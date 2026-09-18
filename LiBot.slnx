@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LiBot.Api/LiBot.Api.csproj" />
+    <Project Path="src/LiBot.Application/LiBot.Application.csproj" />
+    <Project Path="src/LiBot.Contracts/LiBot.Contracts.csproj" />
+    <Project Path="src/LiBot.Domain/LiBot.Domain.csproj" />
+    <Project Path="src/LiBot.Infrastructure/LiBot.Infrastructure.csproj" />
+  </Folder>
+</Solution>

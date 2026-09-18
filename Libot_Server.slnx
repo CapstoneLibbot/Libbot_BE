@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="Libbot_Server.Application/Libbot_Server.Application.csproj" Id="b8d79fed-d481-4bcf-8107-f75e7b0894e3" />
+    <Project Path="Libbot_Server.Contracts/Libbot_Server.Contracts.csproj" Id="f096b61c-0fe3-4e0b-a631-227136162529" />
+    <Project Path="Libbot_Server.Domain/Libbot_Server.Domain.csproj" Id="91f73bcf-5455-42fa-b611-7f0ec71155c6" />
+    <Project Path="Libbot_Server.Infrastructure/Libbot_Server.Infrastructure.csproj" Id="8d506054-0ac2-4257-8455-a20d0df7fa57" />
+    <Project Path="Libot_Server/Libot_Server.Api.csproj" />
+  </Folder>
+</Solution>

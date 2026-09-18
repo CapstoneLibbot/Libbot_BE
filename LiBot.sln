@@ -1,0 +1,45 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LiBot.Api", "src\\LiBot.Api\\LiBot.Api.csproj", "{A8C981D3-6C53-4702-A8FD-0A89E9A7FA82}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LiBot.Application", "src\\LiBot.Application\\LiBot.Application.csproj", "{20DAED23-B0D2-46CE-BF36-D3FBAA9C5B1F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LiBot.Contracts", "src\\LiBot.Contracts\\LiBot.Contracts.csproj", "{915F3B1D-BAD4-4B46-ADA8-B75C9DE42BA0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LiBot.Domain", "src\\LiBot.Domain\\LiBot.Domain.csproj", "{D5762D01-F6A5-4E2D-A2A1-A6DAF1C8A092}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LiBot.Infrastructure", "src\\LiBot.Infrastructure\\LiBot.Infrastructure.csproj", "{3BC0E8FF-65DE-4BB9-9A09-7A52A902D2B5}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A8C981D3-6C53-4702-A8FD-0A89E9A7FA82}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A8C981D3-6C53-4702-A8FD-0A89E9A7FA82}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A8C981D3-6C53-4702-A8FD-0A89E9A7FA82}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A8C981D3-6C53-4702-A8FD-0A89E9A7FA82}.Release|Any CPU.Build.0 = Release|Any CPU
+		{20DAED23-B0D2-46CE-BF36-D3FBAA9C5B1F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{20DAED23-B0D2-46CE-BF36-D3FBAA9C5B1F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{20DAED23-B0D2-46CE-BF36-D3FBAA9C5B1F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{20DAED23-B0D2-46CE-BF36-D3FBAA9C5B1F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{915F3B1D-BAD4-4B46-ADA8-B75C9DE42BA0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{915F3B1D-BAD4-4B46-ADA8-B75C9DE42BA0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{915F3B1D-BAD4-4B46-ADA8-B75C9DE42BA0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{915F3B1D-BAD4-4B46-ADA8-B75C9DE42BA0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D5762D01-F6A5-4E2D-A2A1-A6DAF1C8A092}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D5762D01-F6A5-4E2D-A2A1-A6DAF1C8A092}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D5762D01-F6A5-4E2D-A2A1-A6DAF1C8A092}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D5762D01-F6A5-4E2D-A2A1-A6DAF1C8A092}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3BC0E8FF-65DE-4BB9-9A09-7A52A902D2B5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3BC0E8FF-65DE-4BB9-9A09-7A52A902D2B5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3BC0E8FF-65DE-4BB9-9A09-7A52A902D2B5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3BC0E8FF-65DE-4BB9-9A09-7A52A902D2B5}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

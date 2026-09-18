@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LiBot.Application\LiBot.Application.csproj" />
+    <ProjectReference Include="..\LiBot.Domain\LiBot.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
