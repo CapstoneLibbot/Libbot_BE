@@ -3,11 +3,19 @@ namespace LiBot.Domain.Identity;
 public class User
 {
     public Guid Id { get; private set; } = Guid.NewGuid();
+    public string? Username { get; private set; }
+    public string? PasswordHash { get; private set; }
+    public string? Role { get; private set; }
     public string Email { get; private set; }
     public string FullName { get; private set; }
-    public bool IsActive { get; private set; } = true;
+    public string? Phone { get; private set; }
+    public UserStatus Status { get; private set; }
+    public bool IsActive => Status == UserStatus.Active;
+    public DateTime CreatedAtUtc { get; private set; } = DateTime.UtcNow;
+    public DateTime? LastLoginAtUtc { get; private set; }
 
-    public User(string email, string fullName)
+    public User(string email, string fullName, string? username = null, string? passwordHash = null,
+        string? role = null, string? phone = null, UserStatus status = UserStatus.Active)
     {
         if (string.IsNullOrWhiteSpace(email))
             throw new ArgumentException("Email is required.", nameof(email));
@@ -17,10 +25,25 @@ public class User
 
         Email = email.Trim();
         FullName = fullName.Trim();
+        Username = username?.Trim();
+        PasswordHash = passwordHash;
+        Role = role?.Trim();
+        Phone = phone?.Trim();
+        Status = status;
     }
 
     public void Deactivate()
     {
-        IsActive = false;
+        Status = UserStatus.Inactive;
+    }
+
+    public void Lock()
+    {
+        Status = UserStatus.Locked;
+    }
+
+    public void RecordLogin()
+    {
+        LastLoginAtUtc = DateTime.UtcNow;
     }
 }
