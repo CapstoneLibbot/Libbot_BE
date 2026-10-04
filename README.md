@@ -18,4 +18,4 @@ Traditional library management faces significant challenges in keeping inventory
 * **Backend:** .NET Web APIs, Cloud Infrastructure (AWS / Azure)[cite: 1]
 * **Database:** Relational Database (SQL Server / MySQL)[cite: 1]
 * **Client & UI:** ReactJS (Web Admin/Librarian Portal), Flutter (Mobile Clients)[cite: 1]
-* **Robotics:** Autonomous navigation, path planning, and barcode scanning modules[cite: 1]
+* **Robotics:** Autonomous navigation, path planning, and barcode scanning modules[cite: 1].
