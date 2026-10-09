@@ -1,5 +1,4 @@
 using LiBot.Domain.Identity;
-using LiBot.Domain.Inventory;
 using LiBot.Domain.Library;
 using LiBot.Domain.Mission;
 using LiBot.Domain.Workflow;
@@ -31,7 +30,6 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
     public DbSet<Endpoint> Endpoints => Set<Endpoint>();
     public DbSet<EndpointGroup> EndpointGroups => Set<EndpointGroup>();
     public DbSet<EndpointGroupMember> EndpointGroupMembers => Set<EndpointGroupMember>();
-    public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<Mission> Jobs => Set<Mission>();
     public DbSet<JobTask> JobTasks => Set<JobTask>();
     public DbSet<JobStep> JobSteps => Set<JobStep>();
@@ -178,12 +176,6 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.HasIndex(x => new { x.EndpointGroupId, x.EndpointId }).IsUnique();
         });
 
-        modelBuilder.Entity<InventoryItem>(entity =>
-        {
-            entity.ToTable("INVENTORY_ITEM");
-            entity.HasKey(x => x.Id);
-        });
-
         modelBuilder.Entity<Mission>(entity =>
         {
             entity.ToTable("JOB");
@@ -191,6 +183,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.HasOne<User>().WithMany().HasForeignKey(x => x.CreatedBy).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.SourceEndpointId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.DestinationEndpointId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<WorkflowDefinition>().WithMany().HasForeignKey(x => x.WorkflowId).OnDelete(DeleteBehavior.SetNull);
         });
         modelBuilder.Entity<JobTask>(entity =>
         {

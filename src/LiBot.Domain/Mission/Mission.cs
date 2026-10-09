@@ -9,6 +9,7 @@ public class Mission
     public Guid? CreatedBy { get; private set; }
     public Guid? SourceEndpointId { get; private set; }
     public Guid? DestinationEndpointId { get; private set; }
+    public Guid? WorkflowId { get; private set; }
     public int Priority { get; private set; }
     public DateTime CreatedAtUtc { get; private set; } = DateTime.UtcNow;
     public DateTime? StartedAtUtc { get; private set; }
@@ -40,6 +41,35 @@ public class Mission
     public void Complete()
     {
         Status = "Completed";
+        CompletedAtUtc = DateTime.UtcNow;
+    }
+
+    public void Update(string name, string description, int priority, Guid? workflowId,
+        Guid? sourceEndpointId, Guid? destinationEndpointId)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Mission name is required.", nameof(name));
+        Name = name.Trim();
+        Description = description?.Trim() ?? string.Empty;
+        Priority = priority;
+        WorkflowId = workflowId;
+        SourceEndpointId = sourceEndpointId;
+        DestinationEndpointId = destinationEndpointId;
+    }
+
+    public void Cancel()
+    {
+        if (Status is "Completed" or "Cancelled")
+            throw new InvalidOperationException("Completed or cancelled missions cannot be cancelled.");
+        Status = "Cancelled";
+        CompletedAtUtc = DateTime.UtcNow;
+    }
+
+    public void Fail()
+    {
+        if (Status is "Completed" or "Cancelled")
+            throw new InvalidOperationException("Completed or cancelled missions cannot be failed.");
+        Status = "Failed";
         CompletedAtUtc = DateTime.UtcNow;
     }
 }

@@ -21,4 +21,14 @@ public class WorkflowTask : Entity
         SequenceNumber = sequenceNumber;
         Name = name.Trim();
     }
+
+    public void Update(int sequenceNumber, string name)
+    {
+        if (sequenceNumber < 0)
+            throw new ArgumentOutOfRangeException(nameof(sequenceNumber));
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Workflow task name is required.", nameof(name));
+        SequenceNumber = sequenceNumber;
+        Name = name.Trim();
+    }
 }

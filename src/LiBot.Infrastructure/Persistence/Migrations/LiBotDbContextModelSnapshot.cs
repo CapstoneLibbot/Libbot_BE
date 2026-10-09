@@ -154,28 +154,6 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.ToTable("ACCOUNT", (string)null);
                 });
 
-            modelBuilder.Entity("LiBot.Domain.Inventory.InventoryItem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Unit")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("INVENTORY_ITEM", (string)null);
-                });
-
             modelBuilder.Entity("LiBot.Domain.Library.Aisle", b =>
                 {
                     b.Property<Guid>("Id")
@@ -793,6 +771,9 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("DestinationEndpointId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("WorkflowId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -817,6 +798,8 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.HasIndex("DestinationEndpointId");
 
                     b.HasIndex("SourceEndpointId");
+
+                    b.HasIndex("WorkflowId");
 
                     b.ToTable("JOB", (string)null);
                 });
@@ -1116,6 +1099,9 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("Configuration")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("StepType")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -1139,11 +1125,18 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Type")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
@@ -1370,6 +1363,14 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("SourceEndpointId")
                         .OnDelete(DeleteBehavior.NoAction);
+                });
+
+            modelBuilder.Entity("LiBot.Domain.Mission.Mission", b =>
+                {
+                    b.HasOne("LiBot.Domain.Workflow.WorkflowDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("WorkflowId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("LiBot.Domain.Mission.PatrolReport", b =>
