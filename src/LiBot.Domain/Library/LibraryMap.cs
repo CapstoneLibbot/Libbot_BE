@@ -27,4 +27,22 @@ public class LibraryMap : Entity
         Height = height;
         MapData = mapData;
     }
+
+    public void Update(string name, string version, int width, int height, string mapData)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Map name is required.", nameof(name));
+        if (width <= 0)
+            throw new ArgumentOutOfRangeException(nameof(width));
+        if (height <= 0)
+            throw new ArgumentOutOfRangeException(nameof(height));
+        if (mapData is null)
+            throw new ArgumentNullException(nameof(mapData));
+
+        Name = name.Trim();
+        Version = version?.Trim() ?? string.Empty;
+        Width = width;
+        Height = height;
+        MapData = mapData;
+    }
 }
