@@ -1,3 +1,5 @@
+using LiBot.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -5,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace LiBot.Infrastructure.Persistence.Migrations;
 
 /// <inheritdoc />
+[DbContext(typeof(LiBotDbContext))]
 [Migration("20261006150000_RemoveInventoryItem")]
 public partial class RemoveInventoryItem : Migration
 {

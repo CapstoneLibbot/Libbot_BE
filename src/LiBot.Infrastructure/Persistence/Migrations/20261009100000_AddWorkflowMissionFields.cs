@@ -1,9 +1,12 @@
+using LiBot.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace LiBot.Infrastructure.Persistence.Migrations;
 
+[DbContext(typeof(LiBotDbContext))]
 [Migration("20261009100000_AddWorkflowMissionFields")]
 public partial class AddWorkflowMissionFields : Migration
 {

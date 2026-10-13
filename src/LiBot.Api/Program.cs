@@ -1,6 +1,7 @@
 using LiBot.Api.Hubs;
 using LiBot.Api.Middleware;
 using LiBot.Infrastructure;
+using LiBot.Infrastructure.Persistence;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,13 +15,19 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
+await app.Services.InitializeLiBotDatabaseAsync();
+
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger(options => options.RouteTemplate = "openapi/{documentName}.json");
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+else
+{
+    app.UseHttpsRedirection();
 }
 
 app.UseMiddleware<ExceptionMiddleware>();
-app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();

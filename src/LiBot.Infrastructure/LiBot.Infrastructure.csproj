@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LiBot.Application\LiBot.Application.csproj" />
+    <ProjectReference Include="..\LiBot.Contracts\LiBot.Contracts.csproj" />
     <ProjectReference Include="..\LiBot.Domain\LiBot.Domain.csproj" />
   </ItemGroup>
 

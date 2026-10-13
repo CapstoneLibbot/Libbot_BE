@@ -4,6 +4,14 @@ namespace LiBot.Domain.Library;
 
 public class Zone : Entity
 {
+    public static readonly IReadOnlySet<string> SupportedTypes = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "EXCLUSION",
+        "SPEED_LIMIT",
+        "PREFERRED_DIRECTION",
+        "NARROW_CORRIDOR"
+    };
+
     public Guid MapId { get; private set; }
     public string ZoneType { get; private set; }
     public double MaxSpeed { get; private set; }
@@ -26,11 +34,22 @@ public class Zone : Entity
             throw new ArgumentException("Zone type is required.", nameof(zoneType));
         if (maxX < minX || maxY < minY)
             throw new ArgumentException("Zone bounds are invalid.");
-        if (maxSpeed < 0 || corridorWidth < 0)
+        var normalizedType = zoneType.Trim().ToUpperInvariant();
+        if (!SupportedTypes.Contains(normalizedType))
+            throw new ArgumentException($"Unsupported zone type '{zoneType}'.", nameof(zoneType));
+        if (maxSpeed < 0)
             throw new ArgumentOutOfRangeException(nameof(maxSpeed));
+        if (corridorWidth < 0)
+            throw new ArgumentOutOfRangeException(nameof(corridorWidth));
+        if (normalizedType == "SPEED_LIMIT" && maxSpeed <= 0)
+            throw new ArgumentException("SPEED_LIMIT requires maxSpeed greater than zero.", nameof(maxSpeed));
+        if (normalizedType == "PREFERRED_DIRECTION" && string.IsNullOrWhiteSpace(preferredDirection))
+            throw new ArgumentException("PREFERRED_DIRECTION requires preferredDirection.", nameof(preferredDirection));
+        if (normalizedType == "NARROW_CORRIDOR" && corridorWidth is null or <= 0)
+            throw new ArgumentException("NARROW_CORRIDOR requires corridorWidth greater than zero.", nameof(corridorWidth));
 
         MapId = mapId;
-        ZoneType = zoneType.Trim();
+        ZoneType = normalizedType;
         MinX = minX;
         MinY = minY;
         MaxX = maxX;
