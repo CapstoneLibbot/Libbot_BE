@@ -1,6 +1,9 @@
 using LiBot.Application.Robot;
+using LiBot.Application.Workflow.BookGuidance;
+using LiBot.Application.Workflow.FacilityGuidance;
 using LiBot.Infrastructure.Persistence;
 using LiBot.Infrastructure.Robot;
+using LiBot.Infrastructure.Workflow;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,6 +29,8 @@ public static class DependencyInjection
                 "LiBot host, port, and timeout settings must be valid.")
             .ValidateOnStart();
         services.AddSingleton<ILiBotTcpClient, LiBotTcpClient>();
+        services.AddScoped<IBookGuidanceService, BookGuidanceService>();
+        services.AddScoped<IFacilityGuidanceService, FacilityGuidanceService>();
 
         return services;
     }

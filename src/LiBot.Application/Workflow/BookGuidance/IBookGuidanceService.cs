@@ -1,0 +1,40 @@
+using System.Text.Json;
+using LiBot.Contracts.Workflow;
+
+namespace LiBot.Application.Workflow.BookGuidance;
+
+public interface IBookGuidanceService
+{
+    Task<BookSearchResponse> SearchAsync(
+        string query,
+        string matchMode,
+        CancellationToken cancellationToken);
+
+    Task<BookGuidanceDetail?> GetBookAsync(
+        Guid bookId,
+        CancellationToken cancellationToken);
+
+    Task<FeedbackResponse?> SaveFeedbackAsync(
+        FeedbackRequest request,
+        CancellationToken cancellationToken);
+
+    Task<BookGuidanceLoadedWorkflow?> LoadWorkflowAsync(CancellationToken cancellationToken);
+
+    Task<BookGuidanceStartResult> StartAsync(
+        StartBookGuidanceRequest request,
+        string backendBaseUrl,
+        CancellationToken cancellationToken);
+
+    Task<JsonElement> SubmitEventAsync(
+        BookGuidanceEventRequest request,
+        CancellationToken cancellationToken);
+
+    Task<JsonElement> GetExecutionAsync(
+        string executionId,
+        CancellationToken cancellationToken);
+
+    Task<bool> CompleteTaskAsync(
+        Guid taskId,
+        CompleteBookGuidanceRequest request,
+        CancellationToken cancellationToken);
+}
