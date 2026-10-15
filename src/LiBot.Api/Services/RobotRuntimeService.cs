@@ -84,6 +84,8 @@ public sealed class RobotRuntimeService : BackgroundService
         {
             runtime.Telemetry = telemetry with { Timestamp = telemetry.Timestamp.ToUniversalTime() };
             runtime.LastTelemetryAt = DateTimeOffset.UtcNow;
+            runtime.MappingActive = telemetry.MappingActive;
+            runtime.NavigationActive = telemetry.NavigationActive;
         }
 
         var snapshot = ToResponse(runtime);
@@ -111,6 +113,96 @@ public sealed class RobotRuntimeService : BackgroundService
                 cancellationToken);
         }
         return true;
+    }
+
+    public async Task<bool> UpdateMapAsync(string runtimeId, OccupancyGridDto map, CancellationToken cancellationToken)
+    {
+        if (!_runtimes.TryGetValue(runtimeId, out var runtime)
+            || !string.Equals(runtime.Endpoint.Kind, "REAL", StringComparison.OrdinalIgnoreCase)
+            || map.Width == 0 || map.Height == 0
+            || map.Data is null
+            || map.Data.Length != (long)map.Width * map.Height
+            || !double.IsFinite(map.Resolution) || map.Resolution <= 0
+            || !double.IsFinite(map.OriginX) || !double.IsFinite(map.OriginY) || !double.IsFinite(map.OriginYaw)
+            || map.Data.Any(value => value is < -1 or > 100)) return false;
+        lock (runtime.SyncRoot) runtime.Map = map;
+        await _hub.Clients.Group(RobotHub.RuntimeGroup(runtime.Endpoint.Id))
+            .SendAsync("RobotMapUpdated", map, cancellationToken);
+        return true;
+    }
+
+    public OccupancyGridDto? GetLatestMap(string runtimeId)
+    {
+        if (!_runtimes.TryGetValue(runtimeId, out var runtime)) return null;
+        lock (runtime.SyncRoot) return runtime.Map;
+    }
+
+    public async Task<CommandResult> SendManualVelocityAsync(
+        string runtimeId, ManualVelocityRequest request, CancellationToken cancellationToken)
+    {
+        if (!TryGetReadyRuntime(runtimeId, request.ArmLeaseId, requireLocalized: false, out var runtime, out var error))
+            return CommandResult.Fail(error!);
+        if (!string.Equals(runtime!.Endpoint.Kind, "REAL", StringComparison.OrdinalIgnoreCase))
+            return CommandResult.Fail("Manual mapping control is only available for the physical robot.");
+        if (runtime.NavigationActive || string.Equals(runtime.Telemetry?.NavigationState, "NAVIGATING", StringComparison.OrdinalIgnoreCase))
+            return CommandResult.Fail("Stop Nav2 before using manual control.");
+        return await SendCommandAsync(runtime, new
+        {
+            command = "manual_velocity",
+            linear_x = Math.Clamp(request.LinearX, -0.7, 0.7),
+            linear_y = Math.Clamp(request.LinearY, -0.7, 0.7),
+            angular_z = Math.Clamp(request.AngularZ, -0.5, 0.5),
+        }, cancellationToken);
+    }
+
+    public async Task<CommandResult> StopManualAsync(string runtimeId, CancellationToken cancellationToken)
+    {
+        if (!_runtimes.TryGetValue(runtimeId, out var runtime)) return CommandResult.Fail("Robot runtime was not found.");
+        return await SendCommandAsync(runtime, new { command = "manual_stop" }, cancellationToken);
+    }
+
+    public async Task<CommandResult> SetMappingAsync(string runtimeId, bool enabled, string? leaseId, CancellationToken cancellationToken)
+    {
+        if (!_runtimes.TryGetValue(runtimeId, out var runtime)) return CommandResult.Fail("Robot runtime was not found.");
+        if (!string.Equals(runtime.Endpoint.Kind, "REAL", StringComparison.OrdinalIgnoreCase))
+            return CommandResult.Fail("SLAM mapping is only available for the physical robot.");
+        if (enabled)
+        {
+            if (!TryGetReadyRuntime(runtimeId, leaseId, requireLocalized: false, out runtime, out var error))
+                return CommandResult.Fail(error!);
+            if (runtime!.NavigationActive) return CommandResult.Fail("Stop Nav2 before starting SLAM mapping.");
+        }
+        var result = await SendCommandAsync(runtime, new { command = enabled ? "start_mapping" : "stop_mapping" }, cancellationToken);
+        if (result.Success) runtime.MappingActive = enabled;
+        return result;
+    }
+
+    public async Task<CommandResult> SaveMapOnRobotAsync(string runtimeId, string fileStem, string? leaseId, CancellationToken cancellationToken)
+    {
+        if (!TryGetReadyRuntime(runtimeId, leaseId, requireLocalized: false, out var runtime, out var error))
+            return CommandResult.Fail(error!);
+        if (runtime!.Map is null) return CommandResult.Fail("No live occupancy map has been received yet.");
+        if (!runtime.MappingActive) return CommandResult.Fail("Start SLAM mapping before saving this map.");
+        var result = await SendCommandAsync(runtime, new { command = "save_map", file_stem = fileStem }, cancellationToken);
+        return result;
+    }
+
+    public async Task<CommandResult> StartNavigationModeAsync(string runtimeId, string mapPath, string? leaseId, CancellationToken cancellationToken)
+    {
+        if (!TryGetReadyRuntime(runtimeId, leaseId, requireLocalized: false, out var runtime, out var error))
+            return CommandResult.Fail(error!);
+        if (runtime!.MappingActive) return CommandResult.Fail("Stop SLAM mapping before starting Nav2.");
+        var result = await SendCommandAsync(runtime, new { command = "start_navigation_mode", map_path = mapPath }, cancellationToken);
+        if (result.Success) runtime.NavigationActive = true;
+        return result;
+    }
+
+    public async Task<CommandResult> StopNavigationModeAsync(string runtimeId, CancellationToken cancellationToken)
+    {
+        if (!_runtimes.TryGetValue(runtimeId, out var runtime)) return CommandResult.Fail("Robot runtime was not found.");
+        var result = await SendCommandAsync(runtime, new { command = "stop_navigation_mode" }, cancellationToken);
+        if (result.Success) runtime.NavigationActive = false;
+        return result;
     }
 
     public async Task<CommandResult> SetInitialPoseAsync(
@@ -281,6 +373,8 @@ public sealed class RobotRuntimeService : BackgroundService
                 !stale,
                 stale,
                 armed,
+                runtime.MappingActive,
+                runtime.NavigationActive,
                 armed ? runtime.ArmExpiresAt : null,
                 runtime.LastTelemetryAt,
                 runtime.Telemetry);
@@ -295,6 +389,9 @@ public sealed class RobotRuntimeService : BackgroundService
         public DateTimeOffset? ArmExpiresAt { get; set; }
         public DateTimeOffset? LastTelemetryAt { get; set; }
         public RobotTelemetryRequest? Telemetry { get; set; }
+        public OccupancyGridDto? Map { get; set; }
+        public bool MappingActive { get; set; }
+        public bool NavigationActive { get; set; }
     }
 
     private sealed class RuntimeEndpoint
