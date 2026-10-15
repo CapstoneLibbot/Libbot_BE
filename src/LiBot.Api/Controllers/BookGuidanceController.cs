@@ -115,7 +115,20 @@ public sealed class BookGuidanceController(IBookGuidanceService service) : Contr
         if (string.IsNullOrWhiteSpace(request.EventType)) return BadRequest("eventType is required.");
         try
         {
-            return Ok(await service.SubmitEventAsync(request, cancellationToken));
+            var response = await service.SubmitEventAsync(request, cancellationToken);
+            var status = GetString(response, "status");
+            if (string.Equals(status, "accepted", StringComparison.OrdinalIgnoreCase))
+                return Accepted(response);
+
+            if (string.Equals(status, "error", StringComparison.OrdinalIgnoreCase))
+            {
+                var code = GetString(response, "code");
+                return code is "INVALID_EVENT_DATA" or "INVALID_NAVIGATION_TARGET"
+                    ? UnprocessableEntity(response)
+                    : Conflict(response);
+            }
+
+            return StatusCode(StatusCodes.Status502BadGateway, response);
         }
         catch (BookGuidanceRobotUnavailableException exception)
         {
@@ -148,4 +161,11 @@ public sealed class BookGuidanceController(IBookGuidanceService service) : Contr
         statusCode: StatusCodes.Status500InternalServerError,
         title: "Book guidance workflow is not configured correctly",
         detail: detail);
+
+    private static string? GetString(System.Text.Json.JsonElement value, string propertyName) =>
+        value.ValueKind == System.Text.Json.JsonValueKind.Object &&
+        value.TryGetProperty(propertyName, out var property) &&
+        property.ValueKind == System.Text.Json.JsonValueKind.String
+            ? property.GetString()
+            : null;
 }

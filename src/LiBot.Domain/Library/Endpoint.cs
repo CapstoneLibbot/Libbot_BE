@@ -8,9 +8,10 @@ public class Endpoint : Entity
     public string Name { get; private set; }
     public double PositionX { get; private set; }
     public double PositionY { get; private set; }
+    public double Theta { get; private set; }
     public bool IsActive { get; private set; } = true;
 
-    public Endpoint(Guid mapId, string name, double positionX, double positionY)
+    public Endpoint(Guid mapId, string name, double positionX, double positionY, double theta = 0)
     {
         if (mapId == Guid.Empty)
             throw new ArgumentException("Map id is required.", nameof(mapId));
@@ -21,6 +22,7 @@ public class Endpoint : Entity
         Name = name.Trim();
         PositionX = positionX;
         PositionY = positionY;
+        Theta = theta;
     }
 
     public void Deactivate() => IsActive = false;

@@ -359,6 +359,9 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<double>("PositionY")
                         .HasColumnType("float");
 
+                    b.Property<double>("Theta")
+                        .HasColumnType("float");
+
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
 

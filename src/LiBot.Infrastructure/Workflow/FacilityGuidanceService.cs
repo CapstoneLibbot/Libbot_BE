@@ -62,7 +62,12 @@ public sealed class FacilityGuidanceService(LiBotDbContext db, ILiBotTcpClient t
                     map.Name,
                     map.Width,
                     map.Height,
-                    new FacilityGuidanceEndpoint(endpoint.Id, endpoint.Name, endpoint.PositionX, endpoint.PositionY, 0)),
+                    new FacilityGuidanceEndpoint(
+                        endpoint.Id,
+                        endpoint.Name,
+                        endpoint.PositionX,
+                        endpoint.PositionY,
+                        endpoint.Theta)),
                 new[] { "VIEW_LOCATION", "RATE" }))
             .FirstOrDefaultAsync(cancellationToken);
     }

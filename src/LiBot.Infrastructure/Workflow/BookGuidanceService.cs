@@ -64,19 +64,25 @@ public sealed class BookGuidanceService(LiBotDbContext db, ILiBotTcpClient tcpCl
             join shelf in db.Shelves.AsNoTracking() on level.ShelfId equals shelf.Id
             join aisle in db.Aisles.AsNoTracking() on shelf.AisleId equals aisle.Id
             join floor in db.Floors.AsNoTracking() on aisle.FloorId equals floor.Id
-            join endpoint in db.Endpoints.AsNoTracking() on aisle.EndpointId equals endpoint.Id into endpoints
+            join endpoint in db.Endpoints.AsNoTracking().Where(item => item.IsActive)
+                on aisle.EndpointId equals endpoint.Id into endpoints
             from endpoint in endpoints.DefaultIfEmpty()
             where copy.BookId == bookId && copy.Status == "Available"
             orderby copy.Barcode
             select new BookLocation(
                 floor.Id, floor.Name, floor.FloorNumber, aisle.Id, aisle.Code, aisle.Name,
                 shelf.Id, shelf.Code, shelf.Name, level.Id, level.LevelNumber,
-                endpoint == null ? null : new NavigationEndpoint(endpoint.Id, endpoint.Name, endpoint.PositionX, endpoint.PositionY, 0)))
+                endpoint == null ? null : new NavigationEndpoint(
+                    endpoint.Id,
+                    endpoint.Name,
+                    endpoint.PositionX,
+                    endpoint.PositionY,
+                    endpoint.Theta)))
             .FirstOrDefaultAsync(cancellationToken);
 
         return new BookGuidanceDetail(
             book.Id, book.Isbn, book.Title, book.Author, book.Publisher, book.PublicationYear,
-            book.Classification, location, ["VIEW_LOCATION", "RATE"]);
+            book.Classification, location, ["VIEW_LOCATION", "START_GUIDANCE", "RATE"]);
     }
 
     public async Task<FeedbackResponse?> SaveFeedbackAsync(
