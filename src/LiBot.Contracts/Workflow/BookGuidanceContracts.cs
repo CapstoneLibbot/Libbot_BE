@@ -3,7 +3,12 @@ using System.Text.Json.Serialization;
 
 namespace LiBot.Contracts.Workflow;
 
-public sealed record BookSearchResponse(IReadOnlyList<BookSearchItem> Books);
+public sealed record BookSearchResponse(
+    IReadOnlyList<BookSearchItem> Books,
+    int Page,
+    int PageSize,
+    int TotalCount,
+    int TotalPages);
 
 public sealed record BookSearchItem(
     Guid BookId,
@@ -11,7 +16,8 @@ public sealed record BookSearchItem(
     string Title,
     string Author,
     string? Classification,
-    int AvailableCopies);
+    int AvailableCopies,
+    string? Image);
 
 public sealed record NavigationEndpoint(
     Guid EndpointId,
@@ -43,7 +49,8 @@ public sealed record BookGuidanceDetail(
     int? PublicationYear,
     string? Classification,
     BookLocation? Location,
-    IReadOnlyList<string> Actions);
+    IReadOnlyList<string> Actions,
+    string? Image);
 
 public sealed record FeedbackRequest(Guid TaskId, int Rating, string? Comment = null);
 

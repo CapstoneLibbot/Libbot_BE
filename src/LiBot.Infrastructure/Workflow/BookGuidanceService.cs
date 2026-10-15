@@ -12,28 +12,55 @@ namespace LiBot.Infrastructure.Workflow;
 public sealed class BookGuidanceService(LiBotDbContext db, ILiBotTcpClient tcpClient) : IBookGuidanceService
 {
     public async Task<BookSearchResponse> SearchAsync(
-        string query,
+        string? query,
+        string? category,
         string matchMode,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken)
     {
-        var term = query.Trim();
         var exact = string.Equals(matchMode, "EXACT", StringComparison.OrdinalIgnoreCase);
-        var books = await (
+        var booksQuery =
             from book in db.Books.AsNoTracking()
-            join category in db.BookCategories.AsNoTracking() on book.CategoryId equals category.Id into categories
-            from category in categories.DefaultIfEmpty()
-            where exact
-                ? book.Title == term || book.Isbn == term || book.Author == term || (category != null && category.Name == term)
-                : EF.Functions.Like(book.Title, $"%{term}%") || EF.Functions.Like(book.Isbn, $"%{term}%") ||
-                  EF.Functions.Like(book.Author, $"%{term}%") || (category != null && EF.Functions.Like(category.Name, $"%{term}%"))
-            orderby book.Title
-            select new BookSearchItem(
-                book.Id, book.Isbn, book.Title, book.Author, category == null ? null : category.Name,
-                db.BookItems.Count(item => item.BookId == book.Id && item.Status == "Available")))
-            .Take(50)
+            join bookCategory in db.BookCategories.AsNoTracking() on book.CategoryId equals bookCategory.Id into categories
+            from bookCategory in categories.DefaultIfEmpty()
+            select new { Book = book, CategoryName = bookCategory == null ? null : bookCategory.Name };
+
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            var term = query.Trim();
+            booksQuery = exact
+                ? booksQuery.Where(item => item.Book.Title == term || item.Book.Isbn == term || item.Book.Author == term)
+                : booksQuery.Where(item =>
+                    EF.Functions.Like(item.Book.Title, $"%{term}%") ||
+                    EF.Functions.Like(item.Book.Isbn, $"%{term}%") ||
+                    EF.Functions.Like(item.Book.Author, $"%{term}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            var categoryTerm = category.Trim().ToLowerInvariant();
+            booksQuery = booksQuery.Where(item =>
+                item.CategoryName != null &&
+                EF.Functions.Like(item.CategoryName.ToLower(), $"%{categoryTerm}%"));
+        }
+
+        var totalCount = await booksQuery.CountAsync(cancellationToken);
+        var books = await booksQuery
+            .OrderBy(item => item.Book.Title)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(item => new BookSearchItem(
+                item.Book.Id,
+                item.Book.Isbn,
+                item.Book.Title,
+                item.Book.Author,
+                item.CategoryName,
+                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == "Available"),
+                item.Book.Image))
             .ToListAsync(cancellationToken);
 
-        return new BookSearchResponse(books);
+        return new BookSearchResponse(books, page, pageSize, totalCount, (int)Math.Ceiling(totalCount / (double)pageSize));
     }
 
     public async Task<BookGuidanceDetail?> GetBookAsync(
@@ -53,6 +80,7 @@ public sealed class BookGuidanceService(LiBotDbContext db, ILiBotTcpClient tcpCl
                 item.Author,
                 item.Publisher,
                 item.PublicationYear,
+                item.Image,
                 Classification = category == null ? null : category.Name
             })
             .FirstOrDefaultAsync(cancellationToken);
@@ -82,7 +110,7 @@ public sealed class BookGuidanceService(LiBotDbContext db, ILiBotTcpClient tcpCl
 
         return new BookGuidanceDetail(
             book.Id, book.Isbn, book.Title, book.Author, book.Publisher, book.PublicationYear,
-            book.Classification, location, ["VIEW_LOCATION", "START_GUIDANCE", "RATE"]);
+            book.Classification, location, ["VIEW_LOCATION", "START_GUIDANCE", "RATE"], book.Image);
     }
 
     public async Task<FeedbackResponse?> SaveFeedbackAsync(

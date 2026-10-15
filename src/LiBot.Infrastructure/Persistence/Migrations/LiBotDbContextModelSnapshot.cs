@@ -237,6 +237,9 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("Image")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Isbn")
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");

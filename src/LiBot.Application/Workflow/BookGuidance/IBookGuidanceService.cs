@@ -6,8 +6,11 @@ namespace LiBot.Application.Workflow.BookGuidance;
 public interface IBookGuidanceService
 {
     Task<BookSearchResponse> SearchAsync(
-        string query,
+        string? query,
+        string? category,
         string matchMode,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken);
 
     Task<BookGuidanceDetail?> GetBookAsync(
