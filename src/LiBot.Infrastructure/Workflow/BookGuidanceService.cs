@@ -9,7 +9,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LiBot.Infrastructure.Workflow;
 
-public sealed class BookGuidanceService(LiBotDbContext db, ILiBotTcpClient tcpClient) : IBookGuidanceService
+public sealed class BookGuidanceService(
+    LiBotDbContext db,
+    ILiBotTcpClient tcpClient,
+    BookGuidanceRuntimeRegistry runtimeRegistry) : IBookGuidanceService
 {
     public async Task<BookSearchResponse> SearchAsync(
         string? query,
@@ -254,6 +257,9 @@ public sealed class BookGuidanceService(LiBotDbContext db, ILiBotTcpClient tcpCl
             new Dictionary<string, object?>
             {
                 ["query"] = request.Query.Trim(),
+                ["book_id"] = request.BookId?.ToString(),
+                ["book_item_id"] = request.BookItemId?.ToString(),
+                ["runtime_id"] = request.RuntimeId,
                 ["task_id"] = mission.Id.ToString(),
                 ["backend_base_url"] = backendBaseUrl
             },
@@ -261,13 +267,18 @@ public sealed class BookGuidanceService(LiBotDbContext db, ILiBotTcpClient tcpCl
 
         try
         {
-            using var response = await tcpClient.SendAsync(tcpRequest, cancellationToken);
+            var runtimeId = request.RuntimeId ?? "sim";
+            using var response = await tcpClient.SendAsync(runtimeId, tcpRequest, cancellationToken);
             var body = response.RootElement.Clone();
             var isAccepted = IsAccepted(body);
             if (!isAccepted)
             {
                 mission.Fail();
                 await db.SaveChangesAsync(cancellationToken);
+            }
+            else
+            {
+                runtimeRegistry.Register(mission.Id.ToString(), runtimeId);
             }
 
             return new BookGuidanceStartResult(mission.Id, loadedWorkflow, body, isAccepted);
@@ -286,9 +297,17 @@ public sealed class BookGuidanceService(LiBotDbContext db, ILiBotTcpClient tcpCl
     {
         try
         {
-            using var response = await tcpClient.SendAsync(new
+            var executionId = request.ExecutionId?.Trim();
+            if (string.IsNullOrWhiteSpace(executionId)
+                || !runtimeRegistry.TryGetRuntime(executionId, out var runtimeId))
+            {
+                throw new BookGuidanceExecutionNotFoundException(executionId ?? "");
+            }
+
+            using var response = await tcpClient.SendAsync(runtimeId, new
             {
                 command = "submit_event",
+                execution_id = executionId,
                 event_type = request.EventType.Trim().ToUpperInvariant(),
                 data = request.Data
             }, cancellationToken);
@@ -306,7 +325,11 @@ public sealed class BookGuidanceService(LiBotDbContext db, ILiBotTcpClient tcpCl
     {
         try
         {
+            if (!runtimeRegistry.TryGetRuntime(executionId, out var runtimeId))
+                throw new BookGuidanceExecutionNotFoundException(executionId);
+
             using var response = await tcpClient.SendAsync(
+                runtimeId,
                 new { command = "get_execution", execution_id = executionId },
                 cancellationToken);
             return response.RootElement.Clone();

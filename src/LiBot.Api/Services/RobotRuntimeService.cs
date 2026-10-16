@@ -47,6 +47,23 @@ public sealed class RobotRuntimeService : BackgroundService
     public RobotRuntimeResponse? Get(string runtimeId) =>
         _runtimes.TryGetValue(runtimeId, out var runtime) ? ToResponse(runtime) : null;
 
+    public string? ValidateBookGuidanceStart(string runtimeId, string? armLeaseId)
+    {
+        if (!_runtimes.TryGetValue(runtimeId, out var runtime))
+            return "Robot runtime was not found.";
+
+        var response = ToResponse(runtime);
+        if (!response.Connected || response.Stale)
+            return "Robot runtime is offline or its telemetry is stale.";
+        if (!string.Equals(runtime.Telemetry?.LocalizationState, "LOCALIZED", StringComparison.OrdinalIgnoreCase))
+            return "Robot must be localized before starting book guidance.";
+        if (string.Equals(runtime.Endpoint.Kind, "REAL", StringComparison.OrdinalIgnoreCase)
+            && (!response.Armed || !string.Equals(runtime.ArmLeaseId, armLeaseId, StringComparison.Ordinal)))
+            return "Arm the physical robot and provide its current lease before starting guidance.";
+
+        return null;
+    }
+
     public ArmRuntimeResponse? Arm(string runtimeId)
     {
         if (!_runtimes.TryGetValue(runtimeId, out var runtime)) return null;

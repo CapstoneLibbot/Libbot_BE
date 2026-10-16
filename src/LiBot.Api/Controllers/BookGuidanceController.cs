@@ -1,12 +1,14 @@
 using LiBot.Application.Workflow.BookGuidance;
 using LiBot.Contracts.Workflow;
+using LiBot.Api.Services;
+using LiBot.Infrastructure.Workflow;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LiBot.Api.Controllers;
 
 [ApiController]
 [Route("api/book-guidance")]
-public sealed class BookGuidanceController(IBookGuidanceService service) : ControllerBase
+public sealed class BookGuidanceController(IBookGuidanceService service, RobotRuntimeService runtimes) : ControllerBase
 {
     [HttpGet("search")]
     public async Task<ActionResult<BookSearchResponse>> Search(
@@ -77,6 +79,21 @@ public sealed class BookGuidanceController(IBookGuidanceService service) : Contr
     public async Task<IActionResult> Start(StartBookGuidanceRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
+        if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.BookId is null || request.BookItemId is null)
+            return BadRequest("runtimeId, bookId, and bookItemId are required.");
+
+        var book = await service.GetBookAsync(request.BookId.Value, cancellationToken);
+        if (book is null) return NotFound("Book not found.");
+        var selectedCopy = book.BookItems.FirstOrDefault(item => item.Id == request.BookItemId.Value);
+        if (selectedCopy is null) return NotFound("Selected book copy was not found.");
+        if (!string.Equals(selectedCopy.Status, "Available", StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { message = "Selected book copy is not available." });
+        var endpoint = selectedCopy.Location?.Endpoint;
+        if (endpoint is null || !double.IsFinite(endpoint.X) || !double.IsFinite(endpoint.Y) || !double.IsFinite(endpoint.Theta))
+            return UnprocessableEntity(new { message = "Selected book copy has no valid navigation endpoint." });
+
+        var runtimeError = runtimes.ValidateBookGuidanceStart(request.RuntimeId, request.ArmLeaseId);
+        if (runtimeError is not null) return Conflict(new { message = runtimeError });
 
         var baseUrl = string.IsNullOrWhiteSpace(request.BackendBaseUrl)
             ? $"{Request.Scheme}://{Request.Host}{Request.PathBase}"
@@ -101,6 +118,7 @@ public sealed class BookGuidanceController(IBookGuidanceService service) : Contr
                 missionId = result.MissionId,
                 executionId = result.MissionId,
                 workflowId = result.Workflow.Id,
+                runtimeId = request.RuntimeId,
                 robot = result.Robot
             });
         }
@@ -118,6 +136,7 @@ public sealed class BookGuidanceController(IBookGuidanceService service) : Contr
     public async Task<IActionResult> SubmitEvent(BookGuidanceEventRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.EventType)) return BadRequest("eventType is required.");
+        if (string.IsNullOrWhiteSpace(request.ExecutionId)) return BadRequest("executionId is required.");
         try
         {
             var response = await service.SubmitEventAsync(request, cancellationToken);
@@ -139,6 +158,10 @@ public sealed class BookGuidanceController(IBookGuidanceService service) : Contr
         {
             return Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "LiBot is unavailable", detail: exception.Message);
         }
+        catch (BookGuidanceExecutionNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
     }
 
     [HttpGet("executions/{executionId}")]
@@ -146,11 +169,18 @@ public sealed class BookGuidanceController(IBookGuidanceService service) : Contr
     {
         try
         {
-            return Ok(await service.GetExecutionAsync(executionId, cancellationToken));
+            var response = await service.GetExecutionAsync(executionId, cancellationToken);
+            return string.Equals(GetString(response, "status"), "error", StringComparison.OrdinalIgnoreCase)
+                ? NotFound(response)
+                : Ok(response);
         }
         catch (BookGuidanceRobotUnavailableException exception)
         {
             return Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "LiBot is unavailable", detail: exception.Message);
+        }
+        catch (BookGuidanceExecutionNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
         }
     }
 

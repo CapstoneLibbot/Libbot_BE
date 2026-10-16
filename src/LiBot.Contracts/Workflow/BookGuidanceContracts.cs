@@ -65,9 +65,18 @@ public sealed record FeedbackRequest(Guid TaskId, int Rating, string? Comment = 
 
 public sealed record FeedbackResponse(Guid FeedbackId, Guid TaskId, int Rating);
 
-public sealed record StartBookGuidanceRequest(string Query, string? BackendBaseUrl = null);
+public sealed record StartBookGuidanceRequest(
+    string Query,
+    string? BackendBaseUrl = null,
+    string? RuntimeId = null,
+    Guid? BookId = null,
+    Guid? BookItemId = null,
+    string? ArmLeaseId = null);
 
-public sealed record BookGuidanceEventRequest(string EventType, JsonElement? Data = null);
+public sealed record BookGuidanceEventRequest(
+    string EventType,
+    JsonElement? Data = null,
+    string? ExecutionId = null);
 
 public sealed record CompleteBookGuidanceRequest(string Status, string? Message = null);
 

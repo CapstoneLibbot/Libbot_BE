@@ -25,10 +25,16 @@ public static class DependencyInjection
                     && Uri.CheckHostName(options.Host) != UriHostNameType.Unknown
                     && options.Port is >= 1 and <= 65535
                     && options.ConnectTimeoutSeconds is >= 1 and <= LiBotTcpOptions.MaximumTimeoutSeconds
-                    && options.ResponseTimeoutSeconds is >= 1 and <= LiBotTcpOptions.MaximumTimeoutSeconds,
+                    && options.ResponseTimeoutSeconds is >= 1 and <= LiBotTcpOptions.MaximumTimeoutSeconds
+                    && options.RuntimeEndpoints.All(item =>
+                        !string.IsNullOrWhiteSpace(item.Key)
+                        && !string.IsNullOrWhiteSpace(item.Value.Host)
+                        && Uri.CheckHostName(item.Value.Host) != UriHostNameType.Unknown
+                        && item.Value.Port is >= 1 and <= 65535),
                 "LiBot host, port, and timeout settings must be valid.")
             .ValidateOnStart();
         services.AddSingleton<ILiBotTcpClient, LiBotTcpClient>();
+        services.AddSingleton<BookGuidanceRuntimeRegistry>();
         services.AddScoped<IBookGuidanceService, BookGuidanceService>();
         services.AddScoped<IFacilityGuidanceService, FacilityGuidanceService>();
 

@@ -27,6 +27,28 @@ public sealed class LiBotTcpClient : ILiBotTcpClient
     public async Task<JsonDocument> SendAsync<TRequest>(
         TRequest request,
         CancellationToken cancellationToken = default)
+        => await SendAsyncCore(request, _options.Host, _options.Port, cancellationToken);
+
+    public async Task<JsonDocument> SendAsync<TRequest>(
+        string runtimeId,
+        TRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_options.RuntimeEndpoints.TryGetValue(runtimeId, out var endpoint))
+        {
+            throw new LiBotTcpException(
+                LiBotTcpFailure.NetworkError,
+                $"No workflow TCP endpoint is configured for runtime '{runtimeId}'.");
+        }
+
+        return await SendAsyncCore(request, endpoint.Host, endpoint.Port, cancellationToken);
+    }
+
+    private async Task<JsonDocument> SendAsyncCore<TRequest>(
+        TRequest request,
+        string host,
+        int port,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -37,13 +59,13 @@ public sealed class LiBotTcpClient : ILiBotTcpClient
 
         try
         {
-            var isIpAddress = IPAddress.TryParse(_options.Host, out var ipAddress);
+            var isIpAddress = IPAddress.TryParse(host, out var ipAddress);
             using var client = isIpAddress
                 ? new TcpClient(ipAddress!.AddressFamily)
                 : new TcpClient();
             var connectTask = isIpAddress
-                ? client.ConnectAsync(ipAddress!, _options.Port)
-                : client.ConnectAsync(_options.Host, _options.Port);
+                ? client.ConnectAsync(ipAddress!, port)
+                : client.ConnectAsync(host, port);
             try
             {
                 await connectTask.WaitAsync(
@@ -56,7 +78,7 @@ public sealed class LiBotTcpClient : ILiBotTcpClient
                 ObserveConnectTask(connectTask);
                 throw new LiBotTcpException(
                     LiBotTcpFailure.ConnectTimeout,
-                    $"Timed out connecting to LiBot at {_options.Host}:{_options.Port}.",
+                    $"Timed out connecting to LiBot at {host}:{port}.",
                     exception);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -69,14 +91,14 @@ public sealed class LiBotTcpClient : ILiBotTcpClient
             {
                 throw new LiBotTcpException(
                     LiBotTcpFailure.ConnectionRefused,
-                    $"LiBot refused the TCP connection at {_options.Host}:{_options.Port}.",
+                    $"LiBot refused the TCP connection at {host}:{port}.",
                     exception);
             }
             catch (SocketException exception)
             {
                 throw new LiBotTcpException(
                     LiBotTcpFailure.NetworkError,
-                    $"A network error occurred connecting to LiBot at {_options.Host}:{_options.Port}.",
+                    $"A network error occurred connecting to LiBot at {host}:{port}.",
                     exception);
             }
 
@@ -108,7 +130,7 @@ public sealed class LiBotTcpClient : ILiBotTcpClient
                 {
                     throw new LiBotTcpException(
                         LiBotTcpFailure.ResponseTimeout,
-                        $"Timed out waiting for a response from LiBot at {_options.Host}:{_options.Port}.",
+                        $"Timed out waiting for a response from LiBot at {host}:{port}.",
                         exception);
                 }
                 catch (ResponseTooLargeException exception)
@@ -137,8 +159,8 @@ public sealed class LiBotTcpClient : ILiBotTcpClient
             {
                 _logger.LogWarning(
                     "Received invalid JSON from LiBot at {Host}:{Port}. Raw response excerpt: {ResponseExcerpt}",
-                    _options.Host,
-                    _options.Port,
+                    host,
+                    port,
                     response[..Math.Min(response.Length, MaximumLoggedResponseCharacters)]);
 
                 throw new LiBotTcpException(
@@ -157,7 +179,7 @@ public sealed class LiBotTcpClient : ILiBotTcpClient
             outcome = LiBotTcpFailure.NetworkError.ToString();
             throw new LiBotTcpException(
                 LiBotTcpFailure.NetworkError,
-                $"A network error occurred communicating with LiBot at {_options.Host}:{_options.Port}.",
+                $"A network error occurred communicating with LiBot at {host}:{port}.",
                 exception);
         }
         catch (IOException exception)
@@ -165,7 +187,7 @@ public sealed class LiBotTcpClient : ILiBotTcpClient
             outcome = LiBotTcpFailure.NetworkError.ToString();
             throw new LiBotTcpException(
                 LiBotTcpFailure.NetworkError,
-                $"A network error occurred communicating with LiBot at {_options.Host}:{_options.Port}.",
+                $"A network error occurred communicating with LiBot at {host}:{port}.",
                 exception);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -177,8 +199,8 @@ public sealed class LiBotTcpClient : ILiBotTcpClient
         {
             _logger.LogInformation(
                 "LiBot TCP request completed. Host: {Host}, Port: {Port}, Command: {Command}, ElapsedMs: {ElapsedMs}, Result: {Result}",
-                _options.Host,
-                _options.Port,
+                host,
+                port,
                 command,
                 stopwatch.ElapsedMilliseconds,
                 outcome);
