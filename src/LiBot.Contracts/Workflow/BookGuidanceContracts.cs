@@ -40,6 +40,12 @@ public sealed record BookLocation(
     int ShelfLevel,
     NavigationEndpoint? Endpoint);
 
+public sealed record BookGuidanceBookItem(
+    Guid Id,
+    string Barcode,
+    string Status,
+    BookLocation? Location);
+
 public sealed record BookGuidanceDetail(
     Guid BookId,
     string Isbn,
@@ -50,7 +56,10 @@ public sealed record BookGuidanceDetail(
     string? Classification,
     BookLocation? Location,
     IReadOnlyList<string> Actions,
-    string? Image);
+    string? Image)
+{
+    public IReadOnlyList<BookGuidanceBookItem> BookItems { get; init; } = [];
+}
 
 public sealed record FeedbackRequest(Guid TaskId, int Rating, string? Comment = null);
 

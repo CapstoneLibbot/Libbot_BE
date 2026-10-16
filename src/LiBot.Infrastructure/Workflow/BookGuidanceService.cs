@@ -86,7 +86,19 @@ public sealed class BookGuidanceService(LiBotDbContext db, ILiBotTcpClient tcpCl
             .FirstOrDefaultAsync(cancellationToken);
         if (book is null) return null;
 
-        var location = await (
+        var copies = await db.BookItems
+            .AsNoTracking()
+            .Where(copy => copy.BookId == bookId)
+            .OrderBy(copy => copy.Barcode)
+            .Select(copy => new
+            {
+                copy.Id,
+                copy.Barcode,
+                copy.Status
+            })
+            .ToListAsync(cancellationToken);
+
+        var locationsByCopyId = await (
             from copy in db.BookItems.AsNoTracking()
             join level in db.ShelfLevels.AsNoTracking() on copy.ExpectedShelfLevelId equals level.Id
             join shelf in db.Shelves.AsNoTracking() on level.ShelfId equals shelf.Id
@@ -95,22 +107,40 @@ public sealed class BookGuidanceService(LiBotDbContext db, ILiBotTcpClient tcpCl
             join endpoint in db.Endpoints.AsNoTracking().Where(item => item.IsActive)
                 on aisle.EndpointId equals endpoint.Id into endpoints
             from endpoint in endpoints.DefaultIfEmpty()
-            where copy.BookId == bookId && copy.Status == "Available"
-            orderby copy.Barcode
-            select new BookLocation(
-                floor.Id, floor.Name, floor.FloorNumber, aisle.Id, aisle.Code, aisle.Name,
-                shelf.Id, shelf.Code, shelf.Name, level.Id, level.LevelNumber,
-                endpoint == null ? null : new NavigationEndpoint(
-                    endpoint.Id,
-                    endpoint.Name,
-                    endpoint.PositionX,
-                    endpoint.PositionY,
-                    endpoint.Theta)))
-            .FirstOrDefaultAsync(cancellationToken);
+            where copy.BookId == bookId
+            select new
+            {
+                copy.Id,
+                Location = new BookLocation(
+                    floor.Id, floor.Name, floor.FloorNumber, aisle.Id, aisle.Code, aisle.Name,
+                    shelf.Id, shelf.Code, shelf.Name, level.Id, level.LevelNumber,
+                    endpoint == null ? null : new NavigationEndpoint(
+                        endpoint.Id,
+                        endpoint.Name,
+                        endpoint.PositionX,
+                        endpoint.PositionY,
+                        endpoint.Theta))
+            })
+            .ToDictionaryAsync(item => item.Id, item => item.Location, cancellationToken);
+
+        var bookItems = copies
+            .Select(copy => new BookGuidanceBookItem(
+                copy.Id,
+                copy.Barcode,
+                copy.Status,
+                locationsByCopyId.GetValueOrDefault(copy.Id)))
+            .ToList();
+
+        var location = bookItems
+            .FirstOrDefault(copy => copy.Status == "Available" && copy.Location is not null)
+            ?.Location;
 
         return new BookGuidanceDetail(
             book.Id, book.Isbn, book.Title, book.Author, book.Publisher, book.PublicationYear,
-            book.Classification, location, ["VIEW_LOCATION", "START_GUIDANCE", "RATE"], book.Image);
+            book.Classification, location, ["VIEW_LOCATION", "START_GUIDANCE", "RATE"], book.Image)
+        {
+            BookItems = bookItems
+        };
     }
 
     public async Task<FeedbackResponse?> SaveFeedbackAsync(
