@@ -134,13 +134,9 @@ public sealed class BookGuidanceService(
                 locationsByCopyId.GetValueOrDefault(copy.Id)))
             .ToList();
 
-        var location = bookItems
-            .FirstOrDefault(copy => copy.Status == "Available" && copy.Location is not null)
-            ?.Location;
-
         return new BookGuidanceDetail(
             book.Id, book.Isbn, book.Title, book.Author, book.Publisher, book.PublicationYear,
-            book.Classification, location, ["VIEW_LOCATION", "START_GUIDANCE", "RATE"], book.Image)
+            book.Classification, ["VIEW_LOCATION", "START_GUIDANCE", "RATE"], book.Image)
         {
             BookItems = bookItems
         };

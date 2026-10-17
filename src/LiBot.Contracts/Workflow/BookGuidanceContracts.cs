@@ -54,7 +54,6 @@ public sealed record BookGuidanceDetail(
     string? Publisher,
     int? PublicationYear,
     string? Classification,
-    BookLocation? Location,
     IReadOnlyList<string> Actions,
     string? Image)
 {
