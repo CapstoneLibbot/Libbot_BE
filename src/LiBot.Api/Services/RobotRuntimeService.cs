@@ -28,8 +28,22 @@ public sealed class RobotRuntimeService : BackgroundService
 
         var configured = configuration.GetSection("RobotRuntimes")
             .Get<Dictionary<string, RuntimeEndpoint>>() ?? [];
+        if (!configured.ContainsKey("real"))
+        {
+            throw new InvalidOperationException(
+                "Robot runtime 'real' must be configured in the BE .env file.");
+        }
+
         foreach (var (id, endpoint) in configured)
         {
+            if (string.IsNullOrWhiteSpace(endpoint.Host)
+                || Uri.CheckHostName(endpoint.Host) == UriHostNameType.Unknown
+                || endpoint.Port is < 1 or > 65535)
+            {
+                throw new InvalidOperationException(
+                    $"Robot runtime '{id}' must define a valid Host and Port in the BE .env file.");
+            }
+
             endpoint.Id = id.ToLowerInvariant();
             endpoint.DisplayName ??= id.Equals("real", StringComparison.OrdinalIgnoreCase)
                 ? "LiBot thật"
@@ -172,10 +186,30 @@ public sealed class RobotRuntimeService : BackgroundService
         }, cancellationToken);
     }
 
-    public async Task<CommandResult> StopManualAsync(string runtimeId, CancellationToken cancellationToken)
+    public async Task<CommandResult> StopManualAsync(
+        string runtimeId,
+        bool resumeNavigation,
+        CancellationToken cancellationToken)
     {
         if (!_runtimes.TryGetValue(runtimeId, out var runtime)) return CommandResult.Fail("Robot runtime was not found.");
-        return await SendCommandAsync(runtime, new { command = "manual_stop" }, cancellationToken);
+        var result = await SendCommandAsync(runtime, new
+        {
+            command = "manual_stop",
+            resume_navigation = resumeNavigation,
+        }, cancellationToken);
+        if (!result.Success) return result;
+
+        lock (runtime.SyncRoot)
+        {
+            if (result.Payload is JsonElement payload
+                && payload.ValueKind == JsonValueKind.Object
+                && payload.TryGetProperty("navigation_active", out var navigationActive)
+                && (navigationActive.ValueKind == JsonValueKind.True || navigationActive.ValueKind == JsonValueKind.False))
+            {
+                runtime.NavigationActive = navigationActive.GetBoolean();
+            }
+        }
+        return result;
     }
 
     public async Task<CommandResult> SetMappingAsync(string runtimeId, bool enabled, string? leaseId, CancellationToken cancellationToken)
@@ -190,7 +224,13 @@ public sealed class RobotRuntimeService : BackgroundService
             if (runtime!.NavigationActive) return CommandResult.Fail("Stop Nav2 before starting SLAM mapping.");
         }
         var result = await SendCommandAsync(runtime, new { command = enabled ? "start_mapping" : "stop_mapping" }, cancellationToken);
-        if (result.Success) runtime.MappingActive = enabled;
+        if (result.Success)
+        {
+            lock (runtime.SyncRoot)
+            {
+                runtime.MappingActive = enabled;
+            }
+        }
         return result;
     }
 
@@ -210,7 +250,13 @@ public sealed class RobotRuntimeService : BackgroundService
             return CommandResult.Fail(error!);
         if (runtime!.MappingActive) return CommandResult.Fail("Stop SLAM mapping before starting Nav2.");
         var result = await SendCommandAsync(runtime, new { command = "start_navigation_mode", map_path = mapPath }, cancellationToken);
-        if (result.Success) runtime.NavigationActive = true;
+        if (result.Success)
+        {
+            lock (runtime.SyncRoot)
+            {
+                runtime.NavigationActive = true;
+            }
+        }
         return result;
     }
 
@@ -218,7 +264,13 @@ public sealed class RobotRuntimeService : BackgroundService
     {
         if (!_runtimes.TryGetValue(runtimeId, out var runtime)) return CommandResult.Fail("Robot runtime was not found.");
         var result = await SendCommandAsync(runtime, new { command = "stop_navigation_mode" }, cancellationToken);
-        if (result.Success) runtime.NavigationActive = false;
+        if (result.Success)
+        {
+            lock (runtime.SyncRoot)
+            {
+                runtime.NavigationActive = false;
+            }
+        }
         return result;
     }
 
@@ -414,8 +466,8 @@ public sealed class RobotRuntimeService : BackgroundService
     private sealed class RuntimeEndpoint
     {
         public string Id { get; set; } = "";
-        public string Host { get; set; } = "127.0.0.1";
-        public int Port { get; set; } = 9000;
+        public string Host { get; set; } = string.Empty;
+        public int Port { get; set; }
         public string? DisplayName { get; set; }
         public string? Kind { get; set; }
     }

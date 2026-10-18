@@ -6,7 +6,7 @@ namespace LiBot.Api.Controllers;
 
 [ApiController]
 [Route("api/robot-runtimes")]
-public sealed class RobotTelemetryController(RobotRuntimeService runtimes) : ControllerBase
+public sealed class RobotTelemetryController(RobotRuntimeService runtimes, ILogger<RobotTelemetryController> logger) : ControllerBase
 {
     [HttpGet]
     public ActionResult<IReadOnlyList<RobotRuntimeResponse>> GetAll() => Ok(runtimes.GetAll());
@@ -37,9 +37,22 @@ public sealed class RobotTelemetryController(RobotRuntimeService runtimes) : Con
         CancellationToken cancellationToken) =>
         await runtimes.UpdateTelemetryAsync(runtimeId, request, cancellationToken) ? Accepted() : NotFound();
 
+    [HttpGet("{runtimeId}/map")]
+    public IActionResult GetMap(string runtimeId)
+    {
+        var map = runtimes.GetLatestMap(runtimeId);
+        return map is null ? NoContent() : Ok(map);
+    }
+
     [HttpPost("{runtimeId}/map")]
-    public async Task<IActionResult> Map(string runtimeId, OccupancyGridDto request, CancellationToken cancellationToken) =>
-        await runtimes.UpdateMapAsync(runtimeId, request, cancellationToken) ? Accepted() : BadRequest(new { message = "Invalid occupancy grid." });
+    public async Task<IActionResult> Map(string runtimeId, OccupancyGridDto request, CancellationToken cancellationToken)
+    {
+        if (await runtimes.UpdateMapAsync(runtimeId, request, cancellationToken)) return Accepted();
+        logger.LogWarning(
+            "Rejected occupancy grid from runtime {RuntimeId}: {Width}x{Height}, {CellCount} cells, resolution {Resolution}.",
+            runtimeId, request.Width, request.Height, request.Data?.Length ?? 0, request.Resolution);
+        return BadRequest(new { message = "Invalid occupancy grid." });
+    }
 
     [HttpPost("{runtimeId}/manual-velocity")]
     public async Task<IActionResult> ManualVelocity(string runtimeId, ManualVelocityRequest request, CancellationToken cancellationToken)
@@ -49,9 +62,12 @@ public sealed class RobotTelemetryController(RobotRuntimeService runtimes) : Con
     }
 
     [HttpPost("{runtimeId}/manual-stop")]
-    public async Task<IActionResult> ManualStop(string runtimeId, CancellationToken cancellationToken)
+    public async Task<IActionResult> ManualStop(
+        string runtimeId,
+        CancellationToken cancellationToken,
+        [FromQuery] bool resumeNavigation = false)
     {
-        var result = await runtimes.StopManualAsync(runtimeId, cancellationToken);
+        var result = await runtimes.StopManualAsync(runtimeId, resumeNavigation, cancellationToken);
         return result.Success ? Accepted(result.Payload) : Conflict(new { message = result.Error });
     }
 

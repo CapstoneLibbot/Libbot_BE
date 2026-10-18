@@ -5,7 +5,10 @@ using LiBot.Infrastructure;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.OpenApi.Models;
 
+var dotEnvSettings = DotEnvLoader.Load();
+
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddInMemoryCollection(dotEnvSettings);
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();

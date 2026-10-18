@@ -10,7 +10,7 @@ namespace LiBot.Api.Controllers;
 
 [ApiController]
 [Route("api/maps")]
-public class MapController(LiBotDbContext db, RobotRuntimeService runtimes) : ControllerBase
+public class MapController(LiBotDbContext db, RobotRuntimeService runtimes, ILogger<MapController> logger) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
@@ -48,6 +48,37 @@ public class MapController(LiBotDbContext db, RobotRuntimeService runtimes) : Co
         return Ok(result);
     }
 
+    [HttpGet("/api/robot-runtimes/real/maps/latest")]
+    public async Task<IActionResult> GetLatestRobotMap(CancellationToken cancellationToken)
+    {
+        var map = await db.Maps.AsNoTracking()
+            .Where(item => EF.Functions.Like(item.MapData, "%occupancy-grid-v1%"))
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (map is null) return Ok(null);
+
+        try
+        {
+            using var data = JsonDocument.Parse(map.MapData);
+            if (data.RootElement.GetProperty("format").GetString() != "occupancy-grid-v1")
+                return Ok(null);
+        }
+        catch (JsonException)
+        {
+            return Ok(null);
+        }
+        catch (KeyNotFoundException)
+        {
+            return Ok(null);
+        }
+        catch (InvalidOperationException)
+        {
+            return Ok(null);
+        }
+
+        return Ok(new SavedRobotMapResponse(map.Id, map.Name, map.Width, map.Height, map.Version));
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
@@ -81,28 +112,35 @@ public class MapController(LiBotDbContext db, RobotRuntimeService runtimes) : Co
             : null;
         if (savedGrid is null) return Conflict(new { message = "Robot wrote its map files but did not return the saved grid snapshot." });
 
-        var priorVersions = await db.Maps.AsNoTracking().CountAsync(x => x.Name == request.Name.Trim(), cancellationToken);
-        var version = (priorVersions + 1).ToString();
-        var data = JsonSerializer.Serialize(new
-        {
-            format = "occupancy-grid-v1",
-            resolution = savedGrid.Resolution,
-            origin = new[] { savedGrid.OriginX, savedGrid.OriginY, savedGrid.OriginYaw },
-            timestamp = savedGrid.Timestamp,
-            cells = savedGrid.Data,
-            robotPath = $"{fileStem}.yaml",
-        });
-        var map = new LibraryMap(request.Name.Trim(), version, checked((int)savedGrid.Width), checked((int)savedGrid.Height), data);
-        db.Maps.Add(map);
         try
         {
+            var mapName = request.Name.Trim();
+            var priorVersions = await db.Maps.AsNoTracking().CountAsync(x => x.Name == mapName, cancellationToken);
+            var version = (priorVersions + 1).ToString();
+            var data = JsonSerializer.Serialize(new
+            {
+                format = "occupancy-grid-v1",
+                resolution = savedGrid.Resolution,
+                origin = new[] { savedGrid.OriginX, savedGrid.OriginY, savedGrid.OriginYaw },
+                timestamp = savedGrid.Timestamp,
+                cells = savedGrid.Data,
+                robotPath = $"{fileStem}.yaml",
+            });
+            var map = new LibraryMap(mapName, version, checked((int)savedGrid.Width), checked((int)savedGrid.Height), data);
+            db.Maps.Add(map);
             await db.SaveChangesAsync(cancellationToken);
+            return Ok(new { map.Id, map.Name, map.Width, map.Height, map.Version, data = new { format = "occupancy-grid-v1" } });
         }
         catch (Exception exception)
         {
-            return Problem($"Robot files were saved, but the database save failed: {exception.Message}");
+            logger.LogError(exception,
+                "Robot map files were saved, but map {MapId} ({MapName}) could not be persisted to the database.",
+                id, request.Name.Trim());
+            return Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "Robot files were saved, but saving the map to the database failed.",
+                detail: exception.GetBaseException().Message);
         }
-        return Ok(new { map.Id, map.Name, map.Width, map.Height, map.Version, data = new { format = "occupancy-grid-v1" } });
     }
 
     [HttpPost("{id:guid}/start-navigation")]

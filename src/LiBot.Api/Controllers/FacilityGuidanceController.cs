@@ -6,7 +6,9 @@ namespace LiBot.Api.Controllers;
 
 [ApiController]
 [Route("api/facility-guidance")]
-public sealed class FacilityGuidanceController(IFacilityGuidanceService service) : ControllerBase
+public sealed class FacilityGuidanceController(
+    IFacilityGuidanceService service,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet("search")]
     public async Task<ActionResult<FacilitySearchResponse>> Search(
@@ -79,9 +81,10 @@ public sealed class FacilityGuidanceController(IFacilityGuidanceService service)
     {
         if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
 
-        var baseUrl = string.IsNullOrWhiteSpace(request.BackendBaseUrl)
-            ? $"{Request.Scheme}://{Request.Host}{Request.PathBase}"
-            : request.BackendBaseUrl.TrimEnd('/');
+        var baseUrl = !string.IsNullOrWhiteSpace(request.BackendBaseUrl)
+            ? request.BackendBaseUrl.TrimEnd('/')
+            : configuration["LiBot:BackendBaseUrl"]?.TrimEnd('/')
+                ?? $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
         try
         {

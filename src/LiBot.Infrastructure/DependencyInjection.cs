@@ -26,12 +26,13 @@ public static class DependencyInjection
                     && options.Port is >= 1 and <= 65535
                     && options.ConnectTimeoutSeconds is >= 1 and <= LiBotTcpOptions.MaximumTimeoutSeconds
                     && options.ResponseTimeoutSeconds is >= 1 and <= LiBotTcpOptions.MaximumTimeoutSeconds
+                    && options.RuntimeEndpoints.ContainsKey("real")
                     && options.RuntimeEndpoints.All(item =>
                         !string.IsNullOrWhiteSpace(item.Key)
                         && !string.IsNullOrWhiteSpace(item.Value.Host)
                         && Uri.CheckHostName(item.Value.Host) != UriHostNameType.Unknown
                         && item.Value.Port is >= 1 and <= 65535),
-                "LiBot host, port, and timeout settings must be valid.")
+                "LiBot host, port, timeouts, and runtime endpoints must be configured in the BE .env file.")
             .ValidateOnStart();
         services.AddSingleton<ILiBotTcpClient, LiBotTcpClient>();
         services.AddSingleton<BookGuidanceRuntimeRegistry>();

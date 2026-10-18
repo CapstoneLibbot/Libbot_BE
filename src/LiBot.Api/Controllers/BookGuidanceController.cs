@@ -8,7 +8,10 @@ namespace LiBot.Api.Controllers;
 
 [ApiController]
 [Route("api/book-guidance")]
-public sealed class BookGuidanceController(IBookGuidanceService service, RobotRuntimeService runtimes) : ControllerBase
+public sealed class BookGuidanceController(
+    IBookGuidanceService service,
+    RobotRuntimeService runtimes,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet("search")]
     public async Task<ActionResult<BookSearchResponse>> Search(
@@ -95,9 +98,10 @@ public sealed class BookGuidanceController(IBookGuidanceService service, RobotRu
         var runtimeError = runtimes.ValidateBookGuidanceStart(request.RuntimeId, request.ArmLeaseId);
         if (runtimeError is not null) return Conflict(new { message = runtimeError });
 
-        var baseUrl = string.IsNullOrWhiteSpace(request.BackendBaseUrl)
-            ? $"{Request.Scheme}://{Request.Host}{Request.PathBase}"
-            : request.BackendBaseUrl.TrimEnd('/');
+        var baseUrl = !string.IsNullOrWhiteSpace(request.BackendBaseUrl)
+            ? request.BackendBaseUrl.TrimEnd('/')
+            : configuration["LiBot:BackendBaseUrl"]?.TrimEnd('/')
+                ?? $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
         try
         {
