@@ -189,6 +189,9 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("JOB_TASK");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.RuntimeId).HasMaxLength(32).HasDefaultValue("real");
+            entity.Property(x => x.ExecutionId).HasMaxLength(64);
+            entity.Property(x => x.ExecutionState).HasColumnType("nvarchar(max)");
             entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<RobotEntity>().WithMany().HasForeignKey(x => x.RobotId).OnDelete(DeleteBehavior.SetNull);
         });

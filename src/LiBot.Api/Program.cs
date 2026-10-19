@@ -20,6 +20,7 @@ builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
 }));
 builder.Services.AddSingleton<RobotRuntimeService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<RobotRuntimeService>());
+builder.Services.AddScoped<WorkflowDocumentService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
     options.SwaggerDoc("v1", new OpenApiInfo { Title = "LiBot.Api", Version = "v1" }));

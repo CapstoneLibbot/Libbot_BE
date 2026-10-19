@@ -737,6 +737,19 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("JobId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("RuntimeId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasDefaultValue("real")
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("ExecutionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("ExecutionState")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<Guid?>("RobotId")
                         .HasColumnType("uniqueidentifier");
 

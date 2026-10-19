@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using LiBot.Api.Services;
 using LiBot.Domain.Workflow;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
@@ -8,8 +10,55 @@ namespace LiBot.Api.Controllers;
 
 [ApiController]
 [Route("api/workflows")]
-public class WorkflowController(LiBotDbContext db) : ControllerBase
+public class WorkflowController(LiBotDbContext db, WorkflowDocumentService documents) : ControllerBase
 {
+    [HttpGet("templates")]
+    public ActionResult<IReadOnlyList<WorkflowTemplateResponse>> GetTemplates() => Ok(documents.GetTemplates());
+
+    [HttpPost("templates/{templateId}/create")]
+    public async Task<ActionResult<WorkflowResponse>> CreateFromTemplate(
+        string templateId,
+        WorkflowTemplateCreateRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var template = documents.GetTemplate(templateId);
+        if (template is null) return NotFound(new { message = "Workflow template not found." });
+        var templateSteps = template.Steps.Select(step =>
+            new WorkflowStepWriteRequest(step.Sequence, step.Type, step.Name, step.Configuration, step.Name)).ToList();
+        var validationError = documents.ValidateSteps(templateSteps);
+        if (validationError is not null) return BadRequest(new { message = validationError });
+        var workflow = new WorkflowDefinition(
+            string.IsNullOrWhiteSpace(request?.Name) ? template.Name : request.Name,
+            template.Description);
+        workflow.SetType(template.Type);
+        workflow.SetActive(true);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        db.Workflows.Add(workflow);
+        await db.SaveChangesAsync(cancellationToken);
+        await ReplaceSteps(workflow.Id, templateSteps, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = workflow.Id }, await ToResponse(workflow, cancellationToken));
+    }
+
+    [HttpGet("{id:guid}/robot-json")]
+    public async Task<IActionResult> GetRobotJson(
+        Guid id,
+        [FromQuery] string runtimeId = "real",
+        CancellationToken cancellationToken = default)
+    {
+        if (runtimeId is not ("sim" or "real"))
+            return BadRequest(new { message = "runtimeId must be 'sim' or 'real'." });
+        try
+        {
+            var document = await documents.BuildRobotDocumentAsync(id, runtimeId, cancellationToken);
+            return document is null ? NotFound() : Ok(document);
+        }
+        catch (InvalidWorkflowDefinitionException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<WorkflowResponse>>> GetAll(CancellationToken cancellationToken)
     {
@@ -30,6 +79,8 @@ public class WorkflowController(LiBotDbContext db) : ControllerBase
     public async Task<ActionResult<WorkflowResponse>> Create(WorkflowWriteRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Name)) return BadRequest("Workflow name is required.");
+        var validationError = documents.ValidateSteps(request.Steps ?? []);
+        if (validationError is not null) return BadRequest(new { message = validationError });
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var workflow = new WorkflowDefinition(request.Name, request.Description ?? string.Empty);
         workflow.SetType(request.Type ?? "GENERAL");
@@ -45,6 +96,8 @@ public class WorkflowController(LiBotDbContext db) : ControllerBase
     public async Task<ActionResult<WorkflowResponse>> Update(Guid id, WorkflowWriteRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Name)) return BadRequest("Workflow name is required.");
+        var validationError = documents.ValidateSteps(request.Steps ?? []);
+        if (validationError is not null) return BadRequest(new { message = validationError });
         var workflow = await db.Workflows.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (workflow is null) return NotFound();
         var currentTasks = await db.WorkflowTasks.Where(x => x.WorkflowId == id).ToListAsync(cancellationToken);
@@ -94,7 +147,16 @@ public class WorkflowController(LiBotDbContext db) : ControllerBase
             var task = new WorkflowTask(workflowId, step.Sequence, step.Name ?? step.Type);
             db.WorkflowTasks.Add(task);
             await db.SaveChangesAsync(cancellationToken);
-            db.TaskSteps.Add(new TaskStep(task.Id, step.Type, step.Configuration?.GetRawText()));
+            var configuration = step.Configuration?.GetRawText();
+            if (!string.IsNullOrWhiteSpace(step.Id))
+            {
+                var configObject = string.IsNullOrWhiteSpace(configuration)
+                    ? new JsonObject()
+                    : JsonNode.Parse(configuration) as JsonObject ?? new JsonObject();
+                configObject["id"] ??= step.Id;
+                configuration = configObject.ToJsonString();
+            }
+            db.TaskSteps.Add(new TaskStep(task.Id, step.Type, configuration));
         }
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -122,6 +184,7 @@ public class WorkflowController(LiBotDbContext db) : ControllerBase
 
 public record WorkflowWriteRequest(string Name, string? Description, string? Type, bool? IsActive,
     IReadOnlyList<WorkflowStepWriteRequest>? Steps);
-public record WorkflowStepWriteRequest(int Sequence, string Type, string? Name, JsonElement? Configuration);
+public record WorkflowTemplateCreateRequest(string? Name = null);
+public record WorkflowStepWriteRequest(int Sequence, string Type, string? Name, JsonElement? Configuration, string? Id = null);
 public record WorkflowResponse(Guid Id, string Name, string Description, string Type, bool IsActive,
     IReadOnlyList<WorkflowStepResponse> Steps);
