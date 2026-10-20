@@ -1,5 +1,4 @@
 using System.Text.Json;
-using LiBot.Api.Models;
 using LiBot.Application.Robot;
 using LiBot.Contracts.Robot;
 using LiBot.Infrastructure.Robot;

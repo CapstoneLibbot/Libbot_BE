@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using LiBot.Api.Services;
 using LiBot.Domain.Workflow;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +9,7 @@ namespace LiBot.Api.Controllers;
 
 [ApiController]
 [Route("api/workflows")]
-public class WorkflowController(LiBotDbContext db, WorkflowDocumentService documents) : ControllerBase
+public class WorkflowController(LiBotDbContext db, IWorkflowDocumentService documents) : ControllerBase
 {
     [HttpGet("templates")]
     public ActionResult<IReadOnlyList<WorkflowTemplateResponse>> GetTemplates() => Ok(documents.GetTemplates());
@@ -181,10 +180,3 @@ public class WorkflowController(LiBotDbContext db, WorkflowDocumentService docum
         catch (JsonException) { return JsonSerializer.SerializeToElement(configuration); }
     }
 }
-
-public record WorkflowWriteRequest(string Name, string? Description, string? Type, bool? IsActive,
-    IReadOnlyList<WorkflowStepWriteRequest>? Steps);
-public record WorkflowTemplateCreateRequest(string? Name = null);
-public record WorkflowStepWriteRequest(int Sequence, string Type, string? Name, JsonElement? Configuration, string? Id = null);
-public record WorkflowResponse(Guid Id, string Name, string Description, string Type, bool IsActive,
-    IReadOnlyList<WorkflowStepResponse> Steps);

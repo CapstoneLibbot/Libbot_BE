@@ -1,6 +1,7 @@
 using System.Text.Json;
 using LiBot.Application.Robot;
 using LiBot.Application.Workflow.FacilityGuidance;
+using LiBot.Application.Models;
 using LiBot.Contracts.Workflow;
 using LiBot.Domain.Mission;
 using LiBot.Infrastructure.Persistence;

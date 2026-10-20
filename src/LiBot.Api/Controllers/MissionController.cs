@@ -1,6 +1,5 @@
 using System.Text.Json;
 using LiBot.Api.Hubs;
-using LiBot.Api.Services;
 using LiBot.Application.Robot;
 using LiBot.Domain.Mission;
 using LiBot.Domain.Workflow;
@@ -16,9 +15,9 @@ namespace LiBot.Api.Controllers;
 [Route("api/missions")]
 public class MissionController(
     LiBotDbContext db,
-    WorkflowDocumentService workflowDocuments,
+    IWorkflowDocumentService workflowDocuments,
     ILiBotTcpClient tcpClient,
-    RobotRuntimeService runtimes,
+    IRobotRuntimeService runtimes,
     IHubContext<RobotHub> hub,
     ILogger<MissionController> logger) : ControllerBase
 {
@@ -522,24 +521,3 @@ public class MissionController(
         catch (JsonException) { return JsonSerializer.SerializeToElement(configuration); }
     }
 }
-
-public record MissionRequest(string? WorkflowId, string? RobotId, string? Priority, string? Name = null,
-    string? Description = null, Guid? SourceEndpointId = null, Guid? DestinationEndpointId = null,
-    string? RuntimeId = null, JsonElement? InitialContext = null);
-public record MissionUpdateRequest(string? Name, string? Description, string? Priority, string? WorkflowId = null,
-    Guid? SourceEndpointId = null, Guid? DestinationEndpointId = null);
-public record MissionPreviewRequest(string WorkflowId, string? RobotId = null, string? MapId = null);
-public record MissionResponse(Guid Id, Guid? WorkflowId, string WorkflowName, string Description, string Status,
-    string Priority, DateTime CreatedAt, DateTime? StartedAt, DateTime? CompletedAt, Guid? RobotId, string? RobotName,
-    string? RuntimeId = null);
-public record MissionPreviewResponse(Guid WorkflowId, Guid? RobotId, Guid? MapId, IReadOnlyList<Point> Path,
-    IReadOnlyList<WorkflowStepResponse> Steps, double EstimatedDistance, int EstimatedDuration);
-public record Point(double X, double Y);
-public record WorkflowStepResponse(Guid Id, int Sequence, string Type, string Name, JsonElement? Configuration);
-public record MissionStartRequest(string? ArmLeaseId = null);
-public record MissionExecutionEventRequest(string EventType, JsonElement? Data = null);
-public record MissionExecutionStateRequest(string? ExecutionId, string? RuntimeId, string Status,
-    string? StepId = null, string? StepName = null, string? StepType = null,
-    string? ExpectedEventType = null, IReadOnlyList<string>? AllowedValues = null,
-    JsonElement? Result = null, string? Error = null);
-public record MissionExecutionCompletionRequest(string Status, string? ExecutionId = null, string? Message = null);

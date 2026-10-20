@@ -321,9 +321,3 @@ public sealed class WorkflowDataController(LiBotDbContext db) : ControllerBase
         catch (JsonException) { return null; }
     }
 }
-
-public sealed record InventoryScanRequest(Guid MissionId, string RuntimeId, string Barcode, string? ShelfCode = null);
-public sealed record InventoryFinalizeRequest(Guid MissionId, string RuntimeId, string? ShelfCode = null,
-    string? ScopeType = null, string? ReportType = null);
-public sealed record PatrolObservationRequest(Guid MissionId, string RuntimeId, JsonElement Observation);
-public sealed record PatrolFinalizeRequest(Guid MissionId, string RuntimeId);

@@ -1,8 +1,14 @@
 using LiBot.Application.Robot;
+using LiBot.Application.Interfaces;
+using LiBot.Application.Services;
+using LiBot.Application.Services.Robot;
+using LiBot.Application.Services.Workflow;
 using LiBot.Application.Workflow.BookGuidance;
 using LiBot.Application.Workflow.FacilityGuidance;
 using LiBot.Infrastructure.Persistence;
 using LiBot.Infrastructure.Robot;
+using LiBot.Infrastructure.Repositories;
+using LiBot.Infrastructure.RobotRuntime;
 using LiBot.Infrastructure.Workflow;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -18,6 +24,9 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException("Connection string 'LiBot' was not configured.");
 
         services.AddDbContext<LiBotDbContext>(options => options.UseSqlServer(connectionString));
+        services.AddScoped(typeof(IGenericRepository<>), typeof(EfGenericRepository<>));
+        services.AddScoped(typeof(ILibraryResourceService<>), typeof(LibraryResourceService<>));
+        services.AddScoped<IScheduleService, ScheduleService>();
         services.AddOptions<LiBotTcpOptions>()
             .Bind(configuration.GetSection(LiBotTcpOptions.SectionName))
             .Validate(
@@ -38,6 +47,11 @@ public static class DependencyInjection
         services.AddSingleton<BookGuidanceRuntimeRegistry>();
         services.AddScoped<IBookGuidanceService, BookGuidanceService>();
         services.AddScoped<IFacilityGuidanceService, FacilityGuidanceService>();
+        services.AddScoped<IWorkflowDocumentRepository, WorkflowDocumentRepository>();
+        services.AddScoped<IWorkflowDocumentService, WorkflowDocumentService>();
+        services.AddSingleton<RobotRuntimeService>();
+        services.AddSingleton<IRobotRuntimeService>(provider => provider.GetRequiredService<RobotRuntimeService>());
+        services.AddHostedService(provider => provider.GetRequiredService<RobotRuntimeService>());
 
         return services;
     }

@@ -1,12 +1,10 @@
-using LiBot.Api.Models;
-using LiBot.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LiBot.Api.Controllers;
 
 [ApiController]
 [Route("api/robot-runtimes")]
-public sealed class RobotTelemetryController(RobotRuntimeService runtimes, ILogger<RobotTelemetryController> logger) : ControllerBase
+public sealed class RobotTelemetryController(IRobotRuntimeService runtimes, ILogger<RobotTelemetryController> logger) : ControllerBase
 {
     [HttpGet]
     public ActionResult<IReadOnlyList<RobotRuntimeResponse>> GetAll() => Ok(runtimes.GetAll());
