@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LiBot.Domain\LiBot.Domain.csproj" />
-    <ProjectReference Include="..\LiBot.Contracts\LiBot.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

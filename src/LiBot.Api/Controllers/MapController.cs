@@ -1,6 +1,4 @@
 using System.Text.Json;
-using LiBot.Api.Models;
-using LiBot.Api.Services;
 using LiBot.Domain.Library;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +8,7 @@ namespace LiBot.Api.Controllers;
 
 [ApiController]
 [Route("api/maps")]
-public class MapController(LiBotDbContext db, RobotRuntimeService runtimes, ILogger<MapController> logger) : ControllerBase
+public class MapController(LiBotDbContext db, IRobotRuntimeService runtimes, ILogger<MapController> logger) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
@@ -192,11 +190,3 @@ public class MapController(LiBotDbContext db, RobotRuntimeService runtimes, ILog
         catch (JsonException) { return null; }
     }
 }
-
-public record MapResponse(Guid Id, string Name, int Width, int Height, JsonElement? Data, string Version);
-public record SavedRobotMapResponse(Guid Id, string Name, int Width, int Height, string Version, object Data)
-{
-    public SavedRobotMapResponse(Guid id, string name, int width, int height, string version)
-        : this(id, name, width, height, version, new { format = "occupancy-grid-v1" }) { }
-}
-public record MapWriteRequest(string Name, int Width, int Height, JsonElement? Data, string? Version = null);

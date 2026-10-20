@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using LiBot.Contracts.Identity;
 
 namespace LiBot.Api.Controllers;
 

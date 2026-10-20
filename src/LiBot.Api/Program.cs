@@ -1,6 +1,6 @@
 using LiBot.Api.Hubs;
 using LiBot.Api.Middleware;
-using LiBot.Api.Services;
+using LiBot.Application.Services.Robot;
 using LiBot.Infrastructure;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.OpenApi.Models;
@@ -18,9 +18,7 @@ builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
         ?? ["http://localhost:5173"];
     policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
 }));
-builder.Services.AddSingleton<RobotRuntimeService>();
-builder.Services.AddHostedService(provider => provider.GetRequiredService<RobotRuntimeService>());
-builder.Services.AddScoped<WorkflowDocumentService>();
+builder.Services.AddSingleton<IRobotRuntimeEventPublisher, RobotRuntimeHubPublisher>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
     options.SwaggerDoc("v1", new OpenApiInfo { Title = "LiBot.Api", Version = "v1" }));

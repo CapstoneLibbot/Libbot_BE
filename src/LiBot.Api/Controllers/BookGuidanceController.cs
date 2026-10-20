@@ -1,6 +1,5 @@
 using LiBot.Application.Workflow.BookGuidance;
 using LiBot.Contracts.Workflow;
-using LiBot.Api.Services;
 using LiBot.Infrastructure.Workflow;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,7 +9,7 @@ namespace LiBot.Api.Controllers;
 [Route("api/book-guidance")]
 public sealed class BookGuidanceController(
     IBookGuidanceService service,
-    RobotRuntimeService runtimes,
+    IRobotRuntimeService runtimes,
     IConfiguration configuration) : ControllerBase
 {
     [HttpGet("search")]
