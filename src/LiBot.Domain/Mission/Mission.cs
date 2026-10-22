@@ -38,6 +38,16 @@ public class Mission
         StartedAtUtc = DateTime.UtcNow;
     }
 
+    public void Retry()
+    {
+        if (Status is not ("Failed" or "Cancelled"))
+            throw new InvalidOperationException("Only failed or cancelled missions can be retried.");
+
+        Status = "Pending";
+        StartedAtUtc = null;
+        CompletedAtUtc = null;
+    }
+
     public void Complete()
     {
         Status = "Completed";

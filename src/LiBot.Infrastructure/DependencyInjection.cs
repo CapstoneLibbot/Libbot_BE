@@ -8,6 +8,7 @@ using LiBot.Application.Workflow.FacilityGuidance;
 using LiBot.Infrastructure.Persistence;
 using LiBot.Infrastructure.Robot;
 using LiBot.Infrastructure.Repositories;
+using LiBot.Infrastructure.Services;
 using LiBot.Infrastructure.RobotRuntime;
 using LiBot.Infrastructure.Workflow;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +27,18 @@ public static class DependencyInjection
         services.AddDbContext<LiBotDbContext>(options => options.UseSqlServer(connectionString));
         services.AddScoped(typeof(IGenericRepository<>), typeof(EfGenericRepository<>));
         services.AddScoped(typeof(ILibraryResourceService<>), typeof(LibraryResourceService<>));
+        services.AddScoped<IBookGuidanceRepository, BookGuidanceRepository>();
+        services.AddScoped<IFacilityGuidanceRepository, FacilityGuidanceRepository>();
+        services.AddScoped<IGuidanceWorkflowRepository, GuidanceWorkflowRepository>();
+        services.AddScoped<ILibraryMapRepository, LibraryMapRepository>();
+        services.AddScoped<ILibraryMapService, LibraryMapService>();
+        services.AddScoped<IMissionDataRepository, MissionDataRepository>();
+        services.AddScoped<IMissionDataService, MissionDataService>();
+        services.AddScoped<IRobotTaskRepository, RobotTaskRepository>();
+        services.AddScoped<IWorkflowDataRepository, WorkflowDataRepository>();
+        services.AddScoped<IWorkflowDataService, WorkflowDataService>();
+        services.AddScoped<IWorkflowRepository, WorkflowRepository>();
+        services.AddScoped<IWorkflowManagementService, WorkflowManagementService>();
         services.AddScoped<IScheduleService, ScheduleService>();
         services.AddOptions<LiBotTcpOptions>()
             .Bind(configuration.GetSection(LiBotTcpOptions.SectionName))

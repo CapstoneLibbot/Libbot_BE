@@ -28,6 +28,14 @@ public class JobTask : Entity
         ExecutionId = executionId.Trim();
     }
 
+    public void PrepareForRetry()
+    {
+        ExecutionId = null;
+        ExecutionState = null;
+        StartedAtUtc = null;
+        CompletedAtUtc = null;
+    }
+
     public void UpdateExecutionState(string executionState) => ExecutionState = executionState;
 
     public void Start(DateTime? startedAtUtc = null)

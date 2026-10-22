@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LiBot.Api.Controllers;
 
+/// <summary>Tìm kiếm sách, xem vị trí bản sách và chạy quy trình hướng dẫn người đọc.</summary>
 [ApiController]
 [Route("api/book-guidance")]
 public sealed class BookGuidanceController(
@@ -12,6 +13,7 @@ public sealed class BookGuidanceController(
     IRobotRuntimeService runtimes,
     IConfiguration configuration) : ControllerBase
 {
+    /// <summary>Tìm đầu sách theo tên, ISBN, tác giả hoặc danh mục.</summary>
     [HttpGet("search")]
     public async Task<ActionResult<BookSearchResponse>> Search(
         [FromQuery] string? query = null,
@@ -31,6 +33,7 @@ public sealed class BookGuidanceController(
         return Ok(await service.SearchAsync(query, category, matchMode, page, pageSize, cancellationToken));
     }
 
+    /// <summary>Lấy thông tin sách, các bản sách còn sẵn và vị trí trên kệ.</summary>
     [HttpGet("books/{bookId:guid}")]
     public async Task<ActionResult<BookGuidanceDetail>> GetBook(Guid bookId, CancellationToken cancellationToken)
     {
@@ -38,10 +41,14 @@ public sealed class BookGuidanceController(
         return book is null ? NotFound("Book not found.") : Ok(book);
     }
 
+    /// <summary>Lưu đánh giá của người dùng sau một nhiệm vụ hướng dẫn sách.</summary>
     [HttpPost("feedback")]
     public async Task<ActionResult<FeedbackResponse>> SaveFeedback(FeedbackRequest request, CancellationToken cancellationToken)
     {
         if (request.Rating is < 1 or > 5) return BadRequest("Rating must be between 1 and 5.");
+        var isSimulationTask = await service.IsSimulationTaskAsync(request.TaskId, cancellationToken);
+        if (isSimulationTask)
+            return Ok(new FeedbackResponse(Guid.Empty, request.TaskId, request.Rating));
         var feedback = await service.SaveFeedbackAsync(request, cancellationToken);
         if (feedback is null)
             return NotFound("Task was not found.");
@@ -49,6 +56,7 @@ public sealed class BookGuidanceController(
         return Ok(feedback);
     }
 
+    /// <summary>Lấy workflow BOOK_GUIDANCE đang active để hiển thị hoặc kiểm tra cấu hình.</summary>
     [HttpGet("workflow")]
     public async Task<IActionResult> GetWorkflow(CancellationToken cancellationToken)
     {
@@ -77,12 +85,16 @@ public sealed class BookGuidanceController(
         });
     }
 
+    /// <summary>Bắt đầu nhiệm vụ robot tìm và hướng dẫn đến bản sách đã chọn.</summary>
+    /// <remarks>Luồng Gazebo được khởi chạy từ mission Run để trạng thái mô phỏng không ghi vào database.</remarks>
     [HttpPost("start")]
     public async Task<IActionResult> Start(StartBookGuidanceRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
         if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.BookId is null || request.BookItemId is null)
             return BadRequest("runtimeId, bookId, and bookItemId are required.");
+        if (string.Equals(request.RuntimeId, "sim", StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { message = "Start Gazebo runs from the mission Run button so execution state stays transient." });
 
         var book = await service.GetBookAsync(request.BookId.Value, cancellationToken);
         if (book is null) return NotFound("Book not found.");
@@ -135,6 +147,7 @@ public sealed class BookGuidanceController(
         }
     }
 
+    /// <summary>Gửi câu trả lời hoặc sự kiện tương tác cho một lần chạy hướng dẫn.</summary>
     [HttpPost("events")]
     public async Task<IActionResult> SubmitEvent(BookGuidanceEventRequest request, CancellationToken cancellationToken)
     {
@@ -167,6 +180,7 @@ public sealed class BookGuidanceController(
         }
     }
 
+    /// <summary>Lấy trạng thái hiện tại của lần chạy hướng dẫn.</summary>
     [HttpGet("executions/{executionId}")]
     public async Task<IActionResult> GetExecution(string executionId, CancellationToken cancellationToken)
     {
@@ -187,6 +201,7 @@ public sealed class BookGuidanceController(
         }
     }
 
+    /// <summary>Đánh dấu task hướng dẫn hoàn thành hoặc thất bại.</summary>
     [HttpPost("tasks/{taskId:guid}/complete")]
     public async Task<IActionResult> CompleteTask(Guid taskId, CompleteBookGuidanceRequest request, CancellationToken cancellationToken)
     {

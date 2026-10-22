@@ -1,15 +1,19 @@
 using LiBot.Application.Workflow.FacilityGuidance;
+using LiBot.Application.Robot;
 using LiBot.Contracts.Workflow;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LiBot.Api.Controllers;
 
+/// <summary>Tìm địa điểm trong thư viện và cung cấp luồng robot hướng dẫn người dùng đến đó.</summary>
 [ApiController]
 [Route("api/facility-guidance")]
 public sealed class FacilityGuidanceController(
     IFacilityGuidanceService service,
+    IRobotRuntimeService runtimes,
     IConfiguration configuration) : ControllerBase
 {
+    /// <summary>Tìm khu vực hoặc địa điểm theo tên.</summary>
     [HttpGet("search")]
     public async Task<ActionResult<FacilitySearchResponse>> Search(
         [FromQuery] string query,
@@ -24,6 +28,7 @@ public sealed class FacilityGuidanceController(
         return Ok(await service.SearchAsync(query, matchMode, cancellationToken));
     }
 
+    /// <summary>Lấy vị trí và thông tin điều hướng của một địa điểm.</summary>
     [HttpGet("facilities/{facilityId:guid}")]
     public async Task<ActionResult<FacilityGuidanceDetail>> GetFacility(
         Guid facilityId,
@@ -33,12 +38,16 @@ public sealed class FacilityGuidanceController(
         return facility is null ? NotFound("Facility not found.") : Ok(facility);
     }
 
+    /// <summary>Lưu đánh giá sau nhiệm vụ hướng dẫn đến địa điểm.</summary>
     [HttpPost("feedback")]
     public async Task<ActionResult<FacilityFeedbackResponse>> SaveFeedback(
         FacilityFeedbackRequest request,
         CancellationToken cancellationToken)
     {
         if (request.Rating is < 1 or > 5) return BadRequest("Rating must be between 1 and 5.");
+        var isSimulationTask = await service.IsSimulationTaskAsync(request.TaskId, cancellationToken);
+        if (isSimulationTask)
+            return Ok(new FacilityFeedbackResponse(Guid.Empty, request.TaskId, request.Rating));
         var feedback = await service.SaveFeedbackAsync(request, cancellationToken);
         if (feedback is null)
             return NotFound("Task was not found.");
@@ -46,6 +55,7 @@ public sealed class FacilityGuidanceController(
         return Ok(feedback);
     }
 
+    /// <summary>Lấy workflow FACILITY_GUIDANCE đang active.</summary>
     [HttpGet("workflow")]
     public async Task<IActionResult> GetWorkflow(CancellationToken cancellationToken)
     {
@@ -74,12 +84,22 @@ public sealed class FacilityGuidanceController(
         });
     }
 
+    /// <summary>Bắt đầu nhiệm vụ robot hướng dẫn đến địa điểm đã tìm được.</summary>
+    /// <remarks>Luồng Gazebo được khởi chạy qua mission Run để giữ trạng thái mô phỏng tạm thời.</remarks>
     [HttpPost("start")]
     public async Task<IActionResult> Start(
         StartFacilityGuidanceRequest request,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
+
+        var runtimeId = string.IsNullOrWhiteSpace(request.RuntimeId)
+            ? "real"
+            : request.RuntimeId.Trim().ToLowerInvariant();
+        if (runtimes.Get(runtimeId) is null)
+            return BadRequest(new { message = $"Robot runtime '{runtimeId}' is not configured." });
+        if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { message = "Start Gazebo runs from the mission Run button so execution state stays transient." });
 
         var baseUrl = !string.IsNullOrWhiteSpace(request.BackendBaseUrl)
             ? request.BackendBaseUrl.TrimEnd('/')
@@ -105,6 +125,7 @@ public sealed class FacilityGuidanceController(
                 missionId = result.MissionId,
                 executionId = result.MissionId,
                 workflowId = result.Workflow.Id,
+                runtimeId,
                 robot = result.Robot
             });
         }
@@ -121,6 +142,7 @@ public sealed class FacilityGuidanceController(
         }
     }
 
+    /// <summary>Gửi sự kiện tương tác cho lần chạy hướng dẫn địa điểm.</summary>
     [HttpPost("events")]
     public async Task<IActionResult> SubmitEvent(
         FacilityGuidanceEventRequest request,
@@ -140,6 +162,7 @@ public sealed class FacilityGuidanceController(
         }
     }
 
+    /// <summary>Lấy trạng thái lần chạy hướng dẫn địa điểm.</summary>
     [HttpGet("executions/{executionId}")]
     public async Task<IActionResult> GetExecution(
         string executionId,
@@ -158,6 +181,7 @@ public sealed class FacilityGuidanceController(
         }
     }
 
+    /// <summary>Đánh dấu task hướng dẫn địa điểm hoàn thành hoặc thất bại.</summary>
     [HttpPost("tasks/{taskId:guid}/complete")]
     public async Task<IActionResult> CompleteTask(
         Guid taskId,

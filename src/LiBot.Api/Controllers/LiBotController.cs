@@ -6,14 +6,16 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LiBot.Api.Controllers;
 
+/// <summary>Endpoint tương thích để gửi một lệnh di chuyển trực tiếp đến robot LiBot.</summary>
 [ApiController]
 [Route("api/robots/libot")]
 public sealed class LiBotController(ILiBotTcpClient tcpClient) : ControllerBase
 {
-    /// <summary>Moves the LiBot robot to the requested target.</summary>
-    /// <param name="request">The target, movement policy, and timeout.</param>
-    /// <param name="cancellationToken">Token propagated from the HTTP request.</param>
-    /// <returns>The response returned by the Raspberry Pi.</returns>
+    /// <summary>Gửi lệnh di chuyển tới robot, chuyển tiếp request tới Pi và trả kết quả.</summary>
+    /// <param name="request">Điểm đến, chính sách di chuyển và thời gian chờ.</param>
+    /// <param name="cancellationToken">Token hủy request HTTP.</param>
+    /// <returns>Kết quả thực thi được Pi trả về.</returns>
+    /// <remarks>Trả 200 khi robot hoàn thành, 422 nếu robot từ chối/không hoàn tất và các lỗi gateway khi Pi không kết nối được.</remarks>
     [HttpPost("move")]
     [ProducesResponseType(typeof(JsonElement), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(JsonElement), StatusCodes.Status422UnprocessableEntity)]

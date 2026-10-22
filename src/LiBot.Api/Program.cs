@@ -21,7 +21,15 @@ builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
 builder.Services.AddSingleton<IRobotRuntimeEventPublisher, RobotRuntimeHubPublisher>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
-    options.SwaggerDoc("v1", new OpenApiInfo { Title = "LiBot.Api", Version = "v1" }));
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "LiBot API",
+        Version = "v1",
+        Description = "API quản lý thư viện, workflow/mission và điều khiển robot LiBot. Mỗi nhóm endpoint có mô tả chức năng; xem XML documentation tại các operation để biết mục đích và cách sử dụng."
+    });
+    options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, "LiBot.Api.xml"), includeControllerXmlComments: true);
+});
 builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();

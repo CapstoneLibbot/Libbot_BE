@@ -1,20 +1,24 @@
 using System.Text.Json;
 using LiBot.Application.Robot;
+using LiBot.Application.Interfaces;
 using LiBot.Application.Workflow.BookGuidance;
 using LiBot.Application.Models;
 using LiBot.Contracts.Workflow;
 using LiBot.Domain.Mission;
-using LiBot.Infrastructure.Persistence;
 using LiBot.Infrastructure.Robot;
-using Microsoft.EntityFrameworkCore;
 
 namespace LiBot.Infrastructure.Workflow;
 
 public sealed class BookGuidanceService(
-    LiBotDbContext db,
+    IBookGuidanceRepository books,
+    IGuidanceWorkflowRepository workflowRepository,
     ILiBotTcpClient tcpClient,
-    BookGuidanceRuntimeRegistry runtimeRegistry) : IBookGuidanceService
+    BookGuidanceRuntimeRegistry runtimeRegistry,
+    IRobotTaskRepository robotTasks) : IBookGuidanceService
 {
+    public Task<bool> IsSimulationTaskAsync(Guid taskId, CancellationToken cancellationToken) =>
+        robotTasks.IsSimulationTaskAsync(taskId, cancellationToken);
+
     public async Task<BookSearchResponse> SearchAsync(
         string? query,
         string? category,
@@ -24,199 +28,60 @@ public sealed class BookGuidanceService(
         CancellationToken cancellationToken)
     {
         var exact = string.Equals(matchMode, "EXACT", StringComparison.OrdinalIgnoreCase);
-        var booksQuery =
-            from book in db.Books.AsNoTracking()
-            join bookCategory in db.BookCategories.AsNoTracking() on book.CategoryId equals bookCategory.Id into categories
-            from bookCategory in categories.DefaultIfEmpty()
-            select new { Book = book, CategoryName = bookCategory == null ? null : bookCategory.Name };
-
-        if (!string.IsNullOrWhiteSpace(query))
-        {
-            var term = query.Trim();
-            booksQuery = exact
-                ? booksQuery.Where(item => item.Book.Title == term || item.Book.Isbn == term || item.Book.Author == term)
-                : booksQuery.Where(item =>
-                    EF.Functions.Like(item.Book.Title, $"%{term}%") ||
-                    EF.Functions.Like(item.Book.Isbn, $"%{term}%") ||
-                    EF.Functions.Like(item.Book.Author, $"%{term}%"));
-        }
-
-        if (!string.IsNullOrWhiteSpace(category))
-        {
-            var categoryTerm = category.Trim().ToLowerInvariant();
-            booksQuery = booksQuery.Where(item =>
-                item.CategoryName != null &&
-                EF.Functions.Like(item.CategoryName.ToLower(), $"%{categoryTerm}%"));
-        }
-
-        var totalCount = await booksQuery.CountAsync(cancellationToken);
-        var books = await booksQuery
-            .OrderBy(item => item.Book.Title)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(item => new BookSearchItem(
-                item.Book.Id,
-                item.Book.Isbn,
-                item.Book.Title,
-                item.Book.Author,
-                item.CategoryName,
-                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == "Available"),
-                item.Book.Image))
-            .ToListAsync(cancellationToken);
-
-        return new BookSearchResponse(books, page, pageSize, totalCount, (int)Math.Ceiling(totalCount / (double)pageSize));
+        return await books.SearchAsync(query, category, exact, page, pageSize, cancellationToken);
     }
 
-    public async Task<BookGuidanceDetail?> GetBookAsync(
+    public Task<BookGuidanceDetail?> GetBookAsync(
         Guid bookId,
         CancellationToken cancellationToken)
-    {
-        var book = await (
-            from item in db.Books.AsNoTracking()
-            join category in db.BookCategories.AsNoTracking() on item.CategoryId equals category.Id into categories
-            from category in categories.DefaultIfEmpty()
-            where item.Id == bookId
-            select new
-            {
-                item.Id,
-                item.Isbn,
-                item.Title,
-                item.Author,
-                item.Publisher,
-                item.PublicationYear,
-                item.Image,
-                Classification = category == null ? null : category.Name
-            })
-            .FirstOrDefaultAsync(cancellationToken);
-        if (book is null) return null;
+        => books.GetBookAsync(bookId, cancellationToken);
 
-        var copies = await db.BookItems
-            .AsNoTracking()
-            .Where(copy => copy.BookId == bookId)
-            .OrderBy(copy => copy.Barcode)
-            .Select(copy => new
-            {
-                copy.Id,
-                copy.Barcode,
-                copy.Status
-            })
-            .ToListAsync(cancellationToken);
-
-        var locationsByCopyId = await (
-            from copy in db.BookItems.AsNoTracking()
-            join level in db.ShelfLevels.AsNoTracking() on copy.ExpectedShelfLevelId equals level.Id
-            join shelf in db.Shelves.AsNoTracking() on level.ShelfId equals shelf.Id
-            join aisle in db.Aisles.AsNoTracking() on shelf.AisleId equals aisle.Id
-            join floor in db.Floors.AsNoTracking() on aisle.FloorId equals floor.Id
-            join endpoint in db.Endpoints.AsNoTracking().Where(item => item.IsActive)
-                on aisle.EndpointId equals endpoint.Id into endpoints
-            from endpoint in endpoints.DefaultIfEmpty()
-            where copy.BookId == bookId
-            select new
-            {
-                copy.Id,
-                Location = new BookLocation(
-                    floor.Id, floor.Name, floor.FloorNumber, aisle.Id, aisle.Code, aisle.Name,
-                    shelf.Id, shelf.Code, shelf.Name, level.Id, level.LevelNumber,
-                    endpoint == null ? null : new NavigationEndpoint(
-                        endpoint.Id,
-                        endpoint.Name,
-                        endpoint.PositionX,
-                        endpoint.PositionY,
-                        endpoint.Theta))
-            })
-            .ToDictionaryAsync(item => item.Id, item => item.Location, cancellationToken);
-
-        var bookItems = copies
-            .Select(copy => new BookGuidanceBookItem(
-                copy.Id,
-                copy.Barcode,
-                copy.Status,
-                locationsByCopyId.GetValueOrDefault(copy.Id)))
-            .ToList();
-
-        return new BookGuidanceDetail(
-            book.Id, book.Isbn, book.Title, book.Author, book.Publisher, book.PublicationYear,
-            book.Classification, ["VIEW_LOCATION", "START_GUIDANCE", "RATE"], book.Image)
-        {
-            BookItems = bookItems
-        };
-    }
-
-    public async Task<FeedbackResponse?> SaveFeedbackAsync(
+    public Task<FeedbackResponse?> SaveFeedbackAsync(
         FeedbackRequest request,
         CancellationToken cancellationToken)
-    {
-        if (!await db.Jobs.AnyAsync(job => job.Id == request.TaskId, cancellationToken))
-            return null;
-
-        var feedback = new Feedback(request.TaskId, request.Rating, request.Comment);
-        db.Feedback.Add(feedback);
-        await db.SaveChangesAsync(cancellationToken);
-        return new FeedbackResponse(feedback.Id, feedback.JobId, feedback.Rating);
-    }
+        => books.SaveFeedbackAsync(request, cancellationToken);
 
     public async Task<BookGuidanceLoadedWorkflow?> LoadWorkflowAsync(CancellationToken cancellationToken)
     {
-        var workflows = await db.Workflows
-            .AsNoTracking()
-            .Where(item => item.Type == BookGuidanceWorkflow.Type && item.IsActive)
-            .OrderBy(item => item.Id)
-            .Take(2)
-            .ToListAsync(cancellationToken);
+        var activeWorkflows = await workflowRepository.GetActiveWorkflowsAsync(BookGuidanceWorkflow.Type, cancellationToken);
 
-        if (workflows.Count > 1)
+        if (activeWorkflows.Count > 1)
         {
             throw new BookGuidanceWorkflowConfigurationException(
                 $"More than one active workflow has type '{BookGuidanceWorkflow.Type}'.");
         }
 
-        var workflow = workflows.SingleOrDefault();
+        var workflow = activeWorkflows.SingleOrDefault();
         if (workflow is null) return null;
 
-        var tasks = await db.WorkflowTasks
-            .AsNoTracking()
-            .Where(item => item.WorkflowId == workflow.Id)
-            .OrderBy(item => item.SequenceNumber)
-            .ToListAsync(cancellationToken);
-
-        if (tasks.Count == 0)
+        if (workflow.Tasks.Count == 0)
         {
             throw new BookGuidanceWorkflowConfigurationException(
                 $"Workflow '{workflow.Id}' does not contain any tasks.");
         }
 
-        if (tasks.Select(item => item.SequenceNumber).Distinct().Count() != tasks.Count)
+        if (workflow.Tasks.Select(item => item.SequenceNumber).Distinct().Count() != workflow.Tasks.Count)
         {
             throw new BookGuidanceWorkflowConfigurationException(
                 $"Workflow '{workflow.Id}' contains duplicate task sequence numbers.");
         }
 
-        var taskIds = tasks.Select(item => item.Id).ToList();
-        var taskSteps = await db.TaskSteps
-            .AsNoTracking()
-            .Where(item => taskIds.Contains(item.WorkflowTaskId))
-            .ToListAsync(cancellationToken);
-        var stepsByTask = taskSteps
-            .GroupBy(item => item.WorkflowTaskId)
-            .ToDictionary(group => group.Key, group => group.ToList());
-
-        var steps = new List<IReadOnlyDictionary<string, object?>>(tasks.Count);
-        foreach (var task in tasks)
+        var steps = new List<IReadOnlyDictionary<string, object?>>(workflow.Tasks.Count);
+        foreach (var task in workflow.Tasks)
         {
-            if (!stepsByTask.TryGetValue(task.Id, out var configuredSteps) || configuredSteps.Count == 0)
+            if (task.Steps.Count == 0)
             {
                 throw new BookGuidanceWorkflowConfigurationException(
                     $"Workflow task '{task.Name}' ({task.Id}) does not contain a step.");
             }
 
-            if (configuredSteps.Count > 1)
+            if (task.Steps.Count > 1)
             {
                 throw new BookGuidanceWorkflowConfigurationException(
                     $"Workflow task '{task.Name}' ({task.Id}) contains more than one step.");
             }
 
-            var taskStep = configuredSteps[0];
+            var taskStep = task.Steps[0];
             var definition = ParseStepConfiguration(taskStep.Configuration, task.Name, taskStep.StepType);
             steps.Add(definition);
         }
@@ -244,8 +109,30 @@ public sealed class BookGuidanceService(
             mission.SourceEndpointId,
             mission.DestinationEndpointId);
         mission.Start();
-        db.Jobs.Add(mission);
-        await db.SaveChangesAsync(cancellationToken);
+        var runtimeId = string.IsNullOrWhiteSpace(request.RuntimeId)
+            ? "sim"
+            : request.RuntimeId.Trim().ToLowerInvariant();
+        var jobTask = new JobTask(mission.Id, null, runtimeId);
+        jobTask.Start();
+        jobTask.SetExecutionId(mission.Id.ToString());
+        jobTask.UpdateExecutionState(JsonSerializer.Serialize(new
+        {
+            missionId = mission.Id,
+            executionId = mission.Id,
+            runtimeId,
+            status = "ACCEPTED",
+            updatedAt = DateTime.UtcNow
+        }));
+        var initialContext = JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["query"] = request.Query.Trim(),
+            ["book_id"] = request.BookId?.ToString(),
+            ["book_item_id"] = request.BookItemId?.ToString(),
+            ["runtime_id"] = runtimeId,
+            ["task_id"] = mission.Id.ToString(),
+            ["backend_base_url"] = backendBaseUrl
+        });
+        await workflowRepository.CreateExecutionAsync(mission, jobTask, loadedWorkflow.Id, initialContext, cancellationToken);
 
         var tcpRequest = new LiBotStartWorkflowRequest(
             "start_workflow",
@@ -256,7 +143,7 @@ public sealed class BookGuidanceService(
                 ["query"] = request.Query.Trim(),
                 ["book_id"] = request.BookId?.ToString(),
                 ["book_item_id"] = request.BookItemId?.ToString(),
-                ["runtime_id"] = request.RuntimeId,
+                ["runtime_id"] = runtimeId,
                 ["task_id"] = mission.Id.ToString(),
                 ["backend_base_url"] = backendBaseUrl
             },
@@ -264,14 +151,22 @@ public sealed class BookGuidanceService(
 
         try
         {
-            var runtimeId = request.RuntimeId ?? "sim";
             using var response = await tcpClient.SendAsync(runtimeId, tcpRequest, cancellationToken);
             var body = response.RootElement.Clone();
             var isAccepted = IsAccepted(body);
             if (!isAccepted)
             {
                 mission.Fail();
-                await db.SaveChangesAsync(cancellationToken);
+                jobTask.UpdateExecutionState(JsonSerializer.Serialize(new
+                {
+                    missionId = mission.Id,
+                    executionId = mission.Id,
+                    runtimeId,
+                    status = "FAILED",
+                    error = ReadMessage(body),
+                    updatedAt = DateTime.UtcNow
+                }));
+                await workflowRepository.SaveChangesAsync(cancellationToken);
             }
             else
             {
@@ -283,7 +178,16 @@ public sealed class BookGuidanceService(
         catch (LiBotTcpException exception)
         {
             mission.Fail();
-            await db.SaveChangesAsync(cancellationToken);
+            jobTask.UpdateExecutionState(JsonSerializer.Serialize(new
+            {
+                missionId = mission.Id,
+                executionId = mission.Id,
+                runtimeId,
+                status = "FAILED",
+                error = exception.Message,
+                updatedAt = DateTime.UtcNow
+            }));
+            await workflowRepository.SaveChangesAsync(cancellationToken);
             throw new BookGuidanceRobotUnavailableException(exception.Message, exception);
         }
     }
@@ -342,13 +246,13 @@ public sealed class BookGuidanceService(
         CompleteBookGuidanceRequest request,
         CancellationToken cancellationToken)
     {
-        var mission = await db.Jobs.FirstOrDefaultAsync(job => job.Id == taskId, cancellationToken);
+        var mission = await workflowRepository.GetMissionAsync(taskId, cancellationToken);
         if (mission is null) return false;
         if (mission.Status is "Completed" or "Failed" or "Cancelled") return true;
 
         if (string.Equals(request.Status, "SUCCEEDED", StringComparison.OrdinalIgnoreCase)) mission.Complete();
         else mission.Fail();
-        await db.SaveChangesAsync(cancellationToken);
+        await workflowRepository.SaveChangesAsync(cancellationToken);
         return true;
     }
 
@@ -357,6 +261,13 @@ public sealed class BookGuidanceService(
         response.TryGetProperty("status", out var status) &&
         status.ValueKind == JsonValueKind.String &&
         string.Equals(status.GetString(), "accepted", StringComparison.OrdinalIgnoreCase);
+
+    private static string? ReadMessage(JsonElement response) =>
+        response.ValueKind == JsonValueKind.Object &&
+        response.TryGetProperty("message", out var message) &&
+        message.ValueKind == JsonValueKind.String
+            ? message.GetString()
+            : null;
 
     private static IReadOnlyDictionary<string, object?> ParseStepConfiguration(
         string? configuration,

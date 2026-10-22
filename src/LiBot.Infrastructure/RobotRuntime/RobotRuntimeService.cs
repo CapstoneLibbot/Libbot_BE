@@ -14,6 +14,7 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
 {
     private static readonly TimeSpan TelemetryFreshness = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan ArmDuration = TimeSpan.FromMinutes(5);
+    private const int MaxFirmwareWheelSpeedMmS = 1000;
     private readonly ConcurrentDictionary<string, RuntimeState> _runtimes;
     private readonly IRobotRuntimeEventPublisher _eventPublisher;
     private readonly ILogger<RobotRuntimeService> _logger;
@@ -51,6 +52,13 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
                 ? "LiBot thật"
                 : "Gazebo mô phỏng";
             endpoint.Kind ??= id.Equals("real", StringComparison.OrdinalIgnoreCase) ? "REAL" : "SIM";
+            if (string.Equals(endpoint.Kind, "REAL", StringComparison.OrdinalIgnoreCase)
+                && endpoint.MaxWheelSpeedMmS is < 1 or > MaxFirmwareWheelSpeedMmS)
+            {
+                throw new InvalidOperationException(
+                    $"Robot runtime '{id}' must configure MaxWheelSpeedMmS between 1 and {MaxFirmwareWheelSpeedMmS}, " +
+                    "matching the current STM32 firmware limit.");
+            }
             _runtimes[id] = new RuntimeState(endpoint);
         }
     }
@@ -156,13 +164,18 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
             return CommandResult.Fail("Manual mapping control is only available for the physical robot.");
         if (runtime.NavigationActive || string.Equals(runtime.Telemetry?.NavigationState, "NAVIGATING", StringComparison.OrdinalIgnoreCase))
             return CommandResult.Fail("Stop Nav2 before using manual control.");
-        return await SendCommandAsync(runtime, new
+        var result = await SendCommandAsync(runtime, new
         {
             command = "manual_velocity",
             linear_x = Math.Clamp(request.LinearX, -0.7, 0.7),
             linear_y = Math.Clamp(request.LinearY, -0.7, 0.7),
             angular_z = Math.Clamp(request.AngularZ, -0.5, 0.5),
+            max_wheel_speed_mm_s = runtime.Endpoint.MaxWheelSpeedMmS,
         }, cancellationToken);
+        if (!result.Success) return result;
+        return HasStm32Acknowledgement(result)
+            ? result
+            : CommandResult.Fail("Robot gateway accepted the velocity, but STM32 did not acknowledge it.");
     }
 
     public async Task<CommandResult> StopManualAsync(
@@ -177,6 +190,8 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
             resume_navigation = resumeNavigation,
         }, cancellationToken);
         if (!result.Success) return result;
+        if (!HasStm32Acknowledgement(result))
+            return CommandResult.Fail("Robot gateway accepted the stop, but STM32 did not acknowledge it.");
 
         lock (runtime.SyncRoot)
         {
@@ -189,6 +204,18 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
             }
         }
         return result;
+    }
+
+    private static bool HasStm32Acknowledgement(CommandResult result)
+    {
+        if (result.Payload is not JsonElement payload
+            || payload.ValueKind != JsonValueKind.Object
+            || !payload.TryGetProperty("stm32_acknowledged", out var acknowledged))
+        {
+            return false;
+        }
+
+        return acknowledged.ValueKind == JsonValueKind.True;
     }
 
     public async Task<CommandResult> SetMappingAsync(string runtimeId, bool enabled, string? leaseId, CancellationToken cancellationToken)
@@ -228,7 +255,11 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
         if (!TryGetReadyRuntime(runtimeId, leaseId, requireLocalized: false, out var runtime, out var error))
             return CommandResult.Fail(error!);
         if (runtime!.MappingActive) return CommandResult.Fail("Stop SLAM mapping before starting Nav2.");
-        var result = await SendCommandAsync(runtime, new { command = "start_navigation_mode", map_path = mapPath }, cancellationToken);
+        var result = await SendCommandAsync(
+            runtime,
+            new { command = "start_navigation_mode", map_path = mapPath },
+            cancellationToken,
+            TimeSpan.FromSeconds(70));
         if (result.Success)
         {
             lock (runtime.SyncRoot)
@@ -371,7 +402,8 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
     private async Task<CommandResult> SendCommandAsync(
         RuntimeState runtime,
         object command,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? responseTimeout = null)
     {
         try
         {
@@ -383,7 +415,7 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
             await writer.WriteLineAsync(JsonSerializer.Serialize(command).AsMemory(), cancellationToken);
             await writer.FlushAsync(cancellationToken);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+            timeout.CancelAfter(responseTimeout ?? TimeSpan.FromSeconds(10));
             var line = await reader.ReadLineAsync(timeout.Token);
             if (string.IsNullOrWhiteSpace(line)) return CommandResult.Fail("Robot gateway returned an empty response.");
             using var response = JsonDocument.Parse(line);
@@ -446,6 +478,7 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
         public string Id { get; set; } = "";
         public string Host { get; set; } = string.Empty;
         public int Port { get; set; }
+        public int MaxWheelSpeedMmS { get; set; }
         public string? DisplayName { get; set; }
         public string? Kind { get; set; }
     }

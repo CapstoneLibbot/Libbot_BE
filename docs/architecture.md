@@ -120,10 +120,8 @@ Phân công:
 - `BackgroundJobs/`: worker chạy định kỳ, watchdog, monitor job
 
 Ví dụ:
-- `RobotCommunicationService`: gửi lệnh đến robot, theo dõi trạng thái
-- `MissionDispatcher`: phân công nhiệm vụ cho robot
-- `RobotHeartbeatMonitor`: kiểm tra robot còn sống hay không
-- `MissionTimeoutMonitor`: phát hiện mission quá hạn
+ - `LiBotTcpClient`: gửi lệnh TCP đến runtime robot
+- `RobotRuntimeService`: quản lý runtime, telemetry và lệnh điều khiển robot
 
 Trách nhiệm:
 - Kết nối dữ liệu / storage
@@ -144,8 +142,8 @@ Thư mục gợi ý:
 
 Ví dụ:
 - `MissionController`
-- `RobotController`
-- `InventoryController`
+- `RobotTelemetryController`
+- `WorkflowController`
 - `RobotHub`
 - `ExceptionMiddleware`
 

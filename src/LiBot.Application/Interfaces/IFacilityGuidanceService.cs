@@ -5,6 +5,8 @@ namespace LiBot.Application.Workflow.FacilityGuidance;
 
 public interface IFacilityGuidanceService
 {
+    Task<bool> IsSimulationTaskAsync(Guid taskId, CancellationToken cancellationToken);
+
     Task<FacilitySearchResponse> SearchAsync(
         string query,
         string matchMode,

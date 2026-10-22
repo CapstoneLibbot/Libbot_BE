@@ -5,6 +5,8 @@ namespace LiBot.Application.Workflow.BookGuidance;
 
 public interface IBookGuidanceService
 {
+    Task<bool> IsSimulationTaskAsync(Guid taskId, CancellationToken cancellationToken);
+
     Task<BookSearchResponse> SearchAsync(
         string? query,
         string? category,
