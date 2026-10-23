@@ -17,15 +17,28 @@ public static class WorkflowTemplates
     [
         new("search-guide-book", "Tìm và hướng dẫn tới sách", "Tìm sách, nhận lựa chọn và dẫn người đọc đến kệ.", "SEARCH_AND_GUIDE_TO_BOOK", new[]
         {
-            MakeStep(1, "S10", "PROCESS_DATA", new() { ["action"] = "SEARCH_BOOK", ["payload"] = new { query = "${query}", runtime_id = "${runtime_id}" }, ["output_mapping"] = new { data = "search_results" }, ["transitions"] = new { on_success = "S20", on_error = "S90" } }),
-            MakeStep(2, "S20", "DISPLAY", new() { ["ui_screen"] = "BOOK_SEARCH_RESULTS", ["data"] = "${search_results}", ["transitions"] = new { on_success = "S30", on_error = "S90" } }),
-            MakeStep(3, "S30", "WAIT", new() { ["wait_for"] = "USER_TOUCH", ["event_type"] = "BOOK_SELECTED", ["result_variable"] = "selected_book_id", ["timeout_sec"] = 120, ["transitions"] = new { on_event = "S40", on_timeout = "S90", on_cancel = "S90" } }),
-            MakeStep(4, "S40", "PROCESS_DATA", new() { ["action"] = "GET_BOOK_DETAIL", ["payload"] = new { book_id = "${selected_book_id}", runtime_id = "${runtime_id}" }, ["output_mapping"] = new { data = "book_detail" }, ["transitions"] = new { on_success = "S50", on_error = "S90" } }),
-            MakeStep(5, "S50", "DISPLAY", new() { ["ui_screen"] = "BOOK_INFO", ["data"] = "${book_detail}", ["transitions"] = new { on_success = "S60", on_error = "S90" } }),
-            MakeStep(6, "S60", "MOVE", new() { ["target"] = "${book_detail.location.endpoint}", ["timeout_sec"] = 180, ["transitions"] = new { on_success = "S70", on_error = "S90", on_timeout = "S90" } }),
-            MakeStep(7, "S70", "DISPLAY", new() { ["ui_screen"] = "ARRIVED", ["data"] = "${book_detail.location}", ["transitions"] = new { on_success = "S80", on_error = "S90" } }),
-            MakeStep(8, "S80", "END", new() { ["status"] = "SUCCEEDED" }),
-            MakeStep(9, "S90", "END", new() { ["status"] = "FAILED" })
+            MakeStep(1, "S10", "PROCESS_DATA", new() { ["action"] = "SEARCH_BOOK", ["payload"] = new { query = "${query}", match_mode = "FUZZY", runtime_id = "${runtime_id}" }, ["output_mapping"] = new Dictionary<string, string> { ["data.books"] = "search_results" }, ["transitions"] = new { on_success = "S20", on_error = "S210" } }),
+            MakeStep(2, "S20", "DISPLAY", new() { ["ui_screen"] = "BOOK_SEARCH_RESULTS", ["data"] = new { books = "${search_results}" }, ["transitions"] = new { on_success = "S30", on_error = "S210" } }),
+            MakeStep(3, "S30", "WAIT", new() { ["wait_for"] = "USER_TOUCH", ["event_type"] = "BOOK_SELECTED", ["result_variable"] = "selected_book_id", ["timeout_sec"] = 120, ["transitions"] = new { on_event = "S40", on_timeout = "S210", on_cancel = "S210" } }),
+            MakeStep(4, "S40", "PROCESS_DATA", new() { ["action"] = "GET_BOOK_DETAIL", ["payload"] = new { book_id = "${selected_book_id}", runtime_id = "${runtime_id}" }, ["output_mapping"] = new { data = "book_detail" }, ["transitions"] = new { on_success = "S50", on_error = "S210" } }),
+            MakeStep(5, "S50", "DISPLAY", new() { ["ui_screen"] = "BOOK_INFO", ["data"] = "${book_detail}", ["transitions"] = new { on_success = "S60", on_error = "S210" } }),
+            MakeStep(6, "S60", "WAIT", new() { ["wait_for"] = "USER_TOUCH", ["event_type"] = "BOOK_ACTION", ["allowed_values"] = new[] { "VIEW_LOCATION", "START_GUIDANCE", "RATE" }, ["result_variable"] = "book_action", ["timeout_sec"] = 120, ["transitions"] = new { on_event = "S70", on_timeout = "S160", on_cancel = "S160" } }),
+            MakeStep(7, "S70", "EVALUATE", new() { ["condition_type"] = "DATA_MATCH", ["left"] = "${book_action}", ["operator"] = "EQUAL", ["right"] = "RATE", ["transitions"] = new { on_true = "S160", on_false = "S75" } }),
+            MakeStep(8, "S75", "EVALUATE", new() { ["condition_type"] = "DATA_MATCH", ["left"] = "${book_action}", ["operator"] = "EQUAL", ["right"] = "START_GUIDANCE", ["transitions"] = new { on_true = "S110", on_false = "S80" } }),
+            MakeStep(9, "S80", "DISPLAY", new() { ["ui_screen"] = "MAP_LOCATION", ["data"] = "${book_detail.location}", ["transitions"] = new { on_success = "S90", on_error = "S210" } }),
+            MakeStep(10, "S90", "WAIT", new() { ["wait_for"] = "USER_TOUCH", ["event_type"] = "MAP_ACTION", ["allowed_values"] = new[] { "START_GUIDANCE", "RATE" }, ["result_variable"] = "map_action", ["timeout_sec"] = 120, ["transitions"] = new { on_event = "S100", on_timeout = "S160", on_cancel = "S160" } }),
+            MakeStep(11, "S100", "EVALUATE", new() { ["condition_type"] = "DATA_MATCH", ["left"] = "${map_action}", ["operator"] = "EQUAL", ["right"] = "RATE", ["transitions"] = new { on_true = "S160", on_false = "S110" } }),
+            MakeStep(12, "S110", "DISPLAY", new() { ["ui_screen"] = "NAV_GUIDE", ["data"] = new { destination = "${book_detail.location}", show_route = true }, ["transitions"] = new { on_success = "S120", on_error = "S210" } }),
+            MakeStep(13, "S120", "MOVE", new() { ["target"] = "${book_detail.location.endpoint}", ["speed_mode"] = "SLOW_GUIDE", ["obstacle_policy"] = "WAIT_RESUME", ["timeout_sec"] = 180, ["output_mapping"] = new { move_status = "move_status", final_pose = "current_pose" }, ["transitions"] = new { on_success = "S130", on_error = "S210", on_timeout = "S210" } }),
+            MakeStep(14, "S130", "DISPLAY", new() { ["ui_screen"] = "ARRIVED", ["data"] = "${book_detail.location}", ["transitions"] = new { on_success = "S140", on_error = "S210" } }),
+            MakeStep(15, "S140", "NOTIFY", new() { ["channel"] = "SPEAKER_TTS", ["message_type"] = "INFO", ["content"] = "Đã đến vị trí sách. Vui lòng xem kệ và tầng kệ hiển thị trên màn hình.", ["transitions"] = new { on_success = "S150", on_error = "S210" } }),
+            MakeStep(16, "S150", "WAIT", new() { ["wait_for"] = "TIMEOUT", ["timeout_sec"] = 15, ["transitions"] = new { on_timeout = "S160", on_success = "S160" } }),
+            MakeStep(17, "S160", "DISPLAY", new() { ["ui_screen"] = "RATING", ["data"] = new { prompt = "Đánh giá trải nghiệm của bạn" }, ["transitions"] = new { on_success = "S170", on_error = "S210" } }),
+            MakeStep(18, "S170", "WAIT", new() { ["wait_for"] = "USER_TOUCH", ["event_type"] = "RATING_SUBMIT", ["result_variable"] = "rating", ["timeout_sec"] = 10, ["transitions"] = new { on_event = "S180", on_timeout = "S190", on_cancel = "S190" } }),
+            MakeStep(19, "S180", "PROCESS_DATA", new() { ["action"] = "SAVE_RATING", ["payload"] = new { rating = "${rating}", task_id = "${task_id}", runtime_id = "${runtime_id}" }, ["transitions"] = new { on_success = "S190", on_error = "S210" } }),
+            MakeStep(20, "S190", "DISPLAY", new() { ["ui_screen"] = "HOME", ["data"] = new { }, ["transitions"] = new { on_success = "S200", on_error = "S210" } }),
+            MakeStep(21, "S200", "END", new() { ["result_status"] = "SUCCEEDED" }),
+            MakeStep(22, "S210", "END", new() { ["result_status"] = "FAILED" })
         }),
         new("search-guide-facility", "Tìm và hướng dẫn tới tiện ích", "Tìm tiện ích trong thư viện và điều hướng tới đó.", "SEARCH_AND_GUIDE_TO_FACILITY", new[]
         {
