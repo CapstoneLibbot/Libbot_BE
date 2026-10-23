@@ -1,39 +1,39 @@
-using System.Reflection;
 using LiBot.Application.Interfaces;
+using LiBot.Application.Models;
 
 namespace LiBot.Application.Services;
 
-public sealed class LibraryResourceService<TEntity>(IGenericRepository<TEntity> repository)
-    : ILibraryResourceService<TEntity> where TEntity : class
+public sealed class LibraryResourceService<TEntity, TDto>(ILibraryResourceRepository<TEntity> repository)
+    : ILibraryResourceService<TEntity, TDto>
+    where TEntity : class
+    where TDto : class, ILibraryResourceDto<TEntity>, new()
 {
-    public Task<IReadOnlyList<TEntity>> GetAllAsync(CancellationToken cancellationToken) =>
-        repository.GetAllAsync(cancellationToken);
+    public async Task<IReadOnlyList<TDto>> GetAllAsync(CancellationToken cancellationToken) =>
+        (await repository.GetAllAsync(cancellationToken)).Select(ToDto).ToList();
 
-    public Task<TEntity?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        repository.GetByIdAsync(id, cancellationToken);
-
-    public async Task<TEntity> CreateAsync(TEntity entity, CancellationToken cancellationToken)
+    public async Task<TDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
     {
-        repository.Add(entity);
-        await repository.SaveChangesAsync(cancellationToken);
-        return entity;
+        var entity = await repository.GetByIdAsync(id, cancellationToken);
+        return entity is null ? null : ToDto(entity);
     }
 
-    public async Task<TEntity?> UpdateAsync(Guid id, TEntity replacement, CancellationToken cancellationToken)
+    public async Task<TDto> CreateAsync(TDto dto, CancellationToken cancellationToken)
+    {
+        var entity = dto.ToEntity();
+        dto.ApplyTo(entity);
+        repository.Add(entity);
+        await repository.SaveChangesAsync(cancellationToken);
+        return ToDto(entity);
+    }
+
+    public async Task<TDto?> UpdateAsync(Guid id, TDto dto, CancellationToken cancellationToken)
     {
         var current = await repository.GetByIdAsync(id, cancellationToken);
         if (current is null) return null;
-        foreach (var property in typeof(TEntity).GetProperties(BindingFlags.Instance | BindingFlags.Public))
-        {
-            if (property.Name is "Id" or "CreatedAtUtc" or "UpdatedAtUtc" || property.GetSetMethod(true) is null) continue;
-            property.SetValue(current, property.GetValue(replacement));
-        }
+        dto.ApplyTo(current);
         await repository.SaveChangesAsync(cancellationToken);
-        return current;
+        return ToDto(current);
     }
-
-    public async Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken) =>
-        await repository.GetByIdAsync(id, cancellationToken) is not null;
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -42,5 +42,12 @@ public sealed class LibraryResourceService<TEntity>(IGenericRepository<TEntity> 
         repository.Remove(entity);
         await repository.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    private static TDto ToDto(TEntity entity)
+    {
+        var dto = new TDto();
+        dto.LoadFrom(entity);
+        return dto;
     }
 }

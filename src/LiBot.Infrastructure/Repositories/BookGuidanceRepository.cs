@@ -131,6 +131,42 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
         var feedback = new Feedback(request.TaskId, request.Rating, request.Comment);
         db.Feedback.Add(feedback);
         await db.SaveChangesAsync(cancellationToken);
-        return new FeedbackResponse(feedback.Id, feedback.JobId, feedback.Rating);
+        return ToFeedbackResponse(feedback);
     }
+
+    public async Task<IReadOnlyList<FeedbackResponse>> GetFeedbackAsync(Guid? taskId, CancellationToken cancellationToken)
+    {
+        var query = db.Feedback.AsNoTracking();
+        if (taskId.HasValue) query = query.Where(item => item.JobId == taskId.Value);
+        return await query.OrderByDescending(item => item.CreatedAtUtc)
+            .Select(item => new FeedbackResponse(item.Id, item.JobId, item.Rating, item.Comment))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<FeedbackResponse?> GetFeedbackByIdAsync(Guid feedbackId, CancellationToken cancellationToken)
+    {
+        var feedback = await db.Feedback.AsNoTracking().FirstOrDefaultAsync(item => item.Id == feedbackId, cancellationToken);
+        return feedback is null ? null : ToFeedbackResponse(feedback);
+    }
+
+    public async Task<FeedbackResponse?> UpdateFeedbackAsync(Guid feedbackId, FeedbackUpdateRequest request, CancellationToken cancellationToken)
+    {
+        var feedback = await db.Feedback.FirstOrDefaultAsync(item => item.Id == feedbackId, cancellationToken);
+        if (feedback is null) return null;
+        feedback.Update(request.Rating, request.Comment);
+        await db.SaveChangesAsync(cancellationToken);
+        return ToFeedbackResponse(feedback);
+    }
+
+    public async Task<bool> DeleteFeedbackAsync(Guid feedbackId, CancellationToken cancellationToken)
+    {
+        var feedback = await db.Feedback.FirstOrDefaultAsync(item => item.Id == feedbackId, cancellationToken);
+        if (feedback is null) return false;
+        db.Feedback.Remove(feedback);
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    private static FeedbackResponse ToFeedbackResponse(Feedback feedback) =>
+        new(feedback.Id, feedback.JobId, feedback.Rating, feedback.Comment);
 }

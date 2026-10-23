@@ -1,11 +1,14 @@
+using LiBot.Application.Models;
+
 namespace LiBot.Application.Interfaces;
 
-public interface ILibraryResourceService<TEntity> where TEntity : class
+public interface ILibraryResourceService<TEntity, TDto>
+    where TEntity : class
+    where TDto : class, ILibraryResourceDto<TEntity>, new()
 {
-    Task<IReadOnlyList<TEntity>> GetAllAsync(CancellationToken cancellationToken);
-    Task<TEntity?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
-    Task<TEntity> CreateAsync(TEntity entity, CancellationToken cancellationToken);
-    Task<TEntity?> UpdateAsync(Guid id, TEntity replacement, CancellationToken cancellationToken);
-    Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TDto>> GetAllAsync(CancellationToken cancellationToken);
+    Task<TDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
+    Task<TDto> CreateAsync(TDto dto, CancellationToken cancellationToken);
+    Task<TDto?> UpdateAsync(Guid id, TDto dto, CancellationToken cancellationToken);
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
 }

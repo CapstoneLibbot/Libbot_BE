@@ -1,5 +1,6 @@
 using LiBot.Application.Robot;
 using LiBot.Application.Interfaces;
+using LiBot.Application.Models;
 using LiBot.Application.Services;
 using LiBot.Application.Services.Robot;
 using LiBot.Application.Services.Workflow;
@@ -26,7 +27,19 @@ public static class DependencyInjection
 
         services.AddDbContext<LiBotDbContext>(options => options.UseSqlServer(connectionString));
         services.AddScoped(typeof(IGenericRepository<>), typeof(EfGenericRepository<>));
-        services.AddScoped(typeof(ILibraryResourceService<>), typeof(LibraryResourceService<>));
+        services.AddScoped(typeof(ILibraryResourceRepository<>), typeof(EfLibraryResourceRepository<>));
+        services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.Aisle, AisleDto>, LibraryResourceService<LiBot.Domain.Library.Aisle, AisleDto>>();
+        services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.Area, AreaDto>, LibraryResourceService<LiBot.Domain.Library.Area, AreaDto>>();
+        services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.Book, BookDto>, LibraryResourceService<LiBot.Domain.Library.Book, BookDto>>();
+        services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.BookCategory, BookCategoryDto>, LibraryResourceService<LiBot.Domain.Library.BookCategory, BookCategoryDto>>();
+        services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.BookItem, BookItemDto>, LibraryResourceService<LiBot.Domain.Library.BookItem, BookItemDto>>();
+        services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.Endpoint, EndpointDto>, LibraryResourceService<LiBot.Domain.Library.Endpoint, EndpointDto>>();
+        services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.EndpointGroup, EndpointGroupDto>, LibraryResourceService<LiBot.Domain.Library.EndpointGroup, EndpointGroupDto>>();
+        services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.EndpointGroupMember, EndpointGroupMemberDto>, LibraryResourceService<LiBot.Domain.Library.EndpointGroupMember, EndpointGroupMemberDto>>();
+        services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.Floor, FloorDto>, LibraryResourceService<LiBot.Domain.Library.Floor, FloorDto>>();
+        services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.Shelf, ShelfDto>, LibraryResourceService<LiBot.Domain.Library.Shelf, ShelfDto>>();
+        services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.ShelfLevel, ShelfLevelDto>, LibraryResourceService<LiBot.Domain.Library.ShelfLevel, ShelfLevelDto>>();
+        services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.Zone, ZoneDto>, LibraryResourceService<LiBot.Domain.Library.Zone, ZoneDto>>();
         services.AddScoped<IBookGuidanceRepository, BookGuidanceRepository>();
         services.AddScoped<IFacilityGuidanceRepository, FacilityGuidanceRepository>();
         services.AddScoped<IGuidanceWorkflowRepository, GuidanceWorkflowRepository>();

@@ -41,6 +41,18 @@ public sealed class BookGuidanceService(
         CancellationToken cancellationToken)
         => books.SaveFeedbackAsync(request, cancellationToken);
 
+    public Task<IReadOnlyList<FeedbackResponse>> GetFeedbackAsync(Guid? taskId, CancellationToken cancellationToken) =>
+        books.GetFeedbackAsync(taskId, cancellationToken);
+
+    public Task<FeedbackResponse?> GetFeedbackByIdAsync(Guid feedbackId, CancellationToken cancellationToken) =>
+        books.GetFeedbackByIdAsync(feedbackId, cancellationToken);
+
+    public Task<FeedbackResponse?> UpdateFeedbackAsync(Guid feedbackId, FeedbackUpdateRequest request, CancellationToken cancellationToken) =>
+        books.UpdateFeedbackAsync(feedbackId, request, cancellationToken);
+
+    public Task<bool> DeleteFeedbackAsync(Guid feedbackId, CancellationToken cancellationToken) =>
+        books.DeleteFeedbackAsync(feedbackId, cancellationToken);
+
     public async Task<BookGuidanceLoadedWorkflow?> LoadWorkflowAsync(CancellationToken cancellationToken)
     {
         var activeWorkflows = await workflowRepository.GetActiveWorkflowsAsync(BookGuidanceWorkflow.Type, cancellationToken);

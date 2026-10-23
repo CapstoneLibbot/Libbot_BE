@@ -19,4 +19,13 @@ public class Feedback : Entity
         Rating = rating;
         Comment = comment?.Trim();
     }
+
+    public void Update(int rating, string? comment)
+    {
+        if (rating is < 1 or > 5)
+            throw new ArgumentOutOfRangeException(nameof(rating));
+
+        Rating = rating;
+        Comment = comment?.Trim();
+    }
 }
