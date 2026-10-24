@@ -71,8 +71,8 @@ public static class WorkflowTemplates
             MakeStep(3, "P25", "WAIT", new() { ["wait_for"] = "USER_TOUCH", ["event_type"] = "PATROL_OBSERVATION", ["allowed_values"] = new[] { "FALLEN_BOOK", "OBSTACLE", "WARNING" }, ["result_variable"] = "patrol_observation", ["prompt"] = "Select the observed library issue", ["timeout_sec"] = 120, ["transitions"] = new { on_event = "P30", on_timeout = "P70" } }),
             MakeStep(4, "P30", "PROCESS_DATA", new() { ["action"] = "RECORD_PATROL_OBSERVATION", ["payload"] = new { observation = "${patrol_observation}", mission_id = "${mission_id}", runtime_id = "${runtime_id}" }, ["transitions"] = new { on_success = "P40", on_error = "P70" } }),
             MakeStep(5, "P40", "DISPLAY", new() { ["ui_screen"] = "PATROL_OBSERVATION", ["data"] = "${patrol_observation}", ["transitions"] = new { on_success = "P50" } }),
-            MakeStep(6, "P50", "PROCESS_DATA", new() { ["action"] = "FINALIZE_PATROL", ["payload"] = new { mission_id = "${mission_id}", runtime_id = "${runtime_id}" }, ["transitions"] = new { on_success = "P60", on_error = "P70" } }),
-            MakeStep(7, "P60", "NOTIFY", new() { ["channel"] = "SPEAKER_TTS", ["content"] = "Library patrol completed.", ["transitions"] = new { on_success = "P80", on_error = "P70" } }),
+            MakeStep(6, "P50", "PROCESS_DATA", new() { ["action"] = "GENERATE_PATROL_REPORT", ["payload"] = new { mission_id = "${mission_id}", runtime_id = "${runtime_id}" }, ["transitions"] = new { on_success = "P60", on_error = "P70" } }),
+            MakeStep(7, "P60", "NOTIFY", new() { ["channel"] = "LIBRARIAN_WS", ["event_type"] = "PATROL_COMPLETED", ["content"] = "Library patrol completed.", ["transitions"] = new { on_success = "P80", on_error = "P70" } }),
             MakeStep(8, "P70", "END", new() { ["status"] = "FAILED" }),
             MakeStep(9, "P80", "END", new() { ["status"] = "SUCCEEDED" })
         }),
