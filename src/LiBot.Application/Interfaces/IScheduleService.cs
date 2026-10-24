@@ -5,9 +5,9 @@ namespace LiBot.Application.Interfaces;
 
 public interface IScheduleService
 {
-    Task<IReadOnlyList<Schedule>> GetAllAsync(CancellationToken cancellationToken);
-    Task<Schedule?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
-    Task<Schedule> CreateAsync(ScheduleWriteRequest request, CancellationToken cancellationToken);
-    Task<Schedule?> UpdateAsync(Guid id, ScheduleWriteRequest request, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ScheduleResponse>> GetAllAsync(CancellationToken cancellationToken);
+    Task<ScheduleResponse?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
+    Task<ScheduleResponse> CreateAsync(ScheduleWriteRequest request, CancellationToken cancellationToken);
+    Task<ScheduleResponse?> UpdateAsync(Guid id, ScheduleWriteRequest request, CancellationToken cancellationToken);
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
 }
