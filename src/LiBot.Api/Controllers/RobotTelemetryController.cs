@@ -12,6 +12,8 @@ namespace LiBot.Api.Controllers;
 public sealed class RobotTelemetryController(
     IRobotRuntimeService runtimes,
     ILiBotTcpClient tcpClient,
+    IHttpClientFactory httpClientFactory,
+    IConfiguration configuration,
     ILogger<RobotTelemetryController> logger) : ControllerBase
 {
     /// <summary>Lấy danh sách runtime robot đã cấu hình cùng trạng thái kết nối.</summary>
@@ -112,7 +114,75 @@ public sealed class RobotTelemetryController(
         return BadRequest(new { message = "Invalid occupancy grid." });
     }
 
-    /// <summary>Gửi vận tốc tuyến tính/góc tới robot ở chế độ điều khiển tay.</summary>
+    [HttpGet("{runtimeId}/camera/stream")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task CameraStream(string runtimeId, CancellationToken cancellationToken)
+    {
+        if (runtimes.Get(runtimeId) is null)
+        {
+            Response.StatusCode = StatusCodes.Status404NotFound;
+            await Response.WriteAsJsonAsync(new { message = "Robot runtime was not found." }, cancellationToken);
+            return;
+        }
+
+        var section = configuration.GetSection($"RobotRuntimes:{runtimeId}");
+        var host = section["Host"];
+        var port = section.GetValue("CameraStreamPort", 9012);
+        if (string.IsNullOrWhiteSpace(host)
+            || Uri.CheckHostName(host) == UriHostNameType.Unknown
+            || port is < 1 or > 65535)
+        {
+            Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            await Response.WriteAsJsonAsync(new { message = "Camera stream is not configured for this runtime." }, cancellationToken);
+            return;
+        }
+
+        try
+        {
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                new UriBuilder(Uri.UriSchemeHttp, host, port, "/stream.mjpg").Uri);
+            var token = section["CameraStreamToken"];
+            if (!string.IsNullOrWhiteSpace(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            using var upstream = await httpClientFactory.CreateClient("RobotCamera").SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+            if (!upstream.IsSuccessStatusCode)
+            {
+                Response.StatusCode = StatusCodes.Status502BadGateway;
+                await Response.WriteAsJsonAsync(
+                    new { message = $"Robot camera returned HTTP {(int)upstream.StatusCode}." },
+                    cancellationToken);
+                return;
+            }
+
+            Response.StatusCode = StatusCodes.Status200OK;
+            Response.ContentType = upstream.Content.Headers.ContentType?.ToString()
+                ?? "multipart/x-mixed-replace; boundary=frame";
+            Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+            Response.Headers.Pragma = "no-cache";
+            await upstream.Content.CopyToAsync(Response.Body, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The browser closed the live feed; there is no response left to write.
+        }
+        catch (Exception exception) when (Response.HasStarted)
+        {
+            logger.LogDebug(exception, "Camera stream for runtime {RuntimeId} ended after it started.", runtimeId);
+        }
+        catch (Exception exception) when (!Response.HasStarted)
+        {
+            logger.LogWarning(exception, "Unable to proxy camera stream for runtime {RuntimeId}.", runtimeId);
+            Response.StatusCode = StatusCodes.Status502BadGateway;
+            await Response.WriteAsJsonAsync(new { message = "Unable to connect to the robot camera." }, cancellationToken);
+        }
+    }
+
+    /// <summary>Send linear/angular velocity to a robot in manual control mode.</summary>
     [HttpPost("{runtimeId}/manual-velocity")]
     public async Task<IActionResult> ManualVelocity(string runtimeId, ManualVelocityRequest request, CancellationToken cancellationToken)
     {
