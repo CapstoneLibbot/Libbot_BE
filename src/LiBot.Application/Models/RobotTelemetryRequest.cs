@@ -14,4 +14,7 @@ public sealed record RobotTelemetryRequest(
     IReadOnlyList<PlannedPathPointDto>? PlannedPath,
     string? Error,
     bool MappingActive = false,
-    bool NavigationActive = false);
+    bool NavigationActive = false,
+    bool NavigationReady = false,
+    string NavigationModeState = "STOPPED",
+    string? ActiveMapId = null);

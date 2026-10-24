@@ -98,7 +98,7 @@ public class MapController(
         if (string.IsNullOrWhiteSpace(path))
             return Conflict(new { message = "Map has no robot-side PGM/YAML files or is not a saved occupancy map." });
 
-        var result = await runtimes.StartNavigationModeAsync("real", path, armLeaseId, cancellationToken);
+        var result = await runtimes.StartNavigationModeAsync("real", id, path, armLeaseId, cancellationToken);
         return result.Success ? Accepted(result.Payload) : Conflict(new { message = result.Error });
     }
 

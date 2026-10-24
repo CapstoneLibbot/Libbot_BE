@@ -16,7 +16,7 @@ public interface IRobotRuntimeService
     Task<CommandResult> StopManualAsync(string runtimeId, bool resumeNavigation, CancellationToken cancellationToken);
     Task<CommandResult> SetMappingAsync(string runtimeId, bool enabled, string? leaseId, CancellationToken cancellationToken);
     Task<CommandResult> SaveMapOnRobotAsync(string runtimeId, string fileStem, string? leaseId, CancellationToken cancellationToken);
-    Task<CommandResult> StartNavigationModeAsync(string runtimeId, string mapPath, string? leaseId, CancellationToken cancellationToken);
+    Task<CommandResult> StartNavigationModeAsync(string runtimeId, Guid mapId, string mapPath, string? leaseId, CancellationToken cancellationToken);
     Task<CommandResult> StopNavigationModeAsync(string runtimeId, CancellationToken cancellationToken);
     Task<CommandResult> SetInitialPoseAsync(string runtimeId, InitialPoseRequest request, CancellationToken cancellationToken);
     Task<CommandResult> StartNavigationAsync(string runtimeId, NavigationGoalRequest request, CancellationToken cancellationToken);

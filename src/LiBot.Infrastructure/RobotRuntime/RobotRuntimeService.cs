@@ -81,6 +81,8 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
             return "Robot runtime is offline or its telemetry is stale.";
         if (!string.Equals(runtime.Telemetry?.LocalizationState, "LOCALIZED", StringComparison.OrdinalIgnoreCase))
             return "Robot must be localized before starting book guidance.";
+        if (runtime.Telemetry?.NavigationReady != true)
+            return "Nav2 is not ready. Set the initial pose and wait for activation.";
         if (string.Equals(runtime.Endpoint.Kind, "REAL", StringComparison.OrdinalIgnoreCase)
             && (!response.Armed || !string.Equals(runtime.ArmLeaseId, armLeaseId, StringComparison.Ordinal)))
             return "Arm the physical robot and provide its current lease before starting guidance.";
@@ -250,14 +252,14 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
         return result;
     }
 
-    public async Task<CommandResult> StartNavigationModeAsync(string runtimeId, string mapPath, string? leaseId, CancellationToken cancellationToken)
+    public async Task<CommandResult> StartNavigationModeAsync(string runtimeId, Guid mapId, string mapPath, string? leaseId, CancellationToken cancellationToken)
     {
         if (!TryGetReadyRuntime(runtimeId, leaseId, requireLocalized: false, out var runtime, out var error))
             return CommandResult.Fail(error!);
         if (runtime!.MappingActive) return CommandResult.Fail("Stop SLAM mapping before starting Nav2.");
         var result = await SendCommandAsync(
             runtime,
-            new { command = "start_navigation_mode", map_path = mapPath },
+            new { command = "start_navigation_mode", map_id = mapId.ToString("D"), map_path = mapPath },
             cancellationToken,
             TimeSpan.FromSeconds(70));
         if (result.Success)
@@ -289,7 +291,7 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
         InitialPoseRequest request,
         CancellationToken cancellationToken)
     {
-        if (!TryGetReadyRuntime(runtimeId, request.ArmLeaseId, requireLocalized: false, out var runtime, out var error))
+        if (!TryGetConnectedRuntime(runtimeId, out var runtime, out var error))
             return CommandResult.Fail(error!);
 
         return await SendCommandAsync(runtime!, new
@@ -306,6 +308,8 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
     {
         if (!TryGetReadyRuntime(runtimeId, request.ArmLeaseId, requireLocalized: true, out var runtime, out var error))
             return CommandResult.Fail(error!);
+        if (runtime!.Telemetry?.NavigationReady != true)
+            return CommandResult.Fail("Nav2 is not ready. Set the initial pose and wait for activation.");
 
         var commandId = Guid.NewGuid().ToString("N");
         var result = await SendCommandAsync(runtime!, new
@@ -393,6 +397,26 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
             && !string.Equals(runtime.Telemetry?.LocalizationState, "LOCALIZED", StringComparison.OrdinalIgnoreCase))
         {
             error = "The robot must be localized before accepting a navigation goal.";
+            return false;
+        }
+        error = null;
+        return true;
+    }
+
+    private bool TryGetConnectedRuntime(
+        string runtimeId,
+        out RuntimeState? runtime,
+        out string? error)
+    {
+        if (!_runtimes.TryGetValue(runtimeId, out runtime))
+        {
+            error = "Robot runtime was not found.";
+            return false;
+        }
+        var response = ToResponse(runtime);
+        if (!response.Connected || response.Stale)
+        {
+            error = "Robot telemetry is offline or stale.";
             return false;
         }
         error = null;
