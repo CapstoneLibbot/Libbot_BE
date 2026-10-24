@@ -20,6 +20,7 @@ builder.Services.AddHttpClient("RobotCamera", client =>
     AllowAutoRedirect = false,
     ConnectTimeout = TimeSpan.FromSeconds(5)
 });
+builder.Services.AddSingleton<IPatrolNotificationPublisher, PatrolNotificationHubPublisher>();
 builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
 {
     var origins = builder.Configuration.GetSection("CorsAllowedOrigins").Get<string[]>()
