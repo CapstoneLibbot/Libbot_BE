@@ -10,7 +10,10 @@ namespace LiBot.Api.Controllers;
 /// <remarks>Kết quả của runtime SIM được giữ tạm thời; dữ liệu runtime REAL được ghi vào database.</remarks>
 [ApiController]
 [Route("api/workflow-data")]
-public sealed class WorkflowDataController(IWorkflowDataService dataService, IBookGuidanceService bookGuidance) : ControllerBase
+public sealed class WorkflowDataController(
+    IWorkflowDataService dataService,
+    IBookGuidanceService bookGuidance,
+    IPatrolNotificationPublisher patrolNotifications) : ControllerBase
 {
     private static readonly Guid SimulationBookId = Guid.Parse("26000000-0000-0000-0000-000000000001");
     private static readonly Guid SimulationBookItemId = Guid.Parse("26000000-0000-0000-0000-000000000002");
@@ -345,16 +348,22 @@ public sealed class WorkflowDataController(IWorkflowDataService dataService, IBo
             var simulationFallen = simulationCategories.Count(item => item == "FALLEN_BOOK");
             var simulationObstacles = simulationCategories.Count(item => item == "OBSTACLE");
             var simulationWarnings = simulationCategories.Count(item => item is "WARNING" or "OTHER_WARNING");
-            return Ok(new
+            var simulationReportId = Guid.NewGuid();
+            var simulationReport = new
             {
-                reportId = Guid.NewGuid(),
+                reportId = simulationReportId,
                 reportType = "SIMULATION_PATROL",
                 runtimeId,
                 observationCount = simulationCategories.Count,
                 fallenBookCount = simulationFallen,
                 unknownObstacleCount = simulationObstacles,
                 otherWarningCount = simulationWarnings
-            });
+            };
+            await patrolNotifications.PublishPatrolCompletedAsync(new PatrolCompletedNotification(
+                request.MissionId, simulationReportId, simulationReport.reportType, runtimeId,
+                simulationReport.observationCount, simulationFallen, simulationObstacles, simulationWarnings,
+                DateTime.UtcNow), cancellationToken);
+            return Ok(simulationReport);
         }
         var observationData = await dataService.GetJobEventDataAsync(request.MissionId, "PATROL_OBSERVATION", cancellationToken);
         var categories = observationData.Select(ReadStoredObservationCategory).Where(item => item is not null).ToList();
@@ -378,6 +387,9 @@ public sealed class WorkflowDataController(IWorkflowDataService dataService, IBo
             $"Patrol mission {request.MissionId}: {categories.Count} observations, {fallen} fallen books, {obstacles} obstacles, {warnings} warnings.",
             duration, categories.Count, warnings + fallen + obstacles, fallen, obstacles, warnings, "COMPLETED",
             eventData, cancellationToken);
+        await patrolNotifications.PublishPatrolCompletedAsync(new PatrolCompletedNotification(
+            request.MissionId, reportId, storedType, runtimeId, categories.Count, fallen, obstacles, warnings,
+            DateTime.UtcNow), cancellationToken);
         return Ok(new { reportId, reportType = storedType, runtimeId,
             observationCount = categories.Count, fallenBookCount = fallen, obstacleCount = obstacles, warningCount = warnings });
     }

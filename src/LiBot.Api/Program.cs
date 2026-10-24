@@ -12,6 +12,7 @@ builder.Configuration.AddInMemoryCollection(dotEnvSettings);
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<IPatrolNotificationPublisher, PatrolNotificationHubPublisher>();
 builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
 {
     var origins = builder.Configuration.GetSection("CorsAllowedOrigins").Get<string[]>()

@@ -87,7 +87,7 @@ public sealed class WorkflowDocumentService(IWorkflowDocumentRepository reposito
                 {
                     "SEARCH_BOOK", "GET_BOOK_DETAIL", "SAVE_RATING", "SEARCH_FACILITY", "GET_FACILITY_DETAIL",
                     "SAVE_FACILITY_RATING", "RECORD_INVENTORY", "FINALIZE_INVENTORY",
-                    "RECORD_PATROL_OBSERVATION", "FINALIZE_PATROL", "IDENTITY"
+                    "RECORD_PATROL_OBSERVATION", "GENERATE_PATROL_REPORT", "FINALIZE_PATROL", "IDENTITY"
                 };
                 if (string.IsNullOrWhiteSpace(action) || !supportedActions.Contains(action))
                     return $"PROCESS_DATA step '{ids[index]}' has unsupported action '{action ?? "<missing>"}'.";
@@ -103,7 +103,7 @@ public sealed class WorkflowDocumentService(IWorkflowDocumentRepository reposito
             if (string.Equals(step.Type, "NOTIFY", StringComparison.OrdinalIgnoreCase))
             {
                 var channel = ReadString(objectConfiguration, "channel") ?? "LOG";
-                if (channel.ToUpperInvariant() is not ("LOG" or "SPEAKER_TTS"))
+                if (channel.ToUpperInvariant() is not ("LOG" or "SPEAKER_TTS" or "LIBRARIAN_WS"))
                     return $"NOTIFY step '{ids[index]}' has unsupported channel '{channel}'.";
             }
 
