@@ -6,4 +6,4 @@ namespace LiBot.Api.Controllers;
 /// <summary>CRUD kệ sách và thông tin liên kết với lối đi.</summary>
 [ApiController]
 [Route("api/shelves")]
-public sealed class ShelfController(ILibraryResourceService<Shelf> service) : LibraryResourceController<Shelf>(service) { }
+public sealed class ShelfController(ILibraryResourceService<Shelf, ShelfDto> service) : LibraryResourceController<Shelf, ShelfDto>(service) { }

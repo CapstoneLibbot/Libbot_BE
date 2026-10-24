@@ -37,6 +37,18 @@ public sealed class FacilityGuidanceService(
         CancellationToken cancellationToken)
         => facilities.SaveFeedbackAsync(request, cancellationToken);
 
+    public Task<IReadOnlyList<FacilityFeedbackResponse>> GetFeedbackAsync(Guid? taskId, CancellationToken cancellationToken) =>
+        facilities.GetFeedbackAsync(taskId, cancellationToken);
+
+    public Task<FacilityFeedbackResponse?> GetFeedbackByIdAsync(Guid feedbackId, CancellationToken cancellationToken) =>
+        facilities.GetFeedbackByIdAsync(feedbackId, cancellationToken);
+
+    public Task<FacilityFeedbackResponse?> UpdateFeedbackAsync(Guid feedbackId, FeedbackUpdateRequest request, CancellationToken cancellationToken) =>
+        facilities.UpdateFeedbackAsync(feedbackId, request, cancellationToken);
+
+    public Task<bool> DeleteFeedbackAsync(Guid feedbackId, CancellationToken cancellationToken) =>
+        facilities.DeleteFeedbackAsync(feedbackId, cancellationToken);
+
     public async Task<FacilityGuidanceLoadedWorkflow?> LoadWorkflowAsync(CancellationToken cancellationToken)
     {
         var activeWorkflows = await workflowRepository.GetActiveWorkflowsAsync(FacilityGuidanceWorkflow.Type, cancellationToken);

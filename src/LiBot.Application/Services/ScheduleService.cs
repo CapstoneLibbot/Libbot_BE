@@ -7,21 +7,24 @@ namespace LiBot.Application.Services;
 
 public sealed class ScheduleService(IGenericRepository<Schedule> repository) : IScheduleService
 {
-    public async Task<IReadOnlyList<Schedule>> GetAllAsync(CancellationToken cancellationToken) =>
-        (await repository.GetAllAsync(cancellationToken)).OrderBy(schedule => schedule.StartDate).ToList();
+    public async Task<IReadOnlyList<ScheduleResponse>> GetAllAsync(CancellationToken cancellationToken) =>
+        (await repository.GetAllAsync(cancellationToken)).OrderBy(schedule => schedule.StartDate).Select(ToResponse).ToList();
 
-    public Task<Schedule?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-        repository.GetByIdAsync(id, cancellationToken);
+    public async Task<ScheduleResponse?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var schedule = await repository.GetByIdAsync(id, cancellationToken);
+        return schedule is null ? null : ToResponse(schedule);
+    }
 
-    public async Task<Schedule> CreateAsync(ScheduleWriteRequest request, CancellationToken cancellationToken)
+    public async Task<ScheduleResponse> CreateAsync(ScheduleWriteRequest request, CancellationToken cancellationToken)
     {
         var schedule = CreateSchedule(request);
         repository.Add(schedule);
         await repository.SaveChangesAsync(cancellationToken);
-        return schedule;
+        return ToResponse(schedule);
     }
 
-    public async Task<Schedule?> UpdateAsync(Guid id, ScheduleWriteRequest request, CancellationToken cancellationToken)
+    public async Task<ScheduleResponse?> UpdateAsync(Guid id, ScheduleWriteRequest request, CancellationToken cancellationToken)
     {
         var current = await repository.GetByIdAsync(id, cancellationToken);
         if (current is null) return null;
@@ -32,7 +35,7 @@ public sealed class ScheduleService(IGenericRepository<Schedule> repository) : I
             property.SetValue(current, property.GetValue(replacement));
         }
         await repository.SaveChangesAsync(cancellationToken);
-        return current;
+        return ToResponse(current);
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
@@ -46,4 +49,9 @@ public sealed class ScheduleService(IGenericRepository<Schedule> repository) : I
 
     private static Schedule CreateSchedule(ScheduleWriteRequest request) =>
         new(request.ScheduleType, request.ScheduleTime, request.StartDate, request.EndDate, request.CreatedBy);
+
+    private static ScheduleResponse ToResponse(Schedule schedule) => new(
+        schedule.Id, schedule.CreatedBy, schedule.ScheduleType, schedule.ScheduleTime,
+        schedule.StartDate, schedule.EndDate, schedule.LastRunAtUtc, schedule.NextRunAtUtc,
+        schedule.CreatedAtUtc, schedule.UpdatedAtUtc);
 }

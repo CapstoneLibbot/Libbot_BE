@@ -52,8 +52,33 @@ public sealed class FacilityGuidanceController(
         if (feedback is null)
             return NotFound("Task was not found.");
 
-        return Ok(feedback);
+        return CreatedAtAction(nameof(GetFeedbackById), new { feedbackId = feedback.FeedbackId }, feedback);
     }
+
+    [HttpGet("feedback")]
+    public async Task<ActionResult<IReadOnlyList<FacilityFeedbackResponse>>> GetFeedback(
+        [FromQuery] Guid? taskId, CancellationToken cancellationToken) =>
+        Ok(await service.GetFeedbackAsync(taskId, cancellationToken));
+
+    [HttpGet("feedback/{feedbackId:guid}")]
+    public async Task<ActionResult<FacilityFeedbackResponse>> GetFeedbackById(Guid feedbackId, CancellationToken cancellationToken)
+    {
+        var feedback = await service.GetFeedbackByIdAsync(feedbackId, cancellationToken);
+        return feedback is null ? NotFound() : Ok(feedback);
+    }
+
+    [HttpPut("feedback/{feedbackId:guid}")]
+    public async Task<ActionResult<FacilityFeedbackResponse>> UpdateFeedback(
+        Guid feedbackId, FeedbackUpdateRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Rating is < 1 or > 5) return BadRequest("Rating must be between 1 and 5.");
+        var feedback = await service.UpdateFeedbackAsync(feedbackId, request, cancellationToken);
+        return feedback is null ? NotFound() : Ok(feedback);
+    }
+
+    [HttpDelete("feedback/{feedbackId:guid}")]
+    public async Task<IActionResult> DeleteFeedback(Guid feedbackId, CancellationToken cancellationToken) =>
+        await service.DeleteFeedbackAsync(feedbackId, cancellationToken) ? NoContent() : NotFound();
 
     /// <summary>Lấy workflow FACILITY_GUIDANCE đang active.</summary>
     [HttpGet("workflow")]
