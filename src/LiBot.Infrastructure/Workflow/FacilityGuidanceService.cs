@@ -20,12 +20,14 @@ public sealed class FacilityGuidanceService(
         robotTasks.IsSimulationTaskAsync(taskId, cancellationToken);
 
     public async Task<FacilitySearchResponse> SearchAsync(
-        string query,
+        string? query,
         string matchMode,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken)
     {
         var exact = string.Equals(matchMode, "EXACT", StringComparison.OrdinalIgnoreCase);
-        return await facilities.SearchAsync(query, exact, cancellationToken);
+        return await facilities.SearchAsync(query, exact, page, pageSize, cancellationToken);
     }
 
     public Task<IReadOnlyList<FacilityGuidanceDetail>> GetAllFacilitiesAsync(CancellationToken cancellationToken) =>

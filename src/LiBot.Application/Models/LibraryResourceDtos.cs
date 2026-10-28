@@ -50,9 +50,10 @@ public sealed class AisleDto : LibraryResourceDto<Aisle>
 public sealed class AreaDto : LibraryResourceDto<Area>
 {
     public Guid FloorId { get; set; }
+    public Guid? EndpointId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public override Area ToEntity() => new(FloorId, Name, Description);
+    public override Area ToEntity() => new(FloorId, Name, Description, EndpointId);
 }
 
 public sealed class BookDto : LibraryResourceDto<Book>

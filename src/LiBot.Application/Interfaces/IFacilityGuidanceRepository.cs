@@ -5,8 +5,10 @@ namespace LiBot.Application.Interfaces;
 public interface IFacilityGuidanceRepository
 {
     Task<FacilitySearchResponse> SearchAsync(
-        string query,
+        string? query,
         bool exact,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken);
 
     Task<IReadOnlyList<FacilityGuidanceDetail>> GetAllFacilitiesAsync(CancellationToken cancellationToken);

@@ -8,8 +8,10 @@ public interface IFacilityGuidanceService
     Task<bool> IsSimulationTaskAsync(Guid taskId, CancellationToken cancellationToken);
 
     Task<FacilitySearchResponse> SearchAsync(
-        string query,
+        string? query,
         string matchMode,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken);
 
     Task<IReadOnlyList<FacilityGuidanceDetail>> GetAllFacilitiesAsync(CancellationToken cancellationToken);

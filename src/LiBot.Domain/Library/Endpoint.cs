@@ -45,4 +45,14 @@ public class Endpoint : Entity
     }
 
     public void Deactivate() => IsActive = false;
+
+    public void UpdatePosition(double positionX, double positionY, double theta)
+    {
+        if (!double.IsFinite(positionX) || !double.IsFinite(positionY) || !double.IsFinite(theta))
+            throw new ArgumentException("Endpoint coordinates and heading must be finite.");
+
+        PositionX = positionX;
+        PositionY = positionY;
+        Theta = theta;
+    }
 }

@@ -136,6 +136,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.ToTable("AREA");
             entity.HasKey(x => x.Id);
             entity.HasOne<Floor>().WithMany().HasForeignKey(x => x.FloorId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.EndpointId).OnDelete(DeleteBehavior.SetNull);
         });
         modelBuilder.Entity<Aisle>(entity =>
         {

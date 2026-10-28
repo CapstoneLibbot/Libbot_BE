@@ -16,16 +16,20 @@ public sealed class FacilityGuidanceController(
     /// <summary>Tìm khu vực hoặc địa điểm theo tên.</summary>
     [HttpGet("search")]
     public async Task<ActionResult<FacilitySearchResponse>> Search(
-        [FromQuery] string query,
+        [FromQuery] string? query = null,
         [FromQuery] string matchMode = "FUZZY",
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(query)) return BadRequest("A search query is required.");
         if (!string.Equals(matchMode, "FUZZY", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(matchMode, "EXACT", StringComparison.OrdinalIgnoreCase))
             return BadRequest("matchMode must be FUZZY or EXACT.");
+        if (page < 1) return BadRequest("page must be at least 1.");
+        if (pageSize is < 1 or > 100) return BadRequest("pageSize must be between 1 and 100.");
+        if ((long)(page - 1) * pageSize > int.MaxValue) return BadRequest("page is too large.");
 
-        return Ok(await service.SearchAsync(query, matchMode, cancellationToken));
+        return Ok(await service.SearchAsync(query, matchMode, page, pageSize, cancellationToken));
     }
 
     /// <summary>Lấy toàn bộ facility đang hoạt động cùng vị trí điều hướng.</summary>

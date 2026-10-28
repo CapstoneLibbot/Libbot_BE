@@ -204,6 +204,9 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<Guid?>("EndpointId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("FloorId")
                         .HasColumnType("uniqueidentifier");
 
@@ -215,6 +218,8 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("EndpointId");
 
                     b.HasIndex("FloorId");
 
@@ -496,15 +501,15 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("AisleId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid?>("EndpointId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("EndpointId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1226,6 +1231,11 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("LiBot.Domain.Library.Area", b =>
                 {
+                    b.HasOne("LiBot.Domain.Library.Endpoint", null)
+                        .WithMany()
+                        .HasForeignKey("EndpointId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("LiBot.Domain.Library.Floor", null)
                         .WithMany()
                         .HasForeignKey("FloorId")
