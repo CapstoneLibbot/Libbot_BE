@@ -50,6 +50,15 @@ public static class LiBotDatabaseInitializer
             db.Endpoints.Add(endpoint);
         }
 
+        var readingRoom = await db.Endpoints.FirstOrDefaultAsync(
+            item => item.MapId == map.Id && item.Name == "Phòng đọc sách",
+            cancellationToken);
+        if (readingRoom is null)
+        {
+            readingRoom = new Endpoint(map.Id, "Phòng đọc sách", 0.5, 0.25);
+            db.Endpoints.Add(readingRoom);
+        }
+
         var floor = await db.Floors.FirstOrDefaultAsync(
             item => item.FloorNumber == 1 && item.Name == "Tầng 1",
             cancellationToken);
@@ -73,7 +82,7 @@ public static class LiBotDatabaseInitializer
             cancellationToken);
         if (shelf is null)
         {
-            shelf = new Shelf(aisle.Id, "A3", "Kệ Công nghệ A3");
+            shelf = new Shelf(aisle.Id, "A3", "Kệ Công nghệ A3", endpoint.Id);
             db.Shelves.Add(shelf);
         }
 

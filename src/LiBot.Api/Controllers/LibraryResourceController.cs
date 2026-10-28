@@ -4,43 +4,66 @@ namespace LiBot.Api.Controllers;
 
 /// <summary>Các thao tác CRUD dùng chung cho dữ liệu thư viện.</summary>
 /// <remarks>Các controller kế thừa cung cấp danh sách, chi tiết, tạo, cập nhật và xóa từng loại tài nguyên.</remarks>
-public abstract class LibraryResourceController<TEntity, TDto>(ILibraryResourceService<TEntity, TDto> service) : ControllerBase
+public abstract class LibraryResourceController<TEntity, TDto> : ControllerBase
     where TEntity : class
     where TDto : class, ILibraryResourceDto<TEntity>, new()
 {
+    private readonly ILibraryResourceService<TEntity, TDto> _service;
+
+    protected ILibraryResourceService<TEntity, TDto> ResourceService => _service;
+
+    protected LibraryResourceController(ILibraryResourceService<TEntity, TDto> service)
+    {
+        _service = service;
+    }
+
     /// <summary>Lấy toàn bộ tài nguyên của nhóm hiện tại.</summary>
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken) =>
-        Ok(await service.GetAllAsync(cancellationToken));
+        Ok(await _service.GetAllAsync(cancellationToken));
 
     /// <summary>Lấy chi tiết tài nguyên theo ID.</summary>
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var entity = await service.GetByIdAsync(id, cancellationToken);
+        var entity = await _service.GetByIdAsync(id, cancellationToken);
         return entity is null ? NotFound() : Ok(entity);
     }
 
     /// <summary>Tạo tài nguyên mới từ JSON body.</summary>
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] TDto dto, CancellationToken cancellationToken)
+    public virtual async Task<IActionResult> Create([FromBody] TDto dto, CancellationToken cancellationToken)
     {
-        var created = await service.CreateAsync(dto, cancellationToken);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        try
+        {
+            var created = await _service.CreateAsync(dto, cancellationToken);
+            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
     }
 
     /// <summary>Thay thông tin tài nguyên theo ID.</summary>
     [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] TDto dto, CancellationToken cancellationToken)
+    public virtual async Task<IActionResult> Update(Guid id, [FromBody] TDto dto, CancellationToken cancellationToken)
     {
-        var updated = await service.UpdateAsync(id, dto, cancellationToken);
-        return updated is null ? NotFound() : Ok(updated);
+        try
+        {
+            var updated = await _service.UpdateAsync(id, dto, cancellationToken);
+            return updated is null ? NotFound() : Ok(updated);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
     }
 
     /// <summary>Xóa tài nguyên theo ID.</summary>
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    public virtual async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        return await service.DeleteAsync(id, cancellationToken) ? NoContent() : NotFound();
+        return await _service.DeleteAsync(id, cancellationToken) ? NoContent() : NotFound();
     }
 }

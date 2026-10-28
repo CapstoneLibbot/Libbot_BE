@@ -12,6 +12,8 @@ public interface IFacilityGuidanceService
         string matchMode,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<FacilityGuidanceDetail>> GetAllFacilitiesAsync(CancellationToken cancellationToken);
+    Task<FacilityGuidanceDetail?> GetReadingRoomAsync(CancellationToken cancellationToken);
     Task<FacilityGuidanceDetail?> GetFacilityAsync(
         Guid facilityId,
         CancellationToken cancellationToken);

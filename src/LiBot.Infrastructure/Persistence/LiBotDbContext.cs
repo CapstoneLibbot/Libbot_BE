@@ -149,6 +149,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.ToTable("SHELF");
             entity.HasKey(x => x.Id);
             entity.HasOne<Aisle>().WithMany().HasForeignKey(x => x.AisleId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.EndpointId).OnDelete(DeleteBehavior.SetNull);
         });
         modelBuilder.Entity<ShelfLevel>(entity =>
         {

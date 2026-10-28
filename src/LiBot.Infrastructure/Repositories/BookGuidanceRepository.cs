@@ -95,7 +95,7 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
             join aisle in db.Aisles.AsNoTracking() on shelf.AisleId equals aisle.Id
             join floor in db.Floors.AsNoTracking() on aisle.FloorId equals floor.Id
             join endpoint in db.Endpoints.AsNoTracking().Where(item => item.IsActive)
-                on aisle.EndpointId equals endpoint.Id into endpoints
+                on shelf.EndpointId equals endpoint.Id into endpoints
             from endpoint in endpoints.DefaultIfEmpty()
             where copy.BookId == bookId
             select new

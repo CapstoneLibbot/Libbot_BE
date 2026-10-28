@@ -13,6 +13,7 @@ public sealed class FacilityGuidanceService(
     IFacilityGuidanceRepository facilities,
     IGuidanceWorkflowRepository workflowRepository,
     ILiBotTcpClient tcpClient,
+    FacilityGuidanceRuntimeRegistry runtimeRegistry,
     IRobotTaskRepository robotTasks) : IFacilityGuidanceService
 {
     public Task<bool> IsSimulationTaskAsync(Guid taskId, CancellationToken cancellationToken) =>
@@ -26,6 +27,12 @@ public sealed class FacilityGuidanceService(
         var exact = string.Equals(matchMode, "EXACT", StringComparison.OrdinalIgnoreCase);
         return await facilities.SearchAsync(query, exact, cancellationToken);
     }
+
+    public Task<IReadOnlyList<FacilityGuidanceDetail>> GetAllFacilitiesAsync(CancellationToken cancellationToken) =>
+        facilities.GetAllFacilitiesAsync(cancellationToken);
+
+    public Task<FacilityGuidanceDetail?> GetReadingRoomAsync(CancellationToken cancellationToken) =>
+        facilities.GetReadingRoomAsync(cancellationToken);
 
     public Task<FacilityGuidanceDetail?> GetFacilityAsync(
         Guid facilityId,
@@ -172,6 +179,10 @@ public sealed class FacilityGuidanceService(
                 }));
                 await workflowRepository.SaveChangesAsync(cancellationToken);
             }
+            else
+            {
+                runtimeRegistry.Register(mission.Id.ToString(), runtimeId);
+            }
 
             return new FacilityGuidanceStartResult(mission.Id, loadedWorkflow, body, isAccepted);
         }
@@ -198,9 +209,17 @@ public sealed class FacilityGuidanceService(
     {
         try
         {
-            using var response = await tcpClient.SendAsync(new
+            var executionId = request.ExecutionId?.Trim();
+            if (string.IsNullOrWhiteSpace(executionId)
+                || !runtimeRegistry.TryGetRuntime(executionId, out var runtimeId))
+            {
+                throw new FacilityGuidanceExecutionNotFoundException(executionId ?? string.Empty);
+            }
+
+            using var response = await tcpClient.SendAsync(runtimeId, new
             {
                 command = "submit_event",
+                execution_id = executionId,
                 event_type = request.EventType.Trim().ToUpperInvariant(),
                 data = request.Data
             }, cancellationToken);
@@ -218,7 +237,11 @@ public sealed class FacilityGuidanceService(
     {
         try
         {
+            if (!runtimeRegistry.TryGetRuntime(executionId, out var runtimeId))
+                throw new FacilityGuidanceExecutionNotFoundException(executionId);
+
             using var response = await tcpClient.SendAsync(
+                runtimeId,
                 new { command = "get_execution", execution_id = executionId },
                 cancellationToken);
             return response.RootElement.Clone();

@@ -26,7 +26,7 @@ public abstract class LibraryResourceDto<TEntity> : ILibraryResourceDto<TEntity>
             GetType().GetProperty(source.Name)?.SetValue(this, source.GetValue(entity));
     }
 
-    public void ApplyTo(TEntity entity)
+    public virtual void ApplyTo(TEntity entity)
     {
         foreach (var source in GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
         {
@@ -89,11 +89,20 @@ public sealed class EndpointDto : LibraryResourceDto<Endpoint>
 {
     public Guid MapId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string EndpointType { get; set; } = "WAYPOINT";
     public double PositionX { get; set; }
     public double PositionY { get; set; }
     public double Theta { get; set; }
     public bool IsActive { get; set; } = true;
-    public override Endpoint ToEntity() => new(MapId, Name, PositionX, PositionY, Theta);
+    public override Endpoint ToEntity() => new(MapId, Name, PositionX, PositionY, Theta, EndpointType);
+
+    public override void ApplyTo(Endpoint entity)
+    {
+        var validated = ToEntity();
+        Name = validated.Name;
+        EndpointType = validated.EndpointType;
+        base.ApplyTo(entity);
+    }
 }
 
 public sealed class EndpointGroupDto : LibraryResourceDto<EndpointGroup>
@@ -119,9 +128,10 @@ public sealed class FloorDto : LibraryResourceDto<Floor>
 public sealed class ShelfDto : LibraryResourceDto<Shelf>
 {
     public Guid AisleId { get; set; }
+    public Guid? EndpointId { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
-    public override Shelf ToEntity() => new(AisleId, Code, Name);
+    public override Shelf ToEntity() => new(AisleId, Code, Name, EndpointId);
 }
 
 public sealed class ShelfLevelDto : LibraryResourceDto<ShelfLevel>
@@ -136,14 +146,18 @@ public sealed class ZoneDto : LibraryResourceDto<Zone>
     public Guid MapId { get; set; }
     public string ZoneType { get; set; } = string.Empty;
     public double MaxSpeed { get; set; }
-    public string? PreferredDirection { get; set; }
-    public double? CorridorWidth { get; set; }
-    public bool AllowTurnaround { get; set; }
     public double MinX { get; set; }
     public double MinY { get; set; }
     public double MaxX { get; set; }
     public double MaxY { get; set; }
     public bool IsActive { get; set; } = true;
-    public override Zone ToEntity() => new(MapId, ZoneType, MinX, MinY, MaxX, MaxY,
-        MaxSpeed, PreferredDirection, CorridorWidth, AllowTurnaround);
+    public override Zone ToEntity() => new(MapId, ZoneType, MinX, MinY, MaxX, MaxY, MaxSpeed);
+
+    public override void ApplyTo(Zone entity)
+    {
+        var validated = ToEntity();
+        ZoneType = validated.ZoneType;
+        MaxSpeed = validated.MaxSpeed;
+        base.ApplyTo(entity);
+    }
 }
