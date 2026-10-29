@@ -42,6 +42,7 @@ public static class DependencyInjection
         services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.Zone, ZoneDto>, LibraryResourceService<LiBot.Domain.Library.Zone, ZoneDto>>();
         services.AddScoped<IBookGuidanceRepository, BookGuidanceRepository>();
         services.AddScoped<IFacilityGuidanceRepository, FacilityGuidanceRepository>();
+        services.AddScoped<IVoiceAreaSearchService, VoiceAreaSearchService>();
         services.AddScoped<IGuidanceWorkflowRepository, GuidanceWorkflowRepository>();
         services.AddScoped<ILibraryMapRepository, LibraryMapRepository>();
         services.AddScoped<ILibraryMapService, LibraryMapService>();
