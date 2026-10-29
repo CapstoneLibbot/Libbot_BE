@@ -17,4 +17,13 @@ public class ShelfLevel : Entity
         ShelfId = shelfId;
         LevelNumber = levelNumber;
     }
+
+    public void Update(Guid shelfId, int levelNumber)
+    {
+        if (shelfId == Guid.Empty) throw new ArgumentException("Shelf id is required.", nameof(shelfId));
+        if (levelNumber <= 0) throw new ArgumentOutOfRangeException(nameof(levelNumber));
+        ShelfId = shelfId;
+        LevelNumber = levelNumber;
+        SetUpdated();
+    }
 }

@@ -1,9 +1,11 @@
 using LiBot.Api.Hubs;
 using LiBot.Api.Middleware;
 using LiBot.Api.VoiceTools;
+using LiBot.Application.Models;
 using LiBot.Application.Services.Robot;
 using LiBot.Infrastructure;
 using LiBot.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi.Models;
 using ModelContextProtocol.AspNetCore;
 using System.Security.Cryptography;
@@ -14,7 +16,21 @@ var dotEnvSettings = DotEnvLoader.Load();
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddInMemoryCollection(dotEnvSettings);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var message = string.Join(
+                "; ",
+                context.ModelState.Values
+                    .SelectMany(entry => entry.Errors)
+                    .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage)
+                        ? "The request is invalid."
+                        : error.ErrorMessage));
+            return new BadRequestObjectResult(BaseResponse<object>.Failure(message));
+        };
+    });
 builder.Services.AddSignalR();
 builder.Services.AddOptions<VoiceToolsOptions>()
     .Bind(builder.Configuration.GetSection(VoiceToolsOptions.SectionName))

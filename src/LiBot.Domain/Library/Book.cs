@@ -32,4 +32,26 @@ public class Book : Entity
         PublicationYear = publicationYear;
         Image = image?.Trim();
     }
+
+    public void Update(string isbn, string title, string author, Guid? categoryId = null,
+        string? publisher = null, int? publicationYear = null, string? image = null)
+    {
+        if (string.IsNullOrWhiteSpace(isbn))
+            throw new ArgumentException("ISBN is required.", nameof(isbn));
+        if (string.IsNullOrWhiteSpace(title))
+            throw new ArgumentException("Title is required.", nameof(title));
+        if (string.IsNullOrWhiteSpace(author))
+            throw new ArgumentException("Author is required.", nameof(author));
+        if (publicationYear is < 0)
+            throw new ArgumentOutOfRangeException(nameof(publicationYear));
+
+        Isbn = isbn.Trim();
+        Title = title.Trim();
+        Author = author.Trim();
+        CategoryId = categoryId;
+        Publisher = publisher?.Trim();
+        PublicationYear = publicationYear;
+        Image = image?.Trim();
+        SetUpdated();
+    }
 }

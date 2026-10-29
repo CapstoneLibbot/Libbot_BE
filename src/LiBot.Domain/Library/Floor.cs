@@ -15,4 +15,12 @@ public class Floor : Entity
         Name = name.Trim();
         FloorNumber = floorNumber;
     }
+
+    public void Update(string name, int floorNumber)
+    {
+        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Floor name is required.", nameof(name));
+        Name = name.Trim();
+        FloorNumber = floorNumber;
+        SetUpdated();
+    }
 }
