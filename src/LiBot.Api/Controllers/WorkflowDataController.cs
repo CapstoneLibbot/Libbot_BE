@@ -226,6 +226,98 @@ public sealed class WorkflowDataController(
         return Ok(scan);
     }
 
+    /// <summary>Creates a misplaced-book issue for a previously recorded inventory scan.</summary>
+    [HttpPost("inventory/issues")]
+    public async Task<IActionResult> AddInventoryIssue(InventoryIssueRequest request, CancellationToken cancellationToken)
+    {
+        if (request.MissionId == Guid.Empty || string.IsNullOrWhiteSpace(request.Barcode)
+            || string.IsNullOrWhiteSpace(request.RuntimeId) || request.ScannedAt == default)
+            return BadRequest(new { message = "missionId, runtimeId, barcode and scannedAt are required." });
+        if (!string.Equals(request.IssueType?.Trim(), "MISPLACED", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { message = "Only issueType MISPLACED is supported." });
+
+        var task = await dataService.GetMissionAsync(request.MissionId, cancellationToken);
+        var runtimeId = task?.RuntimeId ?? request.RuntimeId;
+        if (task is null && !IsActiveSimulation(request.MissionId, runtimeId))
+            return NotFound(new { message = "Mission task not found." });
+        if (task is not null && !MatchesRuntime(runtimeId, request.RuntimeId))
+            return Conflict(new { message = "Runtime does not match the mission." });
+        if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
+            && !IsActiveSimulation(request.MissionId, runtimeId))
+            return Conflict(new { message = "No active in-memory simulation exists for this mission." });
+
+        var scanEvents = string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
+            ? SimulationWorkflowDataStore.GetInventoryScans(request.MissionId).Select(scan => scan.GetRawText()).ToArray()
+            : await dataService.GetJobEventDataAsync(request.MissionId, "INVENTORY_SCAN", cancellationToken);
+        JsonElement matchingScan = default;
+        foreach (var scanData in scanEvents)
+        {
+            if (string.IsNullOrWhiteSpace(scanData)) continue;
+            try
+            {
+                using var document = JsonDocument.Parse(scanData);
+                var root = document.RootElement;
+                if (root.TryGetProperty("barcode", out var barcode)
+                    && string.Equals(barcode.GetString(), request.Barcode.Trim(), StringComparison.OrdinalIgnoreCase)
+                    && root.TryGetProperty("scannedAt", out var scannedAt)
+                    && DateTimeOffset.TryParse(scannedAt.GetString(), out var recordedAt)
+                    && recordedAt.ToUniversalTime() == request.ScannedAt.ToUniversalTime())
+                    matchingScan = root.Clone();
+            }
+            catch (JsonException)
+            {
+                // Ignore malformed historical scan events.
+            }
+        }
+
+        if (matchingScan.ValueKind != JsonValueKind.Object
+            || !matchingScan.TryGetProperty("misplaced", out var misplaced)
+            || misplaced.ValueKind != JsonValueKind.True)
+            return Conflict(new { message = "The referenced inventory scan is not marked as misplaced." });
+
+        var existingIssues = string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
+            ? SimulationWorkflowDataStore.GetInventoryIssues(request.MissionId).Select(issue => issue.GetRawText()).ToArray()
+            : await dataService.GetJobEventDataAsync(request.MissionId, "INVENTORY_ISSUE", cancellationToken);
+        foreach (var issueData in existingIssues)
+        {
+            if (string.IsNullOrWhiteSpace(issueData)) continue;
+            try
+            {
+                using var document = JsonDocument.Parse(issueData);
+                var issue = document.RootElement;
+                if (issue.TryGetProperty("barcode", out var barcode)
+                    && string.Equals(barcode.GetString(), request.Barcode.Trim(), StringComparison.OrdinalIgnoreCase)
+                    && issue.TryGetProperty("scannedAt", out var scannedAt)
+                    && DateTimeOffset.TryParse(scannedAt.GetString(), out var recordedAt)
+                    && recordedAt.ToUniversalTime() == request.ScannedAt.ToUniversalTime())
+                    return Ok(issue.Clone());
+            }
+            catch (JsonException)
+            {
+                // Ignore malformed historical issue events.
+            }
+        }
+
+        var issueRecord = new
+        {
+            issueId = Guid.NewGuid(),
+            issueType = "MISPLACED",
+            missionId = request.MissionId,
+            runtimeId,
+            barcode = request.Barcode.Trim(),
+            actualShelfCode = matchingScan.TryGetProperty("shelfCode", out var shelfCode) ? shelfCode.GetString() : null,
+            expectedShelfCode = matchingScan.TryGetProperty("expectedShelfCode", out var expectedShelfCode) ? expectedShelfCode.GetString() : null,
+            scannedAt = request.ScannedAt.ToUniversalTime(),
+            createdAtUtc = DateTime.UtcNow
+        };
+        if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
+            SimulationWorkflowDataStore.AddInventoryIssue(request.MissionId, issueRecord);
+        else
+            await dataService.AddJobEventAsync(request.MissionId, "INVENTORY_ISSUE", JsonSerializer.Serialize(issueRecord), cancellationToken);
+
+        return StatusCode(StatusCodes.Status201Created, issueRecord);
+    }
+
     /// <summary>Tổng hợp các lượt quét và lưu/trả báo cáo kiểm kê.</summary>
     [HttpPost("inventory/reports")]
     public async Task<IActionResult> FinalizeInventory(InventoryFinalizeRequest request, CancellationToken cancellationToken)

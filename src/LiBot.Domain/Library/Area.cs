@@ -19,4 +19,17 @@ public class Area : Entity
         Name = name.Trim();
         Description = description?.Trim();
     }
+
+    public void Update(Guid floorId, string name, string? description = null)
+    {
+        if (floorId == Guid.Empty)
+            throw new ArgumentException("Floor id is required.", nameof(floorId));
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Area name is required.", nameof(name));
+
+        FloorId = floorId;
+        Name = name.Trim();
+        Description = description?.Trim();
+        SetUpdated();
+    }
 }
