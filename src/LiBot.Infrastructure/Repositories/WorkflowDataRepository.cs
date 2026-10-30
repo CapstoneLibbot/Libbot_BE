@@ -88,11 +88,9 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
         int totalBooksScanned, int correctlyPlaced, int misplaced, int missing, string eventData,
         CancellationToken cancellationToken)
     {
-        var report = new Report(reportType, description);
-        await db.Reports.AddAsync(report, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        await db.InventoryReports.AddAsync(new InventoryReport(report.Id, scopeType, 1,
-            totalBooksScanned, correctlyPlaced, misplaced, missing), cancellationToken);
+        var report = new InventoryReport(missionId, reportType, description, scopeType, 1,
+            totalBooksScanned, correctlyPlaced, misplaced, missing);
+        await db.InventoryReports.AddAsync(report, cancellationToken);
         await db.JobEvents.AddAsync(new JobEvent(missionId, "INVENTORY_REPORT", eventData), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return report.Id;
@@ -102,11 +100,9 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
         int durationSeconds, int observationCount, int totalFindings, int fallenBooks, int obstacles, int warnings,
         string status, string eventData, CancellationToken cancellationToken)
     {
-        var report = new Report(reportType, description);
-        await db.Reports.AddAsync(report, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        await db.PatrolReports.AddAsync(new PatrolReport(report.Id, durationSeconds, observationCount, totalFindings,
-            fallenBooks, obstacles, warnings, status), cancellationToken);
+        var report = new PatrolReport(missionId, reportType, description, durationSeconds, observationCount, totalFindings,
+            fallenBooks, obstacles, warnings, status);
+        await db.PatrolReports.AddAsync(report, cancellationToken);
         await db.JobEvents.AddAsync(new JobEvent(missionId, "PATROL_REPORT", eventData), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return report.Id;

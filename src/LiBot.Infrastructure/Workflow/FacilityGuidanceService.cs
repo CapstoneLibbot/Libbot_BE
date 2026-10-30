@@ -143,6 +143,7 @@ public sealed class FacilityGuidanceService(
         var initialContext = JsonSerializer.Serialize(new Dictionary<string, object?>
         {
             ["query"] = request.Query.Trim(),
+            ["facility_id"] = request.FacilityId?.ToString(),
             ["runtime_id"] = runtimeId,
             ["task_id"] = mission.Id.ToString(),
             ["backend_base_url"] = backendBaseUrl
@@ -156,6 +157,7 @@ public sealed class FacilityGuidanceService(
             new Dictionary<string, object?>
             {
                 ["query"] = request.Query.Trim(),
+                ["facility_id"] = request.FacilityId?.ToString(),
                 ["runtime_id"] = runtimeId,
                 ["task_id"] = mission.Id.ToString(),
                 ["backend_base_url"] = backendBaseUrl

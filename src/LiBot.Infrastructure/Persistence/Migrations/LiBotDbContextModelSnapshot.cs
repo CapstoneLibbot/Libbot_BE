@@ -633,10 +633,18 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<Guid>("ReportId")
+                    b.Property<Guid?>("JobId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("ReportType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("ScopeType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Summary")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
@@ -660,7 +668,7 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("JobId");
 
                     b.ToTable("INVENTORY_REPORT", (string)null);
                 });
@@ -844,6 +852,9 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<int>("FallenBookCount")
                         .HasColumnType("int");
 
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("ObservationCount")
                         .HasColumnType("int");
 
@@ -854,8 +865,13 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<Guid>("ReportId")
-                        .HasColumnType("uniqueidentifier");
+                    b.Property<string>("ReportType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("UnknownObstacleCount")
                         .HasColumnType("int");
@@ -868,34 +884,9 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("JobId");
 
                     b.ToTable("PATROL_REPORT", (string)null);
-                });
-
-            modelBuilder.Entity("LiBot.Domain.Mission.Report", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("ReportType")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Summary")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("REPORT", (string)null);
                 });
 
             modelBuilder.Entity("LiBot.Domain.Robot.Robot", b =>
@@ -1337,11 +1328,10 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("LiBot.Domain.Mission.InventoryReport", b =>
                 {
-                    b.HasOne("LiBot.Domain.Mission.Report", null)
+                    b.HasOne("LiBot.Domain.Mission.Mission", null)
                         .WithMany()
-                        .HasForeignKey("ReportId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("LiBot.Domain.Mission.JobEvent", b =>
@@ -1407,11 +1397,10 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("LiBot.Domain.Mission.PatrolReport", b =>
                 {
-                    b.HasOne("LiBot.Domain.Mission.Report", null)
+                    b.HasOne("LiBot.Domain.Mission.Mission", null)
                         .WithMany()
-                        .HasForeignKey("ReportId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("LiBot.Domain.Robot.RobotConfigLog", b =>

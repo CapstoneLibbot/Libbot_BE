@@ -135,13 +135,21 @@ public sealed class FacilityGuidanceController(
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
-        if (string.IsNullOrWhiteSpace(request.RuntimeId)) return BadRequest("runtimeId is required.");
+        if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.FacilityId is null)
+            return BadRequest("runtimeId and facilityId are required.");
 
         var runtimeId = request.RuntimeId.Trim().ToLowerInvariant();
         if (runtimes.Get(runtimeId) is null)
             return BadRequest(new { message = $"Robot runtime '{runtimeId}' is not configured." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
             return Conflict(new { message = "Start Gazebo runs from the mission Run button so execution state stays transient." });
+
+        var facility = await service.GetFacilityAsync(request.FacilityId.Value, cancellationToken);
+        if (facility is null) return NotFound("Facility not found.");
+        var endpoint = facility.Location.Endpoint;
+        if (!double.IsFinite(endpoint.X) || !double.IsFinite(endpoint.Y) || !double.IsFinite(endpoint.Theta))
+            return UnprocessableEntity(new { message = "Selected facility has no valid navigation endpoint." });
+
         var runtimeError = runtimes.ValidateGuidanceStart(runtimeId, request.ArmLeaseId);
         if (runtimeError is not null) return Conflict(new { message = runtimeError });
 
@@ -161,7 +169,9 @@ public sealed class FacilityGuidanceController(
 
             if (!result.IsAccepted)
             {
-                return UnprocessableEntity(new { missionId = result.MissionId, robot = result.Robot });
+                var message = GetString(result.Robot, "message") ?? GetString(result.Robot, "error")
+                    ?? "Robot runtime did not accept the facility guidance workflow.";
+                return UnprocessableEntity(new { message, missionId = result.MissionId, robot = result.Robot });
             }
 
             return Accepted(new
