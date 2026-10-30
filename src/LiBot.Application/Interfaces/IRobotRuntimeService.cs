@@ -6,6 +6,7 @@ public interface IRobotRuntimeService
 {
     IReadOnlyList<RobotRuntimeResponse> GetAll();
     RobotRuntimeResponse? Get(string runtimeId);
+    string? ValidateGuidanceStart(string runtimeId, string? armLeaseId);
     string? ValidateBookGuidanceStart(string runtimeId, string? armLeaseId);
     ArmRuntimeResponse? Arm(string runtimeId);
     bool Disarm(string runtimeId);
@@ -16,7 +17,18 @@ public interface IRobotRuntimeService
     Task<CommandResult> StopManualAsync(string runtimeId, bool resumeNavigation, CancellationToken cancellationToken);
     Task<CommandResult> SetMappingAsync(string runtimeId, bool enabled, string? leaseId, CancellationToken cancellationToken);
     Task<CommandResult> SaveMapOnRobotAsync(string runtimeId, string fileStem, string? leaseId, CancellationToken cancellationToken);
-    Task<CommandResult> StartNavigationModeAsync(string runtimeId, Guid mapId, string mapPath, string? leaseId, CancellationToken cancellationToken);
+    Task<CommandResult> StartNavigationModeAsync(
+        string runtimeId,
+        Guid mapId,
+        string mapPath,
+        IReadOnlyList<NavigationZonePolicy> zones,
+        string? leaseId,
+        CancellationToken cancellationToken);
+    Task<CommandResult> UpdateNavigationZonesAsync(
+        string runtimeId,
+        Guid mapId,
+        IReadOnlyList<NavigationZonePolicy> zones,
+        CancellationToken cancellationToken);
     Task<CommandResult> StopNavigationModeAsync(string runtimeId, CancellationToken cancellationToken);
     Task<CommandResult> SetInitialPoseAsync(string runtimeId, InitialPoseRequest request, CancellationToken cancellationToken);
     Task<CommandResult> StartNavigationAsync(string runtimeId, NavigationGoalRequest request, CancellationToken cancellationToken);

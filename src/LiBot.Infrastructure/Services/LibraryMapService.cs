@@ -7,12 +7,6 @@ namespace LiBot.Infrastructure.Services;
 
 public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibraryMapService
 {
-    public async Task<IReadOnlyList<MapResponse>> GetAllAsync(CancellationToken cancellationToken)
-    {
-        var maps = await repository.GetAllAsync(occupancyMaps: false, cancellationToken);
-        return maps.OrderBy(map => map.Name).Select(ToResponse).ToList();
-    }
-
     public async Task<IReadOnlyList<SavedRobotMapResponse>> GetRobotMapsAsync(CancellationToken cancellationToken)
     {
         var maps = await repository.GetAllAsync(occupancyMaps: true, cancellationToken);
@@ -31,14 +25,6 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
     {
         var map = await repository.GetByIdAsync(id, tracking: false, cancellationToken);
         return map is null ? null : ToResponse(map);
-    }
-
-    public async Task<MapResponse> CreateAsync(MapWriteRequest request, CancellationToken cancellationToken)
-    {
-        var map = new LibraryMap(request.Name, request.Version ?? string.Empty, request.Width, request.Height,
-            request.Data?.GetRawText() ?? "{}");
-        await repository.AddAsync(map, cancellationToken);
-        return ToResponse(map);
     }
 
     public async Task<MapResponse> SaveRobotSnapshotAsync(string name, OccupancyGridDto grid, string robotPath,

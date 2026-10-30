@@ -19,3 +19,6 @@ public sealed class FacilityGuidanceWorkflowConfigurationException(string messag
 
 public sealed class FacilityGuidanceRobotUnavailableException(string message, Exception? innerException = null)
     : InvalidOperationException(message, innerException);
+
+public sealed class FacilityGuidanceExecutionNotFoundException(string executionId)
+    : InvalidOperationException($"Facility guidance execution '{executionId}' was not found or has expired.");

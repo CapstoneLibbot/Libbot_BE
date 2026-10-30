@@ -1,63 +1,84 @@
-using LiBot.Application.Interfaces;
+using LiBot.Domain.Library;
 using LiBot.Application.Models;
-using LiBot.Application.Models.Zone;
+using LiBot.Application.Services.Robot;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LiBot.Api.Controllers;
 
 [ApiController]
 [Route("api/zones")]
-public class ZoneController : ControllerBase
+public sealed class ZoneController(
+    ILibraryResourceService<Zone, ZoneDto> service,
+    ILibraryMapService maps,
+    IRobotRuntimeService runtimes,
+    ILogger<ZoneController> logger) : LibraryResourceController<Zone, ZoneDto>(service)
 {
-    private readonly IZoneService _service;
-    public ZoneController(IZoneService service) => _service = service ?? throw new ArgumentNullException(nameof(service));
-
-    [HttpGet]
-    public async Task<ActionResult<BaseResponse<ZoneListResponse>>> GetAll(
-        [FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null,
-        [FromQuery] Guid? mapId = null, [FromQuery] string? zoneType = null, [FromQuery] bool? isActive = null,
-        [FromQuery] string sortBy = "zoneType", [FromQuery] string sortOrder = "asc", [FromQuery] string? expand = null,
-        CancellationToken cancellationToken = default)
-    {
-        if (page < 1 || pageSize is < 1 or > 100 || (long)(page - 1) * pageSize > int.MaxValue) return BadRequest(Error("page must be at least 1 and pageSize must be between 1 and 100."));
-        if (!new[] { "zoneType", "maxSpeed", "created", "createdAtUtc" }.Contains(sortBy, StringComparer.OrdinalIgnoreCase)) return BadRequest(Error("sortBy must be zoneType, maxSpeed or created."));
-        if (!new[] { "asc", "desc" }.Contains(sortOrder, StringComparer.OrdinalIgnoreCase)) return BadRequest(Error("sortOrder must be asc or desc."));
-        if (!ValidExpand(expand, "map")) return BadRequest(Error("expand supports map."));
-        var response = await _service.GetAllAsync(new ZoneQuery(page, pageSize, search, mapId, zoneType, isActive, sortBy, sortOrder, expand), cancellationToken);
-        return Ok(new BaseResponse<ZoneListResponse>(response));
-    }
-
-    [HttpGet("{id:guid}")]
-    public async Task<ActionResult<BaseResponse<ZoneResponse>>> GetById(Guid id, [FromQuery] string? expand, CancellationToken cancellationToken)
-    {
-        if (!ValidExpand(expand, "map")) return BadRequest(Error("expand supports map."));
-        var response = await _service.GetByIdAsync(id, expand, cancellationToken);
-        return response is null ? NotFound(Error("Zone was not found.")) : Ok(new BaseResponse<ZoneResponse>(response));
-    }
-
     [HttpPost]
-    public async Task<ActionResult<BaseResponse<ZoneResponse>>> Create([FromBody] ZoneWriteRequest request, CancellationToken cancellationToken)
+    public override async Task<IActionResult> Create(ZoneDto dto, CancellationToken cancellationToken)
     {
-        try { var response = await _service.CreateAsync(request, cancellationToken); return CreatedAtAction(nameof(GetById), new { id = response.Id }, new BaseResponse<ZoneResponse>(response)); }
-        catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
-        catch (KeyNotFoundException exception) { return NotFound(Error(exception.Message)); }
+        try { _ = dto.ToEntity(); }
+        catch (ArgumentException exception) { return BadRequest(new { message = exception.Message }); }
+        var map = await maps.GetByIdAsync(dto.MapId, cancellationToken);
+        if (map is null)
+            return NotFound(new { message = "Map was not found." });
+        if (!MapBoundsValidator.Contains(map, dto.MinX, dto.MinY, dto.MaxX, dto.MaxY))
+            return BadRequest(new { message = "Zone bounds must be inside the selected map bounds." });
+        var result = await base.Create(dto, cancellationToken);
+        if (result is ObjectResult { StatusCode: StatusCodes.Status201Created })
+            await RefreshActiveRuntimeZones(dto.MapId, cancellationToken);
+        return result;
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<BaseResponse<ZoneResponse>>> Update(Guid id, [FromBody] ZoneWriteRequest request, CancellationToken cancellationToken)
+    public override async Task<IActionResult> Update(Guid id, ZoneDto dto, CancellationToken cancellationToken)
     {
-        try { var response = await _service.UpdateAsync(id, request, cancellationToken); return response is null ? NotFound(Error("Zone was not found.")) : Ok(new BaseResponse<ZoneResponse>(response)); }
-        catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
-        catch (KeyNotFoundException exception) { return NotFound(Error(exception.Message)); }
+        try { _ = dto.ToEntity(); }
+        catch (ArgumentException exception) { return BadRequest(new { message = exception.Message }); }
+        var map = await maps.GetByIdAsync(dto.MapId, cancellationToken);
+        if (map is null)
+            return NotFound(new { message = "Map was not found." });
+        if (!MapBoundsValidator.Contains(map, dto.MinX, dto.MinY, dto.MaxX, dto.MaxY))
+            return BadRequest(new { message = "Zone bounds must be inside the selected map bounds." });
+        var previous = await ResourceService.GetByIdAsync(id, cancellationToken);
+        var result = await base.Update(id, dto, cancellationToken);
+        if (result is OkObjectResult)
+        {
+            if (previous is not null && previous.MapId != dto.MapId)
+                await RefreshActiveRuntimeZones(previous.MapId, cancellationToken);
+            await RefreshActiveRuntimeZones(dto.MapId, cancellationToken);
+        }
+        return result;
     }
 
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    public override async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        if (!await _service.DeleteAsync(id, cancellationToken)) return NotFound(Error("Zone was not found."));
-        return Ok(BaseResponse<object>.SuccessMessage("Zone deleted successfully."));
+        var previous = await ResourceService.GetByIdAsync(id, cancellationToken);
+        var result = await base.Delete(id, cancellationToken);
+        if (result is NoContentResult && previous is not null)
+            await RefreshActiveRuntimeZones(previous.MapId, cancellationToken);
+        return result;
     }
 
-    private static bool ValidExpand(string? value, params string[] supported) => string.IsNullOrWhiteSpace(value) || value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).All(item => supported.Contains(item, StringComparer.OrdinalIgnoreCase));
-    private static BaseResponse<object> Error(string message) => BaseResponse<object>.Failure(message);
+    private async Task RefreshActiveRuntimeZones(Guid mapId, CancellationToken cancellationToken)
+    {
+        var policies = (await ResourceService.GetAllAsync(cancellationToken))
+            .Where(zone => zone.MapId == mapId && zone.IsActive)
+            .Select(zone => new NavigationZonePolicy(
+                zone.ZoneType, zone.MinX, zone.MinY, zone.MaxX, zone.MaxY, zone.MaxSpeed))
+            .ToList();
+
+        foreach (var runtime in runtimes.GetAll().Where(runtime =>
+                     runtime.NavigationActive
+                     && Guid.TryParse(runtime.Telemetry?.ActiveMapId, out var activeMapId)
+                     && activeMapId == mapId))
+        {
+            var result = await runtimes.UpdateNavigationZonesAsync(
+                runtime.Id, mapId, policies, cancellationToken);
+            if (!result.Success)
+                logger.LogWarning(
+                    "Zone changes for map {MapId} were saved but not applied to active runtime {RuntimeId}: {Error}",
+                    mapId, runtime.Id, result.Error);
+        }
+    }
 }

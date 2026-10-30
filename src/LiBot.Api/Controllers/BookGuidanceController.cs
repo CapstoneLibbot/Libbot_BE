@@ -131,7 +131,7 @@ public sealed class BookGuidanceController(
         if (endpoint is null || !double.IsFinite(endpoint.X) || !double.IsFinite(endpoint.Y) || !double.IsFinite(endpoint.Theta))
             return UnprocessableEntity(new { message = "Selected book copy has no valid navigation endpoint." });
 
-        var runtimeError = runtimes.ValidateBookGuidanceStart(request.RuntimeId, request.ArmLeaseId);
+        var runtimeError = runtimes.ValidateGuidanceStart(request.RuntimeId, request.ArmLeaseId);
         if (runtimeError is not null) return Conflict(new { message = runtimeError });
 
         var baseUrl = !string.IsNullOrWhiteSpace(request.BackendBaseUrl)

@@ -50,6 +50,19 @@ public static class LiBotDatabaseInitializer
             db.Endpoints.Add(endpoint);
         }
 
+        var readingRoom = await db.Endpoints.FirstOrDefaultAsync(
+            item => item.MapId == map.Id && item.Name == "Phòng đọc sách",
+            cancellationToken);
+        if (readingRoom is null)
+        {
+            readingRoom = new Endpoint(map.Id, "Phòng đọc sách", 4.07, 1.86);
+            db.Endpoints.Add(readingRoom);
+        }
+        else
+        {
+            readingRoom.UpdatePosition(4.07, 1.86, readingRoom.Theta);
+        }
+
         var floor = await db.Floors.FirstOrDefaultAsync(
             item => item.FloorNumber == 1 && item.Name == "Tầng 1",
             cancellationToken);
@@ -57,6 +70,23 @@ public static class LiBotDatabaseInitializer
         {
             floor = new Floor("Tầng 1", 1);
             db.Floors.Add(floor);
+        }
+
+        var readingRoomArea = await db.Areas.FirstOrDefaultAsync(
+            item => item.FloorId == floor.Id && item.Name == "Phòng đọc sách",
+            cancellationToken);
+        if (readingRoomArea is null)
+        {
+            readingRoomArea = new Area(
+                floor.Id,
+                "Phòng đọc sách",
+                "Không gian yên tĩnh dành cho bạn đọc học tập và đọc sách.",
+                readingRoom.Id);
+            db.Areas.Add(readingRoomArea);
+        }
+        else
+        {
+            readingRoomArea.AssignEndpoint(readingRoom.Id);
         }
 
         var aisle = await db.Aisles.FirstOrDefaultAsync(
@@ -73,7 +103,7 @@ public static class LiBotDatabaseInitializer
             cancellationToken);
         if (shelf is null)
         {
-            shelf = new Shelf(aisle.Id, "A3", "Kệ Công nghệ A3");
+            shelf = new Shelf(aisle.Id, "A3", "Kệ Công nghệ A3", endpoint.Id);
             db.Shelves.Add(shelf);
         }
 

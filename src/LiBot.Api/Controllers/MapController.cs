@@ -2,24 +2,23 @@ using System.Text.Json;
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
 using LiBot.Application.Robot;
+using LiBot.Domain.Library;
 using Microsoft.AspNetCore.Mvc;
+using LibraryEndpoint = LiBot.Domain.Library.Endpoint;
 
 namespace LiBot.Api.Controllers;
 
 /// <summary>Quản lý bản đồ thư viện và bản đồ occupancy do robot lưu lại.</summary>
-/// <remarks>Dùng <c>/api/maps</c> cho bản đồ thư viện và <c>/api/robot-runtimes/real/maps</c> cho snapshot robot.</remarks>
+/// <remarks>Dùng <c>/api/robot-runtimes/real/maps</c> để liệt kê và lưu snapshot occupancy của robot.</remarks>
 [ApiController]
 [Route("api/maps")]
 public class MapController(
     ILibraryMapService maps,
+    ILibraryResourceService<LibraryEndpoint, EndpointDto> endpoints,
+    ILibraryResourceService<Zone, ZoneDto> zones,
     IRobotRuntimeService runtimes,
     ILogger<MapController> logger) : ControllerBase
 {
-    /// <summary>Lấy danh sách bản đồ thư viện đã lưu.</summary>
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken cancellationToken) =>
-        Ok(await maps.GetAllAsync(cancellationToken));
-
     /// <summary>Lấy các bản đồ occupancy robot thật đã lưu.</summary>
     [HttpGet("/api/robot-runtimes/real/maps")]
     public async Task<IActionResult> GetRobotMaps(CancellationToken cancellationToken) =>
@@ -38,12 +37,24 @@ public class MapController(
         return map is null ? NotFound() : Ok(map);
     }
 
-    /// <summary>Tạo bản đồ thư viện mới.</summary>
-    [HttpPost]
-    public async Task<IActionResult> Create(MapWriteRequest request, CancellationToken cancellationToken)
+    [HttpGet("{mapId:guid}/endpoints")]
+    public async Task<IActionResult> GetEndpoints(Guid mapId, CancellationToken cancellationToken)
     {
-        var map = await maps.CreateAsync(request, cancellationToken);
-        return CreatedAtAction(nameof(GetById), new { id = map.Id }, map);
+        if (await maps.GetByIdAsync(mapId, cancellationToken) is null)
+            return NotFound(new { message = "Map was not found." });
+
+        var resources = await endpoints.GetAllAsync(cancellationToken);
+        return Ok(resources.Where(endpoint => endpoint.MapId == mapId));
+    }
+
+    [HttpGet("{mapId:guid}/zones")]
+    public async Task<IActionResult> GetZones(Guid mapId, CancellationToken cancellationToken)
+    {
+        if (await maps.GetByIdAsync(mapId, cancellationToken) is null)
+            return NotFound(new { message = "Map was not found." });
+
+        var resources = await zones.GetAllAsync(cancellationToken);
+        return Ok(resources.Where(zone => zone.MapId == mapId));
     }
 
     /// <summary>Lưu snapshot occupancy và đường dẫn file map trên robot.</summary>
@@ -91,15 +102,45 @@ public class MapController(
     public async Task<IActionResult> StartNavigation(
         Guid id,
         [FromQuery] string? armLeaseId,
+        [FromQuery] string? runtimeId,
         CancellationToken cancellationToken)
     {
+        runtimeId = string.IsNullOrWhiteSpace(runtimeId) ? "real" : runtimeId.Trim().ToLowerInvariant();
+        if (runtimeId is not ("real" or "sim") || runtimes.Get(runtimeId) is null)
+            return BadRequest(new { message = "runtimeId must identify a configured 'real' or 'sim' runtime." });
+
         var path = await maps.GetRobotMapPathAsync(id, cancellationToken);
         if (path is null) return NotFound();
         if (string.IsNullOrWhiteSpace(path))
             return Conflict(new { message = "Map has no robot-side PGM/YAML files or is not a saved occupancy map." });
 
-        var result = await runtimes.StartNavigationModeAsync("real", id, path, armLeaseId, cancellationToken);
-        return result.Success ? Accepted(result.Payload) : Conflict(new { message = result.Error });
+        var mapZones = await zones.GetAllAsync(cancellationToken);
+        var policyZones = mapZones
+            .Where(zone => zone.MapId == id && zone.IsActive)
+            .Select(zone => new NavigationZonePolicy(
+                zone.ZoneType, zone.MinX, zone.MinY, zone.MaxX, zone.MaxY, zone.MaxSpeed))
+            .ToList();
+        var expectedZoneCounts = policyZones
+            .GroupBy(zone => zone.ZoneType.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key.ToUpperInvariant(),
+                group => group.Count(),
+                StringComparer.OrdinalIgnoreCase);
+        var result = await runtimes.StartNavigationModeAsync(runtimeId, id, path, policyZones, armLeaseId, cancellationToken);
+        if (!result.Success)
+            return Conflict(new { message = result.Error });
+
+        if (!RuntimeConfirmedZonePolicies(result.Payload, expectedZoneCounts))
+        {
+            await runtimes.StopNavigationModeAsync(runtimeId, cancellationToken);
+            return Conflict(new
+            {
+                message = "The robot runtime did not confirm applying every active navigation zone policy. Nav2 was stopped to avoid navigating with incomplete zone configuration.",
+                expectedZoneCounts,
+            });
+        }
+
+        return Accepted(result.Payload);
     }
 
     /// <summary>Cập nhật thông tin và dữ liệu bản đồ.</summary>
@@ -114,4 +155,30 @@ public class MapController(
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken) =>
         await maps.DeleteAsync(id, cancellationToken) ? NoContent() : NotFound();
+
+    private static bool RuntimeConfirmedZonePolicies(
+        JsonElement? payload,
+        IReadOnlyDictionary<string, int> expectedZoneCounts)
+    {
+        if (payload is not { ValueKind: JsonValueKind.Object } response
+            || !response.TryGetProperty("zone_count", out var totalElement)
+            || !totalElement.TryGetInt32(out var reportedTotal)
+            || reportedTotal != expectedZoneCounts.Values.Sum()
+            || !response.TryGetProperty("zone_counts_by_type", out var typeCountsElement)
+            || typeCountsElement.ValueKind != JsonValueKind.Object)
+            return false;
+
+        var reportedCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in typeCountsElement.EnumerateObject())
+        {
+            if (!property.Value.TryGetInt32(out var count) || count < 0
+                || !reportedCounts.TryAdd(property.Name, count))
+                return false;
+        }
+
+        return reportedCounts.Count == expectedZoneCounts.Count
+            && expectedZoneCounts.All(expected =>
+                reportedCounts.TryGetValue(expected.Key, out var actual)
+                && actual == expected.Value);
+    }
 }

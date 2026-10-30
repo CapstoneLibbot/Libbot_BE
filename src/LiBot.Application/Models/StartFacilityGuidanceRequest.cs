@@ -5,4 +5,5 @@ namespace LiBot.Application.Models;
 public sealed record StartFacilityGuidanceRequest(
     string Query,
     string? BackendBaseUrl = null,
-    string? RuntimeId = null);
+    string? RuntimeId = null,
+    string? ArmLeaseId = null);

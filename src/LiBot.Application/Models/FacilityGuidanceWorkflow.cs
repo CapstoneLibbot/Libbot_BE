@@ -9,7 +9,12 @@ public static class FacilityGuidanceWorkflow
         Step("S10", "PROCESS_DATA", new()
         {
             ["action"] = "SEARCH_FACILITY",
-            ["payload"] = new Dictionary<string, object?> { ["query"] = "${query}", ["match_mode"] = "FUZZY" },
+            ["payload"] = new Dictionary<string, object?>
+            {
+                ["query"] = "${query}",
+                ["match_mode"] = "FUZZY",
+                ["runtime_id"] = "${runtime_id}"
+            },
             ["output_mapping"] = new Dictionary<string, object?> { ["data.facilities"] = "facility_results" },
             ["transitions"] = Success("S20")
         }),
@@ -24,13 +29,17 @@ public static class FacilityGuidanceWorkflow
             ["wait_for"] = "USER_TOUCH",
             ["event_type"] = "FACILITY_SELECTED",
             ["result_variable"] = "selected_facility_id",
-            ["timeout_sec"] = 20,
-            ["transitions"] = Event("S40", "S190")
+            ["timeout_sec"] = 120,
+            ["transitions"] = Event("S40", "S210")
         }),
         Step("S40", "PROCESS_DATA", new()
         {
             ["action"] = "GET_FACILITY_DETAIL",
-            ["payload"] = new Dictionary<string, object?> { ["facility_id"] = "${selected_facility_id}" },
+            ["payload"] = new Dictionary<string, object?>
+            {
+                ["facility_id"] = "${selected_facility_id}",
+                ["runtime_id"] = "${runtime_id}"
+            },
             ["output_mapping"] = new Dictionary<string, object?> { ["data"] = "facility_detail" },
             ["transitions"] = Success("S50")
         }),
@@ -44,9 +53,9 @@ public static class FacilityGuidanceWorkflow
         {
             ["wait_for"] = "USER_TOUCH",
             ["event_type"] = "FACILITY_ACTION",
-            ["allowed_values"] = new[] { "VIEW_LOCATION", "RATE" },
+            ["allowed_values"] = new[] { "VIEW_LOCATION", "START_GUIDANCE", "RATE" },
             ["result_variable"] = "facility_action",
-            ["timeout_sec"] = 10,
+            ["timeout_sec"] = 120,
             ["transitions"] = Event("S70", "S160")
         }),
         Step("S70", "EVALUATE", new()
@@ -55,7 +64,15 @@ public static class FacilityGuidanceWorkflow
             ["left"] = "${facility_action}",
             ["operator"] = "EQUAL",
             ["right"] = "RATE",
-            ["transitions"] = Branch("S160", "S80")
+            ["transitions"] = Branch("S160", "S75")
+        }),
+        Step("S75", "EVALUATE", new()
+        {
+            ["condition_type"] = "DATA_MATCH",
+            ["left"] = "${facility_action}",
+            ["operator"] = "EQUAL",
+            ["right"] = "START_GUIDANCE",
+            ["transitions"] = Branch("S110", "S80")
         }),
         Step("S80", "DISPLAY", new()
         {
@@ -69,7 +86,7 @@ public static class FacilityGuidanceWorkflow
             ["event_type"] = "MAP_ACTION",
             ["allowed_values"] = new[] { "START_GUIDANCE", "RATE" },
             ["result_variable"] = "map_action",
-            ["timeout_sec"] = 10,
+            ["timeout_sec"] = 120,
             ["transitions"] = Event("S100", "S160")
         }),
         Step("S100", "EVALUATE", new()
@@ -104,8 +121,8 @@ public static class FacilityGuidanceWorkflow
             ["transitions"] = new Dictionary<string, object?>
             {
                 ["on_success"] = "S130",
-                ["on_error"] = "S160",
-                ["on_timeout"] = "S160"
+                ["on_error"] = "S210",
+                ["on_timeout"] = "S210"
             }
         }),
         Step("S130", "DISPLAY", new()
@@ -147,23 +164,27 @@ public static class FacilityGuidanceWorkflow
         }),
         Step("S180", "PROCESS_DATA", new()
         {
-            ["action"] = "SAVE_RATING",
+            ["action"] = "SAVE_FACILITY_RATING",
             ["payload"] = new Dictionary<string, object?>
             {
                 ["rating"] = "${rating}",
-                ["task_id"] = "${task_id}"
+                ["task_id"] = "${task_id}",
+                ["runtime_id"] = "${runtime_id}"
             },
             ["transitions"] = new Dictionary<string, object?>
             {
                 ["on_success"] = "S190",
-                ["on_error"] = "S190"
+                ["on_error"] = "S210"
             }
         }),
         Step("S190", "DISPLAY", new()
         {
             ["ui_screen"] = "HOME",
-            ["data"] = new Dictionary<string, object?>()
-        })
+            ["data"] = new Dictionary<string, object?>(),
+            ["transitions"] = Success("S200")
+        }),
+        Step("S200", "END", new() { ["result_status"] = "SUCCEEDED" }),
+        Step("S210", "END", new() { ["result_status"] = "FAILED" })
     ];
 
     private static IReadOnlyDictionary<string, object?> Step(string id, string type, Dictionary<string, object?> values)
@@ -174,7 +195,7 @@ public static class FacilityGuidanceWorkflow
         return values;
     }
 
-    private static Dictionary<string, object?> Success(string next) => new() { ["on_success"] = next, ["on_error"] = "S190" };
+    private static Dictionary<string, object?> Success(string next) => new() { ["on_success"] = next, ["on_error"] = "S210" };
 
     private static Dictionary<string, object?> Event(string next, string timeout) =>
         new() { ["on_event"] = next, ["on_timeout"] = timeout, ["on_cancel"] = timeout };
