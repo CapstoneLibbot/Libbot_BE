@@ -6,4 +6,5 @@ public sealed record StartFacilityGuidanceRequest(
     string Query,
     string? BackendBaseUrl = null,
     string? RuntimeId = null,
+    Guid? FacilityId = null,
     string? ArmLeaseId = null);

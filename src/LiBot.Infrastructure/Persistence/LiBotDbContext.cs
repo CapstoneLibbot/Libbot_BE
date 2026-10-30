@@ -35,7 +35,6 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
     public DbSet<JobStep> JobSteps => Set<JobStep>();
     public DbSet<JobEvent> JobEvents => Set<JobEvent>();
     public DbSet<Feedback> Feedback => Set<Feedback>();
-    public DbSet<Report> Reports => Set<Report>();
     public DbSet<InventoryReport> InventoryReports => Set<InventoryReport>();
     public DbSet<PatrolReport> PatrolReports => Set<PatrolReport>();
     public DbSet<WorkflowDefinition> Workflows => Set<WorkflowDefinition>();
@@ -216,22 +215,17 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.HasKey(x => x.Id);
             entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.Cascade);
         });
-        modelBuilder.Entity<Report>(entity =>
-        {
-            entity.ToTable("REPORT");
-            entity.HasKey(x => x.Id);
-        });
         modelBuilder.Entity<InventoryReport>(entity =>
         {
             entity.ToTable("INVENTORY_REPORT");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Report>().WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<PatrolReport>(entity =>
         {
             entity.ToTable("PATROL_REPORT");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Report>().WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<WorkflowDefinition>(entity =>

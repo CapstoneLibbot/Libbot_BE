@@ -4,7 +4,9 @@ namespace LiBot.Domain.Mission;
 
 public class PatrolReport : Entity
 {
-    public Guid ReportId { get; private set; }
+    public Guid? JobId { get; private set; }
+    public string ReportType { get; private set; }
+    public string Summary { get; private set; }
     public int DurationSeconds { get; private set; }
     public int ObservationCount { get; private set; }
     public int WarningCount { get; private set; }
@@ -13,18 +15,24 @@ public class PatrolReport : Entity
     public int OtherWarningCount { get; private set; }
     public string PatrolStatus { get; private set; }
 
-    public PatrolReport(Guid reportId, int durationSeconds, int observationCount, int warningCount,
+    public PatrolReport(Guid? jobId, string reportType, string summary, int durationSeconds, int observationCount, int warningCount,
         int fallenBookCount, int unknownObstacleCount, int otherWarningCount, string patrolStatus)
     {
-        if (reportId == Guid.Empty)
-            throw new ArgumentException("Report id is required.", nameof(reportId));
+        if (!jobId.HasValue || jobId.Value == Guid.Empty)
+            throw new ArgumentException("Job id is required.", nameof(jobId));
+        if (string.IsNullOrWhiteSpace(reportType))
+            throw new ArgumentException("Report type is required.", nameof(reportType));
+        if (string.IsNullOrWhiteSpace(summary))
+            throw new ArgumentException("Report summary is required.", nameof(summary));
         if (durationSeconds < 0 || observationCount < 0 || warningCount < 0 || fallenBookCount < 0 ||
             unknownObstacleCount < 0 || otherWarningCount < 0)
             throw new ArgumentOutOfRangeException(nameof(durationSeconds), "Report values cannot be negative.");
         if (string.IsNullOrWhiteSpace(patrolStatus))
             throw new ArgumentException("Patrol status is required.", nameof(patrolStatus));
 
-        ReportId = reportId;
+        JobId = jobId;
+        ReportType = reportType.Trim();
+        Summary = summary.Trim();
         DurationSeconds = durationSeconds;
         ObservationCount = observationCount;
         WarningCount = warningCount;

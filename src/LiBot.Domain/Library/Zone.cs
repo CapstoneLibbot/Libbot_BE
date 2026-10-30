@@ -20,7 +20,14 @@ public class Zone : Entity
     public double MaxY { get; private set; }
     public bool IsActive { get; private set; } = true;
 
-    public Zone(Guid mapId, string zoneType, double minX, double minY, double maxX, double maxY, double maxSpeed = 0)
+    public Zone(
+        Guid mapId,
+        string zoneType,
+        double minX,
+        double minY,
+        double maxX,
+        double maxY,
+        double maxSpeed = 0)
     {
         if (mapId == Guid.Empty)
             throw new ArgumentException("Map id is required.", nameof(mapId));
