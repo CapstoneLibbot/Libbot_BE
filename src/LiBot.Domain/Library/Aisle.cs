@@ -25,4 +25,17 @@ public class Aisle : Entity
         Name = name.Trim();
         Description = description?.Trim();
     }
+
+    public void Update(Guid floorId, string code, string name, Guid? endpointId, string? description)
+    {
+        if (floorId == Guid.Empty) throw new ArgumentException("Floor id is required.", nameof(floorId));
+        if (string.IsNullOrWhiteSpace(code)) throw new ArgumentException("Aisle code is required.", nameof(code));
+        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Aisle name is required.", nameof(name));
+        FloorId = floorId;
+        Code = code.Trim();
+        Name = name.Trim();
+        EndpointId = endpointId;
+        Description = description?.Trim();
+        SetUpdated();
+    }
 }
