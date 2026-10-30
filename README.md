@@ -19,3 +19,9 @@ Traditional library management faces significant challenges in keeping inventory
 * **Database:** Relational Database (SQL Server / MySQL)[cite: 1]
 * **Client & UI:** ReactJS (Web Admin/Librarian Portal), Flutter (Mobile Clients)[cite: 1]
 * **Robotics:** Autonomous navigation, path planning, and barcode scanning modules[cite: 1].
+
+## Xiaozhi voice tools
+
+The backend exposes a protected MCP Streamable HTTP endpoint at `/mcp/voice-tools` for the self-hosted Xiaozhi server. It provides only `search_books` and `search_areas`; neither tool can create a mission or control a robot.
+
+Set `VoiceTools__ApiToken` in the backend secret environment. Set the same value as `LIBBOT_VOICE_TOOLS_TOKEN` and configure the reachable backend URL as `LIBBOT_BE_MCP_URL` in `Libbot_Mobile/docker/xiaozhi/.env`, then run that folder's `render-config.sh` before restarting Xiaozhi.

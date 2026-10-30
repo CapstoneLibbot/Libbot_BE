@@ -1,10 +1,14 @@
+using LiBot.Application.Interfaces;
+using LiBot.Application.Models;
+using LiBot.Application.Models.Endpoint;
 using LiBot.Domain.Library;
 using Microsoft.AspNetCore.Mvc;
-using LibraryEndpoint = LiBot.Domain.Library.Endpoint;
+using EndpointGroupDto = LiBot.Application.Models.EndpointGroup.EndpointGroupDto;
+using EndpointGroupMemberDto = LiBot.Application.Models.EndpointGroupMember.EndpointGroupMemberDto;
 
 namespace LiBot.Api.Controllers;
 
-/// <summary>CRUD điểm đến điều hướng của robot trong các bản đồ.</summary>
+/// <summary>CRUD endpoint, nhóm endpoint và quan hệ thành viên trong thư viện.</summary>
 [ApiController]
 [Route("api/endpoints")]
 public sealed class EndpointController(

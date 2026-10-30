@@ -1,6 +1,6 @@
 using System.Reflection;
 using LiBot.Domain.Common;
-using LiBot.Domain.Library;
+using AisleEntity = LiBot.Domain.Library.Aisle;
 
 namespace LiBot.Application.Models;
 
@@ -37,7 +37,7 @@ public abstract class LibraryResourceDto<TEntity> : ILibraryResourceDto<TEntity>
     }
 }
 
-public sealed class AisleDto : LibraryResourceDto<Aisle>
+public sealed class AisleDto : LibraryResourceDto<AisleEntity>
 {
     public Guid FloorId { get; set; }
     public Guid? EndpointId { get; set; }

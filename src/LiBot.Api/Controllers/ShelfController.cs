@@ -1,10 +1,12 @@
-using LiBot.Domain.Library;
+using LiBot.Application.Interfaces;
+using LiBot.Application.Models;
+using LiBot.Application.Models.Shelf;
+using LiBot.Application.Models.ShelfLevel;
 using Microsoft.AspNetCore.Mvc;
 using LibraryEndpoint = LiBot.Domain.Library.Endpoint;
 
 namespace LiBot.Api.Controllers;
 
-/// <summary>CRUD kệ sách và thông tin liên kết với lối đi.</summary>
 [ApiController]
 [Route("api/shelves")]
 public sealed class ShelfController(
