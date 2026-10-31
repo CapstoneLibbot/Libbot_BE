@@ -5,6 +5,8 @@ namespace LiBot.Application.Interfaces;
 public interface ILibraryMapService
 {
     Task<IReadOnlyList<MapResponse>> GetAllAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<EndpointDto>> GetEndpointsByMapIdAsync(Guid mapId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ZoneDto>> GetZonesByMapIdAsync(Guid mapId, CancellationToken cancellationToken);
     Task<IReadOnlyList<SavedRobotMapResponse>> GetRobotMapsAsync(CancellationToken cancellationToken);
     Task<SavedRobotMapResponse?> GetLatestRobotMapAsync(CancellationToken cancellationToken);
     Task<MapResponse?> GetByIdAsync(Guid id, CancellationToken cancellationToken);

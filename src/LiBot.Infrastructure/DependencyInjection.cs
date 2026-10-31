@@ -71,6 +71,7 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<ILiBotTcpClient, LiBotTcpClient>();
         services.AddSingleton<BookGuidanceRuntimeRegistry>();
+        services.AddSingleton<FacilityGuidanceRuntimeRegistry>();
         services.AddScoped<IBookGuidanceService, BookGuidanceService>();
         services.AddScoped<IFacilityGuidanceService, FacilityGuidanceService>();
         services.AddScoped<IWorkflowDocumentRepository, WorkflowDocumentRepository>();

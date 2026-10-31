@@ -34,15 +34,13 @@ public sealed class WorkflowDataService(IWorkflowDataRepository repository) : IW
         IReadOnlyCollection<string> scannedBarcodes, CancellationToken cancellationToken) =>
         repository.CountMissingBooksAsync(shelfLevelIds, scannedBarcodes, cancellationToken);
 
-    public Task<Guid> SaveInventoryReportAsync(Guid missionId, string reportType, string description, string scopeType,
-        int totalBooksScanned, int correctlyPlaced, int misplaced, int missing, string eventData,
+    public Task<Guid> SaveInventoryReportAsync(Guid missionId, string scopeType, int totalBooksScanned,
+        int correctlyPlaced, int misplaced, int missing, string data,
         CancellationToken cancellationToken) =>
-        repository.SaveInventoryReportAsync(missionId, reportType, description, scopeType,
-            totalBooksScanned, correctlyPlaced, misplaced, missing, eventData, cancellationToken);
+        repository.SaveInventoryReportAsync(missionId, scopeType, totalBooksScanned,
+            correctlyPlaced, misplaced, missing, data, cancellationToken);
 
-    public Task<Guid> SavePatrolReportAsync(Guid missionId, string reportType, string description, int durationSeconds,
-        int observationCount, int totalFindings, int fallenBooks, int obstacles, int warnings, string status,
-        string eventData, CancellationToken cancellationToken) =>
-        repository.SavePatrolReportAsync(missionId, reportType, description, durationSeconds, observationCount,
-            totalFindings, fallenBooks, obstacles, warnings, status, eventData, cancellationToken);
+    public Task<Guid> SavePatrolReportAsync(Guid missionId, int durationSeconds, int observationCount,
+        int warnings, string data, CancellationToken cancellationToken) =>
+        repository.SavePatrolReportAsync(missionId, durationSeconds, observationCount, warnings, data, cancellationToken);
 }

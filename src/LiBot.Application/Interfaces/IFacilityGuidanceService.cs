@@ -8,7 +8,7 @@ public interface IFacilityGuidanceService
     Task<bool> IsSimulationTaskAsync(Guid taskId, CancellationToken cancellationToken);
 
     Task<FacilitySearchResponse> SearchAsync(
-        string query,
+        string? query,
         string matchMode,
         CancellationToken cancellationToken);
 

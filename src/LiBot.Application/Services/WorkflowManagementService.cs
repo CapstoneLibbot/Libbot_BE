@@ -96,7 +96,7 @@ public sealed class WorkflowManagementService(
             {
                 var step = aggregate.Steps[task.Id];
                 return new WorkflowStepResponse(step.Id, task.SequenceNumber, step.StepType, task.Name,
-                    ParseConfiguration(step.Configuration));
+                    ParseConfiguration(step.Configuration), task.Description);
             }).ToList();
         var workflow = aggregate.Workflow;
         return new WorkflowResponse(workflow.Id, workflow.Name, workflow.Description, workflow.Type,

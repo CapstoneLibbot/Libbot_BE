@@ -6,13 +6,15 @@ public class Floor : Entity
 {
     public string Name { get; private set; }
     public int FloorNumber { get; private set; }
+    public string? Description { get; private set; }
 
-    public Floor(string name, int floorNumber)
+    public Floor(string name, int floorNumber, string? description = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Floor name is required.", nameof(name));
 
         Name = name.Trim();
         FloorNumber = floorNumber;
+        Description = description?.Trim();
     }
 }

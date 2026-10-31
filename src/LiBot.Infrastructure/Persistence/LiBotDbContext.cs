@@ -35,16 +35,12 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
     public DbSet<JobStep> JobSteps => Set<JobStep>();
     public DbSet<JobEvent> JobEvents => Set<JobEvent>();
     public DbSet<Feedback> Feedback => Set<Feedback>();
-    public DbSet<Report> Reports => Set<Report>();
     public DbSet<InventoryReport> InventoryReports => Set<InventoryReport>();
     public DbSet<PatrolReport> PatrolReports => Set<PatrolReport>();
     public DbSet<WorkflowDefinition> Workflows => Set<WorkflowDefinition>();
     public DbSet<WorkflowTask> WorkflowTasks => Set<WorkflowTask>();
     public DbSet<TaskStep> TaskSteps => Set<TaskStep>();
     public DbSet<Schedule> Schedules => Set<Schedule>();
-    public DbSet<ScheduledJob> ScheduledJobs => Set<ScheduledJob>();
-    public DbSet<ScheduledJobTask> ScheduledJobTasks => Set<ScheduledJobTask>();
-    public DbSet<ScheduledJobStep> ScheduledJobSteps => Set<ScheduledJobStep>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -119,6 +115,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("MAP");
             entity.HasKey(x => x.Id);
+            entity.HasOne<Floor>().WithMany().HasForeignKey(x => x.FloorId).OnDelete(DeleteBehavior.SetNull);
         });
         modelBuilder.Entity<Floor>(entity =>
         {
@@ -136,19 +133,22 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.ToTable("AREA");
             entity.HasKey(x => x.Id);
             entity.HasOne<Floor>().WithMany().HasForeignKey(x => x.FloorId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.EndpointId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => x.EndpointId);
         });
         modelBuilder.Entity<Aisle>(entity =>
         {
             entity.ToTable("AISLE");
             entity.HasKey(x => x.Id);
             entity.HasOne<Floor>().WithMany().HasForeignKey(x => x.FloorId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.EndpointId).OnDelete(DeleteBehavior.SetNull);
         });
         modelBuilder.Entity<Shelf>(entity =>
         {
             entity.ToTable("SHELF");
             entity.HasKey(x => x.Id);
             entity.HasOne<Aisle>().WithMany().HasForeignKey(x => x.AisleId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.EndpointId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => x.EndpointId);
         });
         modelBuilder.Entity<ShelfLevel>(entity =>
         {
@@ -160,6 +160,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("ENDPOINT");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.EndpointType).HasDefaultValue("WAYPOINT");
             entity.HasOne<LibraryMap>().WithMany().HasForeignKey(x => x.MapId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<EndpointGroup>(entity =>
@@ -181,8 +182,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.ToTable("JOB");
             entity.HasKey(x => x.Id);
             entity.HasOne<User>().WithMany().HasForeignKey(x => x.CreatedBy).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.SourceEndpointId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.DestinationEndpointId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<RobotEntity>().WithMany().HasForeignKey(x => x.RobotId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<WorkflowDefinition>().WithMany().HasForeignKey(x => x.WorkflowId).OnDelete(DeleteBehavior.SetNull);
         });
         modelBuilder.Entity<JobTask>(entity =>
@@ -192,8 +192,10 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.Property(x => x.RuntimeId).HasMaxLength(32).HasDefaultValue("real");
             entity.Property(x => x.ExecutionId).HasMaxLength(64);
             entity.Property(x => x.ExecutionState).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.Name).IsRequired();
+            entity.Property(x => x.Status).IsRequired();
             entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<RobotEntity>().WithMany().HasForeignKey(x => x.RobotId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<WorkflowTask>().WithMany().HasForeignKey(x => x.WorkflowTaskId).OnDelete(DeleteBehavior.SetNull);
         });
         modelBuilder.Entity<JobStep>(entity =>
         {
@@ -214,22 +216,17 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.HasKey(x => x.Id);
             entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.Cascade);
         });
-        modelBuilder.Entity<Report>(entity =>
-        {
-            entity.ToTable("REPORT");
-            entity.HasKey(x => x.Id);
-        });
         modelBuilder.Entity<InventoryReport>(entity =>
         {
             entity.ToTable("INVENTORY_REPORT");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Report>().WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.SetNull);
         });
         modelBuilder.Entity<PatrolReport>(entity =>
         {
             entity.ToTable("PATROL_REPORT");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Report>().WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<WorkflowDefinition>(entity =>
@@ -254,26 +251,6 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.ToTable("SCHEDULE");
             entity.HasKey(x => x.Id);
             entity.HasOne<User>().WithMany().HasForeignKey(x => x.CreatedBy).OnDelete(DeleteBehavior.SetNull);
-        });
-        modelBuilder.Entity<ScheduledJob>(entity =>
-        {
-            entity.ToTable("SCHEDULE_JOB");
-            entity.HasKey(x => x.Id);
-            entity.HasOne<Schedule>().WithMany().HasForeignKey(x => x.ScheduleId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.Cascade);
-        });
-        modelBuilder.Entity<ScheduledJobTask>(entity =>
-        {
-            entity.ToTable("SCHEDULE_JOBTASK");
-            entity.HasKey(x => x.Id);
-            entity.HasOne<ScheduledJob>().WithMany().HasForeignKey(x => x.ScheduledJobId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<WorkflowTask>().WithMany().HasForeignKey(x => x.WorkflowTaskId).OnDelete(DeleteBehavior.NoAction);
-        });
-        modelBuilder.Entity<ScheduledJobStep>(entity =>
-        {
-            entity.ToTable("SCHEDULE_JOBSTEP");
-            entity.HasKey(x => x.Id);
-            entity.HasOne<ScheduledJobTask>().WithMany().HasForeignKey(x => x.ScheduledJobTaskId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

@@ -81,7 +81,7 @@ public sealed class WorkflowRepository(LiBotDbContext db) : IWorkflowRepository
         await db.SaveChangesAsync(cancellationToken);
         foreach (var step in steps.OrderBy(item => item.Sequence))
         {
-            var task = new WorkflowTask(workflowId, step.Sequence, step.Name ?? step.Type);
+            var task = new WorkflowTask(workflowId, step.Sequence, step.Name ?? step.Type, step.Description);
             db.WorkflowTasks.Add(task);
             await db.SaveChangesAsync(cancellationToken);
             var configuration = step.Configuration?.GetRawText();

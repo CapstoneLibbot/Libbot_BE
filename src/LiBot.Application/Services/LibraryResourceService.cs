@@ -1,5 +1,6 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
+using LiBot.Domain.Common;
 
 namespace LiBot.Application.Services;
 
@@ -31,6 +32,7 @@ public sealed class LibraryResourceService<TEntity, TDto>(ILibraryResourceReposi
         var current = await repository.GetByIdAsync(id, cancellationToken);
         if (current is null) return null;
         dto.ApplyTo(current);
+        if (current is Entity entity) entity.SetUpdated();
         await repository.SaveChangesAsync(cancellationToken);
         return ToDto(current);
     }

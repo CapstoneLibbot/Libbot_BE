@@ -15,9 +15,8 @@ public interface IWorkflowDataRepository
     Task<IReadOnlyList<string?>> GetJobEventDataAsync(Guid missionId, string eventType, CancellationToken cancellationToken);
     Task<int> CountMissingBooksAsync(IReadOnlyCollection<Guid> shelfLevelIds, IReadOnlyCollection<string> scannedBarcodes,
         CancellationToken cancellationToken);
-    Task<Guid> SaveInventoryReportAsync(Guid missionId, string reportType, string description, string scopeType,
-        int totalBooksScanned, int correctlyPlaced, int misplaced, int missing, string eventData, CancellationToken cancellationToken);
-    Task<Guid> SavePatrolReportAsync(Guid missionId, string reportType, string description, int durationSeconds,
-        int observationCount, int totalFindings, int fallenBooks, int obstacles, int warnings, string status,
-        string eventData, CancellationToken cancellationToken);
+    Task<Guid> SaveInventoryReportAsync(Guid missionId, string scopeType, int totalBooksScanned,
+        int correctlyPlaced, int misplaced, int missing, string data, CancellationToken cancellationToken);
+    Task<Guid> SavePatrolReportAsync(Guid missionId, int durationSeconds, int observationCount,
+        int warnings, string data, CancellationToken cancellationToken);
 }

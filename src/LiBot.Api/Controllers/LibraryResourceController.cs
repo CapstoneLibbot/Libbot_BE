@@ -8,6 +8,8 @@ public abstract class LibraryResourceController<TEntity, TDto>(ILibraryResourceS
     where TEntity : class
     where TDto : class, ILibraryResourceDto<TEntity>, new()
 {
+    protected ILibraryResourceService<TEntity, TDto> ResourceService => service;
+
     /// <summary>Lấy toàn bộ tài nguyên của nhóm hiện tại.</summary>
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken) =>
@@ -23,7 +25,7 @@ public abstract class LibraryResourceController<TEntity, TDto>(ILibraryResourceS
 
     /// <summary>Tạo tài nguyên mới từ JSON body.</summary>
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] TDto dto, CancellationToken cancellationToken)
+    public virtual async Task<IActionResult> Create([FromBody] TDto dto, CancellationToken cancellationToken)
     {
         var created = await service.CreateAsync(dto, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
@@ -31,7 +33,7 @@ public abstract class LibraryResourceController<TEntity, TDto>(ILibraryResourceS
 
     /// <summary>Thay thông tin tài nguyên theo ID.</summary>
     [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] TDto dto, CancellationToken cancellationToken)
+    public virtual async Task<IActionResult> Update(Guid id, [FromBody] TDto dto, CancellationToken cancellationToken)
     {
         var updated = await service.UpdateAsync(id, dto, cancellationToken);
         return updated is null ? NotFound() : Ok(updated);
@@ -39,7 +41,7 @@ public abstract class LibraryResourceController<TEntity, TDto>(ILibraryResourceS
 
     /// <summary>Xóa tài nguyên theo ID.</summary>
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    public virtual async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         return await service.DeleteAsync(id, cancellationToken) ? NoContent() : NotFound();
     }

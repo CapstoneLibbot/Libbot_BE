@@ -117,14 +117,12 @@ public sealed class BookGuidanceService(
             mission.Name,
             mission.Description,
             mission.Priority,
-            loadedWorkflow.Id,
-            mission.SourceEndpointId,
-            mission.DestinationEndpointId);
+            loadedWorkflow.Id);
         mission.Start();
         var runtimeId = string.IsNullOrWhiteSpace(request.RuntimeId)
             ? "sim"
             : request.RuntimeId.Trim().ToLowerInvariant();
-        var jobTask = new JobTask(mission.Id, null, runtimeId);
+        var jobTask = new JobTask(mission.Id, null, mission.Name, runtimeId);
         jobTask.Start();
         jobTask.SetExecutionId(mission.Id.ToString());
         jobTask.UpdateExecutionState(JsonSerializer.Serialize(new

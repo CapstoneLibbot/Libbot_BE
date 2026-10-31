@@ -289,14 +289,12 @@ public sealed class WorkflowDataController(
         var storedReportType = reportType;
         var eventData = JsonSerializer.Serialize(new
         {
-            reportType = storedReportType,
             runtimeId,
             totalBooksScanned = scannedBarcodes.Count,
             totalMisplaced = misplacedCount,
             totalMissing = missingCount
         });
-        var reportId = await dataService.SaveInventoryReportAsync(request.MissionId, storedReportType,
-            $"{reportType} mission {request.MissionId}: {scannedBarcodes.Count} scanned, {misplacedCount} misplaced, {missingCount} missing.",
+        var reportId = await dataService.SaveInventoryReportAsync(request.MissionId,
             request.ScopeType ?? "SHELF", scannedBarcodes.Count, Math.Max(0, scannedBarcodes.Count - misplacedCount),
             misplacedCount, missingCount, eventData, cancellationToken);
         return Ok(new { reportId, reportType = storedReportType, runtimeId,
@@ -376,17 +374,14 @@ public sealed class WorkflowDataController(
             : 0;
         var eventData = JsonSerializer.Serialize(new
         {
-            reportType = storedType,
             runtimeId,
             observationCount = categories.Count,
             fallenBookCount = fallen,
             unknownObstacleCount = obstacles,
             otherWarningCount = warnings
         });
-        var reportId = await dataService.SavePatrolReportAsync(request.MissionId, storedType,
-            $"Patrol mission {request.MissionId}: {categories.Count} observations, {fallen} fallen books, {obstacles} obstacles, {warnings} warnings.",
-            duration, categories.Count, warnings + fallen + obstacles, fallen, obstacles, warnings, "COMPLETED",
-            eventData, cancellationToken);
+        var reportId = await dataService.SavePatrolReportAsync(request.MissionId, duration, categories.Count,
+            warnings, eventData, cancellationToken);
         await patrolNotifications.PublishPatrolCompletedAsync(new PatrolCompletedNotification(
             request.MissionId, reportId, storedType, runtimeId, categories.Count, fallen, obstacles, warnings,
             DateTime.UtcNow), cancellationToken);

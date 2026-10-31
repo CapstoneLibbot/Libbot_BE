@@ -13,13 +13,14 @@ public sealed class FacilityGuidanceService(
     IFacilityGuidanceRepository facilities,
     IGuidanceWorkflowRepository workflowRepository,
     ILiBotTcpClient tcpClient,
+    FacilityGuidanceRuntimeRegistry runtimeRegistry,
     IRobotTaskRepository robotTasks) : IFacilityGuidanceService
 {
     public Task<bool> IsSimulationTaskAsync(Guid taskId, CancellationToken cancellationToken) =>
         robotTasks.IsSimulationTaskAsync(taskId, cancellationToken);
 
     public async Task<FacilitySearchResponse> SearchAsync(
-        string query,
+        string? query,
         string matchMode,
         CancellationToken cancellationToken)
     {
@@ -113,14 +114,12 @@ public sealed class FacilityGuidanceService(
             mission.Name,
             mission.Description,
             mission.Priority,
-            loadedWorkflow.Id,
-            mission.SourceEndpointId,
-            mission.DestinationEndpointId);
+            loadedWorkflow.Id);
         mission.Start();
         var runtimeId = string.IsNullOrWhiteSpace(request.RuntimeId)
             ? "real"
             : request.RuntimeId.Trim().ToLowerInvariant();
-        var jobTask = new JobTask(mission.Id, null, runtimeId);
+        var jobTask = new JobTask(mission.Id, null, mission.Name, runtimeId);
         jobTask.Start();
         jobTask.SetExecutionId(mission.Id.ToString());
         jobTask.UpdateExecutionState(JsonSerializer.Serialize(new
@@ -134,6 +133,7 @@ public sealed class FacilityGuidanceService(
         var initialContext = JsonSerializer.Serialize(new Dictionary<string, object?>
         {
             ["query"] = request.Query.Trim(),
+            ["facility_id"] = request.FacilityId?.ToString(),
             ["runtime_id"] = runtimeId,
             ["task_id"] = mission.Id.ToString(),
             ["backend_base_url"] = backendBaseUrl
@@ -147,6 +147,7 @@ public sealed class FacilityGuidanceService(
             new Dictionary<string, object?>
             {
                 ["query"] = request.Query.Trim(),
+                ["facility_id"] = request.FacilityId?.ToString(),
                 ["runtime_id"] = runtimeId,
                 ["task_id"] = mission.Id.ToString(),
                 ["backend_base_url"] = backendBaseUrl
@@ -171,6 +172,10 @@ public sealed class FacilityGuidanceService(
                     updatedAt = DateTime.UtcNow
                 }));
                 await workflowRepository.SaveChangesAsync(cancellationToken);
+            }
+            else
+            {
+                runtimeRegistry.Register(mission.Id.ToString(), runtimeId);
             }
 
             return new FacilityGuidanceStartResult(mission.Id, loadedWorkflow, body, isAccepted);
@@ -198,9 +203,17 @@ public sealed class FacilityGuidanceService(
     {
         try
         {
-            using var response = await tcpClient.SendAsync(new
+            var executionId = request.ExecutionId?.Trim();
+            if (string.IsNullOrWhiteSpace(executionId)
+                || !runtimeRegistry.TryGetRuntime(executionId, out var runtimeId))
+            {
+                throw new FacilityGuidanceExecutionNotFoundException(executionId ?? string.Empty);
+            }
+
+            using var response = await tcpClient.SendAsync(runtimeId, new
             {
                 command = "submit_event",
+                execution_id = executionId,
                 event_type = request.EventType.Trim().ToUpperInvariant(),
                 data = request.Data
             }, cancellationToken);
@@ -218,7 +231,11 @@ public sealed class FacilityGuidanceService(
     {
         try
         {
+            if (!runtimeRegistry.TryGetRuntime(executionId, out var runtimeId))
+                throw new FacilityGuidanceExecutionNotFoundException(executionId);
+
             using var response = await tcpClient.SendAsync(
+                runtimeId,
                 new { command = "get_execution", execution_id = executionId },
                 cancellationToken);
             return response.RootElement.Clone();

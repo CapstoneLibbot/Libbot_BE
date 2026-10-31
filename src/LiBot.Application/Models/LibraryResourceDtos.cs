@@ -40,19 +40,19 @@ public abstract class LibraryResourceDto<TEntity> : ILibraryResourceDto<TEntity>
 public sealed class AisleDto : LibraryResourceDto<Aisle>
 {
     public Guid FloorId { get; set; }
-    public Guid? EndpointId { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public override Aisle ToEntity() => new(FloorId, Code, Name, EndpointId, Description);
+    public override Aisle ToEntity() => new(FloorId, Code, Name, Description);
 }
 
 public sealed class AreaDto : LibraryResourceDto<Area>
 {
     public Guid FloorId { get; set; }
+    public Guid? EndpointId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public override Area ToEntity() => new(FloorId, Name, Description);
+    public override Area ToEntity() => new(FloorId, Name, Description, EndpointId);
 }
 
 public sealed class BookDto : LibraryResourceDto<Book>
@@ -64,7 +64,8 @@ public sealed class BookDto : LibraryResourceDto<Book>
     public string? Publisher { get; set; }
     public int? PublicationYear { get; set; }
     public string? Image { get; set; }
-    public override Book ToEntity() => new(Isbn, Title, Author, CategoryId, Publisher, PublicationYear, Image);
+    public string? Description { get; set; }
+    public override Book ToEntity() => new(Isbn, Title, Author, CategoryId, Publisher, PublicationYear, Image, Description);
 }
 
 public sealed class BookCategoryDto : LibraryResourceDto<BookCategory>
@@ -89,11 +90,13 @@ public sealed class EndpointDto : LibraryResourceDto<Endpoint>
 {
     public Guid MapId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string EndpointType { get; set; } = "WAYPOINT";
     public double PositionX { get; set; }
     public double PositionY { get; set; }
     public double Theta { get; set; }
+    public string? Description { get; set; }
     public bool IsActive { get; set; } = true;
-    public override Endpoint ToEntity() => new(MapId, Name, PositionX, PositionY, Theta);
+    public override Endpoint ToEntity() => new(MapId, Name, PositionX, PositionY, Theta, Description, EndpointType);
 }
 
 public sealed class EndpointGroupDto : LibraryResourceDto<EndpointGroup>
@@ -113,15 +116,17 @@ public sealed class FloorDto : LibraryResourceDto<Floor>
 {
     public string Name { get; set; } = string.Empty;
     public int FloorNumber { get; set; }
-    public override Floor ToEntity() => new(Name, FloorNumber);
+    public string? Description { get; set; }
+    public override Floor ToEntity() => new(Name, FloorNumber, Description);
 }
 
 public sealed class ShelfDto : LibraryResourceDto<Shelf>
 {
     public Guid AisleId { get; set; }
+    public Guid? EndpointId { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
-    public override Shelf ToEntity() => new(AisleId, Code, Name);
+    public override Shelf ToEntity() => new(AisleId, Code, Name, EndpointId);
 }
 
 public sealed class ShelfLevelDto : LibraryResourceDto<ShelfLevel>
@@ -134,16 +139,18 @@ public sealed class ShelfLevelDto : LibraryResourceDto<ShelfLevel>
 public sealed class ZoneDto : LibraryResourceDto<Zone>
 {
     public Guid MapId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
     public string ZoneType { get; set; } = string.Empty;
     public double MaxSpeed { get; set; }
-    public string? PreferredDirection { get; set; }
-    public double? CorridorWidth { get; set; }
-    public bool AllowTurnaround { get; set; }
     public double MinX { get; set; }
     public double MinY { get; set; }
     public double MaxX { get; set; }
     public double MaxY { get; set; }
+    public double? Width { get; set; }
+    public double? Height { get; set; }
+    public double RotationAngle { get; set; }
     public bool IsActive { get; set; } = true;
-    public override Zone ToEntity() => new(MapId, ZoneType, MinX, MinY, MaxX, MaxY,
-        MaxSpeed, PreferredDirection, CorridorWidth, AllowTurnaround);
+    public override Zone ToEntity() => new(MapId, Name, ZoneType, MinX, MinY, MaxX, MaxY,
+        MaxSpeed, Description, Width, Height, RotationAngle);
 }

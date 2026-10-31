@@ -7,16 +7,14 @@ public class Mission
     public string Description { get; private set; }
     public string Status { get; private set; } = "Pending";
     public Guid? CreatedBy { get; private set; }
-    public Guid? SourceEndpointId { get; private set; }
-    public Guid? DestinationEndpointId { get; private set; }
+    public Guid? RobotId { get; private set; }
     public Guid? WorkflowId { get; private set; }
     public int Priority { get; private set; }
     public DateTime CreatedAtUtc { get; private set; } = DateTime.UtcNow;
     public DateTime? StartedAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
 
-    public Mission(string name, string description, Guid? createdBy = null,
-        Guid? sourceEndpointId = null, Guid? destinationEndpointId = null, int priority = 0)
+    public Mission(string name, string description, Guid? createdBy = null, Guid? robotId = null, int priority = 0)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Mission name is required.", nameof(name));
@@ -24,8 +22,7 @@ public class Mission
         Name = name.Trim();
         Description = description.Trim();
         CreatedBy = createdBy;
-        SourceEndpointId = sourceEndpointId;
-        DestinationEndpointId = destinationEndpointId;
+        RobotId = robotId;
         Priority = priority;
     }
 
@@ -54,8 +51,7 @@ public class Mission
         CompletedAtUtc = DateTime.UtcNow;
     }
 
-    public void Update(string name, string description, int priority, Guid? workflowId,
-        Guid? sourceEndpointId, Guid? destinationEndpointId)
+    public void Update(string name, string description, int priority, Guid? workflowId)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Mission name is required.", nameof(name));
@@ -63,8 +59,6 @@ public class Mission
         Description = description?.Trim() ?? string.Empty;
         Priority = priority;
         WorkflowId = workflowId;
-        SourceEndpointId = sourceEndpointId;
-        DestinationEndpointId = destinationEndpointId;
     }
 
     public void Cancel()

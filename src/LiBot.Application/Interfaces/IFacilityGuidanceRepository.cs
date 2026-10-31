@@ -5,7 +5,7 @@ namespace LiBot.Application.Interfaces;
 public interface IFacilityGuidanceRepository
 {
     Task<FacilitySearchResponse> SearchAsync(
-        string query,
+        string? query,
         bool exact,
         CancellationToken cancellationToken);
 

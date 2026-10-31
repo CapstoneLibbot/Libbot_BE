@@ -15,7 +15,7 @@ public interface IMissionDataRepository
     Task<bool> RobotExistsAsync(Guid id, CancellationToken cancellationToken);
     Task<string?> GetRobotNameAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> MapExistsAsync(Guid id, CancellationToken cancellationToken);
-    Task CreateMissionAsync(Mission mission, Guid workflowId, Guid? robotId, string runtimeId,
+    Task CreateMissionAsync(Mission mission, Guid workflowId, string runtimeId,
         string? initialContext, CancellationToken cancellationToken);
     Task<IReadOnlyList<WorkflowStepResponse>> GetWorkflowStepsAsync(Guid workflowId, CancellationToken cancellationToken);
     Task<string?> GetInitialContextAsync(Guid missionId, CancellationToken cancellationToken);

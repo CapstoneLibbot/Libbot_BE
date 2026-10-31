@@ -199,7 +199,8 @@ public sealed class WorkflowDocumentService(IWorkflowDocumentRepository reposito
             task.SequenceNumber,
             stepsByTask[task.Id][0].StepType,
             task.Name,
-            ParseConfiguration(stepsByTask[task.Id][0].Configuration, task.Name))).ToList();
+            ParseConfiguration(stepsByTask[task.Id][0].Configuration, task.Name),
+            Description: task.Description)).ToList();
         var validationError = ValidateSteps(writeSteps);
         if (validationError is not null) throw new InvalidWorkflowDefinitionException(validationError);
 

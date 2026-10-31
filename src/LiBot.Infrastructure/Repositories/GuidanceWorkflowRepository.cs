@@ -67,13 +67,15 @@ public sealed class GuidanceWorkflowRepository(LiBotDbContext db) : IGuidanceWor
         db.Jobs.Add(mission);
         db.JobTasks.Add(jobTask);
 
-        var workflowTaskIds = await db.WorkflowTasks
+        var workflowTasks = await db.WorkflowTasks
             .AsNoTracking()
             .Where(task => task.WorkflowId == workflowId)
             .OrderBy(task => task.SequenceNumber)
-            .Select(task => task.Id)
             .ToListAsync(cancellationToken);
-        var steps = workflowTaskIds.Count == 0
+        var workflowTaskIds = workflowTasks.Select(task => task.Id).ToArray();
+        var primaryWorkflowTask = workflowTasks.FirstOrDefault();
+        jobTask.AssignWorkflowTask(primaryWorkflowTask?.Id, primaryWorkflowTask?.Name ?? mission.Name);
+        var steps = workflowTaskIds.Length == 0
             ? []
             : await db.TaskSteps
                 .AsNoTracking()
@@ -88,7 +90,7 @@ public sealed class GuidanceWorkflowRepository(LiBotDbContext db) : IGuidanceWor
         {
             if (!stepsByTask.TryGetValue(workflowTaskId, out var taskSteps)) continue;
             foreach (var step in taskSteps)
-                db.JobSteps.Add(new JobStep(jobTask.Id, step.Id, sequence++));
+                db.JobSteps.Add(new JobStep(jobTask.Id, step.Id, sequence++, step.StepType));
         }
 
         db.JobEvents.Add(new JobEvent(mission.Id, "WORKFLOW_INITIAL_CONTEXT", initialContext));

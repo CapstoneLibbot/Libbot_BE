@@ -59,12 +59,14 @@ public static class LiBotDatabaseInitializer
             db.Floors.Add(floor);
         }
 
+        map.AssignFloor(floor.Id);
+
         var aisle = await db.Aisles.FirstOrDefaultAsync(
             item => item.FloorId == floor.Id && item.Code == "A",
             cancellationToken);
         if (aisle is null)
         {
-            aisle = new Aisle(floor.Id, "A", "Dãy sách A", endpoint.Id, "Khu sách công nghệ");
+            aisle = new Aisle(floor.Id, "A", "Dãy sách A", "Khu sách công nghệ");
             db.Aisles.Add(aisle);
         }
 

@@ -30,10 +30,10 @@ public class MissionController(
         foreach (var mission in missions)
         {
             var task = await missionData.GetTaskAsync(mission.Id, tracking: false, cancellationToken);
-            var robotName = task?.RobotId is Guid robotId
+            var robotName = mission.RobotId is Guid robotId
                 ? await missionData.GetRobotNameAsync(robotId, cancellationToken)
                 : null;
-            responses.Add(ToResponse(mission, robotName, task?.RobotId, task?.RuntimeId,
+            responses.Add(ToResponse(mission, robotName, mission.RobotId, task?.RuntimeId,
                 GetTransientSimulationStatus(mission.Id, task?.RuntimeId)));
         }
         return Ok(responses);
@@ -46,10 +46,10 @@ public class MissionController(
         var mission = await missionData.GetMissionAsync(id, tracking: false, cancellationToken);
         if (mission is null) return NotFound();
         var task = await missionData.GetTaskAsync(id, tracking: false, cancellationToken);
-        var robot = task?.RobotId is Guid robotId
+        var robot = mission.RobotId is Guid robotId
             ? await missionData.GetRobotNameAsync(robotId, cancellationToken)
             : null;
-        return Ok(ToResponse(mission, robot, task?.RobotId, task?.RuntimeId,
+        return Ok(ToResponse(mission, robot, mission.RobotId, task?.RuntimeId,
             GetTransientSimulationStatus(mission.Id, task?.RuntimeId)));
     }
 
@@ -70,14 +70,12 @@ public class MissionController(
         Guid? robotId = Guid.TryParse(request.RobotId, out var parsedRobotId) &&
             await missionData.RobotExistsAsync(parsedRobotId, cancellationToken) ? parsedRobotId : null;
         var mission = new Mission(request.Name ?? workflow.Name, request.Description ?? workflow.Description,
-            sourceEndpointId: request.SourceEndpointId, destinationEndpointId: request.DestinationEndpointId,
-            priority: ParsePriority(request.Priority));
-        mission.Update(mission.Name, mission.Description, mission.Priority, workflowId,
-            request.SourceEndpointId, request.DestinationEndpointId);
+            robotId: robotId, priority: ParsePriority(request.Priority));
+        mission.Update(mission.Name, mission.Description, mission.Priority, workflowId);
         var initialContextJson = request.InitialContext is { ValueKind: JsonValueKind.Object } initialContext
             ? initialContext.GetRawText()
             : null;
-        await missionData.CreateMissionAsync(mission, workflowId, robotId, runtimeId, initialContextJson, cancellationToken);
+        await missionData.CreateMissionAsync(mission, workflowId, runtimeId, initialContextJson, cancellationToken);
 
         var robotName = robotId is Guid id
             ? await missionData.GetRobotNameAsync(id, cancellationToken)
@@ -116,9 +114,8 @@ public class MissionController(
         }
         if (workflowId.HasValue && workflowId != mission.WorkflowId)
             return Conflict("A mission's workflow cannot be changed after creation.");
-        mission.Update(request.Name ?? mission.Name, request.Description ?? mission.Description, ParsePriority(request.Priority),
-            mission.WorkflowId, request.SourceEndpointId ?? mission.SourceEndpointId,
-            request.DestinationEndpointId ?? mission.DestinationEndpointId);
+        mission.Update(request.Name ?? mission.Name, request.Description ?? mission.Description,
+            ParsePriority(request.Priority), mission.WorkflowId);
         await missionData.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(mission, null, null));
     }
@@ -228,7 +225,7 @@ public class MissionController(
         if (runtimes.Get(runtimeId) is null)
             return BadRequest(new { message = $"Robot runtime '{runtimeId}' is not configured." });
 
-        var preflightError = runtimes.ValidateBookGuidanceStart(runtimeId, request?.ArmLeaseId);
+        var preflightError = runtimes.ValidateGuidanceStart(runtimeId, request?.ArmLeaseId);
         if (preflightError is not null) return Conflict(new { message = preflightError });
 
         RobotWorkflowDocument document;
@@ -513,7 +510,7 @@ public class MissionController(
             var legacyMission = await missionData.GetMissionAsync(id, tracking: true, cancellationToken);
             if (legacyMission is null) return NotFound();
             if (legacyMission.Status == "Pending") legacyMission.Start();
-            task = new JobTask(id, null, request.RuntimeId ?? "real");
+            task = new JobTask(id, null, "Mission task", request.RuntimeId ?? "real");
             task.Start();
             if (!string.IsNullOrWhiteSpace(request.ExecutionId)) task.SetExecutionId(request.ExecutionId);
             await missionData.AddJobTaskAsync(task, cancellationToken);

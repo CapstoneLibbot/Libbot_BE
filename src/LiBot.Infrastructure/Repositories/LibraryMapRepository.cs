@@ -14,6 +14,18 @@ public sealed class LibraryMapRepository(LiBotDbContext db) : ILibraryMapReposit
                 : !EF.Functions.Like(map.MapData, "%occupancy-grid-v1%"))
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Endpoint>> GetEndpointsByMapIdAsync(Guid mapId, CancellationToken cancellationToken) =>
+        await db.Endpoints.AsNoTracking()
+            .Where(endpoint => endpoint.MapId == mapId)
+            .OrderBy(endpoint => endpoint.Name)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<Zone>> GetZonesByMapIdAsync(Guid mapId, CancellationToken cancellationToken) =>
+        await db.Zones.AsNoTracking()
+            .Where(zone => zone.MapId == mapId)
+            .OrderBy(zone => zone.Name)
+            .ToListAsync(cancellationToken);
+
     public Task<LibraryMap?> GetByIdAsync(Guid id, bool tracking, CancellationToken cancellationToken)
     {
         var maps = tracking ? db.Maps : db.Maps.AsNoTracking();

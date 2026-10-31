@@ -5,6 +5,8 @@ namespace LiBot.Domain.Workflow;
 public class Schedule : Entity
 {
     public Guid? CreatedBy { get; private set; }
+    public string Name { get; private set; }
+    public string? Data { get; private set; }
     public string ScheduleType { get; private set; }
     public TimeOnly ScheduleTime { get; private set; }
     public DateOnly StartDate { get; private set; }
@@ -12,14 +14,18 @@ public class Schedule : Entity
     public DateTime? LastRunAtUtc { get; private set; }
     public DateTime? NextRunAtUtc { get; private set; }
 
-    public Schedule(string scheduleType, TimeOnly scheduleTime, DateOnly startDate,
+    public Schedule(string name, string? data, string scheduleType, TimeOnly scheduleTime, DateOnly startDate,
         DateOnly? endDate = null, Guid? createdBy = null)
     {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Schedule name is required.", nameof(name));
         if (string.IsNullOrWhiteSpace(scheduleType))
             throw new ArgumentException("Schedule type is required.", nameof(scheduleType));
         if (endDate < startDate)
             throw new ArgumentException("End date cannot precede start date.", nameof(endDate));
 
+        Name = name.Trim();
+        Data = data;
         ScheduleType = scheduleType.Trim();
         ScheduleTime = scheduleTime;
         StartDate = startDate;

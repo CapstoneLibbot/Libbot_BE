@@ -11,9 +11,10 @@ public class Book : Entity
     public string? Publisher { get; private set; }
     public int? PublicationYear { get; private set; }
     public string? Image { get; private set; }
+    public string? Description { get; private set; }
 
     public Book(string isbn, string title, string author, Guid? categoryId = null,
-        string? publisher = null, int? publicationYear = null, string? image = null)
+        string? publisher = null, int? publicationYear = null, string? image = null, string? description = null)
     {
         if (string.IsNullOrWhiteSpace(isbn))
             throw new ArgumentException("ISBN is required.", nameof(isbn));
@@ -31,5 +32,6 @@ public class Book : Entity
         Publisher = publisher?.Trim();
         PublicationYear = publicationYear;
         Image = image?.Trim();
+        Description = description?.Trim();
     }
 }
