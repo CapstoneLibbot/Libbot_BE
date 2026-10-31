@@ -7,11 +7,13 @@ namespace LiBot.Api.Controllers;
 internal static class SimulationWorkflowDataStore
 {
     private static readonly ConcurrentDictionary<Guid, ConcurrentQueue<string>> InventoryScans = new();
+    private static readonly ConcurrentDictionary<Guid, ConcurrentQueue<string>> InventoryIssues = new();
     private static readonly ConcurrentDictionary<Guid, ConcurrentQueue<string>> PatrolCategories = new();
 
     public static void Reset(Guid missionId)
     {
         InventoryScans.TryRemove(missionId, out _);
+        InventoryIssues.TryRemove(missionId, out _);
         PatrolCategories.TryRemove(missionId, out _);
     }
 
@@ -22,6 +24,15 @@ internal static class SimulationWorkflowDataStore
     public static IReadOnlyList<JsonElement> GetInventoryScans(Guid missionId) =>
         InventoryScans.TryGetValue(missionId, out var scans)
             ? scans.Select(Parse).ToArray()
+            : Array.Empty<JsonElement>();
+
+    public static void AddInventoryIssue(Guid missionId, object issue) =>
+        InventoryIssues.GetOrAdd(missionId, _ => new ConcurrentQueue<string>())
+            .Enqueue(JsonSerializer.Serialize(issue));
+
+    public static IReadOnlyList<JsonElement> GetInventoryIssues(Guid missionId) =>
+        InventoryIssues.TryGetValue(missionId, out var issues)
+            ? issues.Select(Parse).ToArray()
             : Array.Empty<JsonElement>();
 
     public static void AddPatrolCategory(Guid missionId, string category) =>

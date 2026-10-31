@@ -40,18 +40,7 @@ public static class WorkflowTemplates
             MakeStep(21, "S200", "END", new() { ["result_status"] = "SUCCEEDED" }),
             MakeStep(22, "S210", "END", new() { ["result_status"] = "FAILED" })
         }),
-        new("search-guide-facility", "Tìm và hướng dẫn tới tiện ích", "Tìm tiện ích trong thư viện và điều hướng tới đó.", "SEARCH_AND_GUIDE_TO_FACILITY", new[]
-        {
-            MakeStep(1, "F10", "PROCESS_DATA", new() { ["action"] = "SEARCH_FACILITY", ["payload"] = new { query = "${query}", runtime_id = "${runtime_id}" }, ["output_mapping"] = new { data = "search_results" }, ["transitions"] = new { on_success = "F20", on_error = "F90" } }),
-            MakeStep(2, "F20", "DISPLAY", new() { ["ui_screen"] = "FACILITY_SEARCH_RESULTS", ["data"] = "${search_results}", ["transitions"] = new { on_success = "F30", on_error = "F90" } }),
-            MakeStep(3, "F30", "WAIT", new() { ["wait_for"] = "USER_TOUCH", ["event_type"] = "FACILITY_SELECTED", ["result_variable"] = "selected_facility_id", ["timeout_sec"] = 120, ["transitions"] = new { on_event = "F40", on_timeout = "F90", on_cancel = "F90" } }),
-            MakeStep(4, "F40", "PROCESS_DATA", new() { ["action"] = "GET_FACILITY_DETAIL", ["payload"] = new { facility_id = "${selected_facility_id}", runtime_id = "${runtime_id}" }, ["output_mapping"] = new { data = "facility_detail" }, ["transitions"] = new { on_success = "F50", on_error = "F90" } }),
-            MakeStep(5, "F50", "DISPLAY", new() { ["ui_screen"] = "FACILITY_INFO", ["data"] = "${facility_detail}", ["transitions"] = new { on_success = "F60", on_error = "F90" } }),
-            MakeStep(6, "F60", "MOVE", new() { ["target"] = "${facility_detail.location.endpoint}", ["timeout_sec"] = 180, ["transitions"] = new { on_success = "F70", on_error = "F90", on_timeout = "F90" } }),
-            MakeStep(7, "F70", "DISPLAY", new() { ["ui_screen"] = "ARRIVED", ["data"] = "${facility_detail.location}", ["transitions"] = new { on_success = "F80", on_error = "F90" } }),
-            MakeStep(8, "F80", "END", new() { ["status"] = "SUCCEEDED" }),
-            MakeStep(9, "F90", "END", new() { ["status"] = "FAILED" })
-        }),
+        CreateFacilityGuidanceTemplate(),
         new("bookshelf-inventory", "Kiểm kê kệ sách", "Quét nhiều barcode tại kệ và lập báo cáo kiểm kê.", "BOOKSHELF_INVENTORY", new[]
         {
             MakeStep(1, "I10", "MOVE", new() { ["endpoint_name"] = "Kệ A3", ["transitions"] = new { on_success = "I20", on_error = "I80" } }),
@@ -80,14 +69,42 @@ public static class WorkflowTemplates
         {
             MakeStep(1, "M10", "MOVE", new() { ["endpoint_name"] = "Kệ A3", ["transitions"] = new { on_success = "M20", on_error = "M80" } }),
             MakeStep(2, "M20", "SCAN", new() { ["sensor"] = "camera", ["device"] = "imx500", ["output_key"] = "scanned_code", ["timeout_sec"] = 15, ["transitions"] = new { on_success = "M30", on_timeout = "M40", on_error = "M80" } }),
-            MakeStep(3, "M30", "PROCESS_DATA", new() { ["action"] = "RECORD_INVENTORY", ["payload"] = new { barcode = "${scanned_code}", shelf_code = "A3", mission_id = "${mission_id}", runtime_id = "${runtime_id}" }, ["transitions"] = new { on_success = "M40", on_error = "M80" } }),
-            MakeStep(4, "M40", "WAIT", new() { ["wait_for"] = "USER_TOUCH", ["event_type"] = "INVENTORY_ACTION", ["allowed_values"] = new[] { "CONTINUE", "DONE" }, ["result_variable"] = "inventory_action", ["timeout_sec"] = 300, ["transitions"] = new { on_event = "M45", on_timeout = "M80" } }),
-            MakeStep(5, "M45", "EVALUATE", new() { ["left"] = "${inventory_action}", ["operator"] = "EQUAL", ["right"] = "DONE", ["transitions"] = new { on_true = "M50", on_false = "M20" } }),
-            MakeStep(6, "M50", "PROCESS_DATA", new() { ["action"] = "FINALIZE_INVENTORY", ["payload"] = new { mission_id = "${mission_id}", runtime_id = "${runtime_id}", shelf_code = "A3", report_type = "MISPLACED_BOOK_DETECTION" }, ["transitions"] = new { on_success = "M55", on_error = "M80" } }),
-            MakeStep(7, "M55", "NOTIFY", new() { ["channel"] = "SPEAKER_TTS", ["content"] = "Misplaced book scan completed.", ["transitions"] = new { on_success = "M70", on_error = "M80" } }),
-            MakeStep(8, "M70", "END", new() { ["status"] = "SUCCEEDED" }),
-            MakeStep(9, "M80", "END", new() { ["status"] = "FAILED" })
+            MakeStep(3, "M30", "PROCESS_DATA", new() { ["action"] = "RECORD_INVENTORY", ["payload"] = new { barcode = "${scanned_code}", shelf_code = "A3", mission_id = "${mission_id}", runtime_id = "${runtime_id}" }, ["output_mapping"] = new { data = "last_inventory_scan" }, ["transitions"] = new { on_success = "M32", on_error = "M80" } }),
+            MakeStep(4, "M32", "EVALUATE", new() { ["left"] = "${last_inventory_scan.misplaced}", ["operator"] = "EQUAL", ["right"] = true, ["transitions"] = new { on_true = "M35", on_false = "M40" } }),
+            MakeStep(5, "M35", "PROCESS_DATA", new() { ["action"] = "ADD_INVENTORY_ISSUE", ["payload"] = new { issue_type = "MISPLACED", barcode = "${last_inventory_scan.barcode}", scanned_at = "${last_inventory_scan.scannedAt}", mission_id = "${mission_id}", runtime_id = "${runtime_id}" }, ["transitions"] = new { on_success = "M40", on_error = "M80" } }),
+            MakeStep(6, "M40", "WAIT", new() { ["wait_for"] = "USER_TOUCH", ["event_type"] = "INVENTORY_ACTION", ["allowed_values"] = new[] { "CONTINUE", "DONE" }, ["result_variable"] = "inventory_action", ["timeout_sec"] = 300, ["transitions"] = new { on_event = "M45", on_timeout = "M80" } }),
+            MakeStep(7, "M45", "EVALUATE", new() { ["left"] = "${inventory_action}", ["operator"] = "EQUAL", ["right"] = "DONE", ["transitions"] = new { on_true = "M50", on_false = "M20" } }),
+            MakeStep(8, "M50", "PROCESS_DATA", new() { ["action"] = "FINALIZE_INVENTORY", ["payload"] = new { mission_id = "${mission_id}", runtime_id = "${runtime_id}", shelf_code = "A3", report_type = "MISPLACED_BOOK_DETECTION" }, ["transitions"] = new { on_success = "M55", on_error = "M80" } }),
+            MakeStep(9, "M55", "NOTIFY", new() { ["channel"] = "SPEAKER_TTS", ["content"] = "Misplaced book scan completed.", ["transitions"] = new { on_success = "M70", on_error = "M80" } }),
+            MakeStep(10, "M70", "END", new() { ["status"] = "SUCCEEDED" }),
+            MakeStep(11, "M80", "END", new() { ["status"] = "FAILED" })
         })
     ];
+
+    private static WorkflowTemplateResponse CreateFacilityGuidanceTemplate()
+    {
+        var steps = FacilityGuidanceWorkflow.CreateSteps()
+            .Select((step, index) =>
+            {
+                var type = (string)step["type"]!;
+                var name = (string)step["name"]!;
+                var configuration = step
+                    .Where(item => item.Key != "name" && item.Key != "type")
+                    .ToDictionary(item => item.Key, item => item.Value);
+                return new WorkflowTemplateStep(
+                    index + 1,
+                    type,
+                    name,
+                    JsonSerializer.SerializeToElement(configuration));
+            })
+            .ToList();
+
+        return new WorkflowTemplateResponse(
+            "search-guide-facility",
+            "Tìm và hướng dẫn đến facility",
+            "Tìm facility trong thư viện, hiển thị vị trí, dẫn người đọc đến nơi và thu thập đánh giá.",
+            FacilityGuidanceWorkflow.Type,
+            steps);
+    }
 }
 

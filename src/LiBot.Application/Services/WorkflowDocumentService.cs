@@ -86,7 +86,7 @@ public sealed class WorkflowDocumentService(IWorkflowDocumentRepository reposito
                 var supportedActions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
                 {
                     "SEARCH_BOOK", "GET_BOOK_DETAIL", "SAVE_RATING", "SEARCH_FACILITY", "GET_FACILITY_DETAIL",
-                    "SAVE_FACILITY_RATING", "RECORD_INVENTORY", "FINALIZE_INVENTORY",
+                    "SAVE_FACILITY_RATING", "RECORD_INVENTORY", "ADD_INVENTORY_ISSUE", "FINALIZE_INVENTORY",
                     "RECORD_PATROL_OBSERVATION", "GENERATE_PATROL_REPORT", "FINALIZE_PATROL", "IDENTITY"
                 };
                 if (string.IsNullOrWhiteSpace(action) || !supportedActions.Contains(action))

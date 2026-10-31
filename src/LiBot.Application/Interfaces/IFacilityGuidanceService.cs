@@ -10,8 +10,12 @@ public interface IFacilityGuidanceService
     Task<FacilitySearchResponse> SearchAsync(
         string? query,
         string matchMode,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<FacilityGuidanceDetail>> GetAllFacilitiesAsync(CancellationToken cancellationToken);
+    Task<FacilityGuidanceDetail?> GetReadingRoomAsync(CancellationToken cancellationToken);
     Task<FacilityGuidanceDetail?> GetFacilityAsync(
         Guid facilityId,
         CancellationToken cancellationToken);

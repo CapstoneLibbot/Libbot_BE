@@ -1,6 +1,6 @@
 using System.Reflection;
 using LiBot.Domain.Common;
-using LiBot.Domain.Library;
+using AisleEntity = LiBot.Domain.Library.Aisle;
 
 namespace LiBot.Application.Models;
 
@@ -26,7 +26,7 @@ public abstract class LibraryResourceDto<TEntity> : ILibraryResourceDto<TEntity>
             GetType().GetProperty(source.Name)?.SetValue(this, source.GetValue(entity));
     }
 
-    public void ApplyTo(TEntity entity)
+    public virtual void ApplyTo(TEntity entity)
     {
         foreach (var source in GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
         {
@@ -37,7 +37,7 @@ public abstract class LibraryResourceDto<TEntity> : ILibraryResourceDto<TEntity>
     }
 }
 
-public sealed class AisleDto : LibraryResourceDto<Aisle>
+public sealed class AisleDto : LibraryResourceDto<AisleEntity>
 {
     public Guid FloorId { get; set; }
     public string Code { get; set; } = string.Empty;
@@ -50,8 +50,10 @@ public sealed class AreaDto : LibraryResourceDto<Area>
 {
     public Guid FloorId { get; set; }
     public Guid? EndpointId { get; set; }
+    public Guid? EndpointId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public override Area ToEntity() => new(FloorId, Name, Description, EndpointId);
     public override Area ToEntity() => new(FloorId, Name, Description, EndpointId);
 }
 
@@ -91,6 +93,7 @@ public sealed class EndpointDto : LibraryResourceDto<Endpoint>
     public Guid MapId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string EndpointType { get; set; } = "WAYPOINT";
+    public string EndpointType { get; set; } = "WAYPOINT";
     public double PositionX { get; set; }
     public double PositionY { get; set; }
     public double Theta { get; set; }
@@ -124,8 +127,10 @@ public sealed class ShelfDto : LibraryResourceDto<Shelf>
 {
     public Guid AisleId { get; set; }
     public Guid? EndpointId { get; set; }
+    public Guid? EndpointId { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public override Shelf ToEntity() => new(AisleId, Code, Name, EndpointId);
     public override Shelf ToEntity() => new(AisleId, Code, Name, EndpointId);
 }
 

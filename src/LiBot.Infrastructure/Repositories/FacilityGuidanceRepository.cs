@@ -10,16 +10,26 @@ public sealed class FacilityGuidanceRepository(LiBotDbContext db) : IFacilityGui
 {
     private const string ReadingRoomName = "Phòng đọc sách";
 
+    private const string ReadingRoomName = "Phòng đọc sách";
+
     public async Task<FacilitySearchResponse> SearchAsync(
         string? query,
+        string? query,
         bool exact,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken)
     {
         var term = query?.Trim() ?? string.Empty;
         var facilitiesQuery =
             from area in db.Areas.AsNoTracking()
             join endpoint in db.Endpoints.AsNoTracking() on area.EndpointId equals endpoint.Id
+            from area in db.Areas.AsNoTracking()
+            join endpoint in db.Endpoints.AsNoTracking() on area.EndpointId equals endpoint.Id
             join map in db.Maps.AsNoTracking() on endpoint.MapId equals map.Id
+            join floor in db.Floors.AsNoTracking() on area.FloorId equals floor.Id
+            where endpoint.IsActive && endpoint.EndpointType == "WAYPOINT"
+            select new { Area = area, Endpoint = endpoint, Map = map, Floor = floor };
             join floor in db.Floors.AsNoTracking() on area.FloorId equals floor.Id
             where endpoint.IsActive && endpoint.EndpointType == "WAYPOINT"
             select new { Area = area, Endpoint = endpoint, Map = map, Floor = floor };
@@ -48,11 +58,40 @@ public sealed class FacilityGuidanceRepository(LiBotDbContext db) : IFacilityGui
             .Take(50)
             .ToListAsync(cancellationToken);
 
-        return new FacilitySearchResponse(facilities);
+        return new FacilitySearchResponse(
+            facilities,
+            page,
+            pageSize,
+            totalCount,
+            (int)Math.Ceiling(totalCount / (double)pageSize));
     }
+
+    public async Task<IReadOnlyList<FacilityGuidanceDetail>> GetAllFacilitiesAsync(CancellationToken cancellationToken) =>
+        await (
+            from area in db.Areas.AsNoTracking()
+            join endpoint in db.Endpoints.AsNoTracking() on area.EndpointId equals endpoint.Id
+            join map in db.Maps.AsNoTracking() on endpoint.MapId equals map.Id
+            join floor in db.Floors.AsNoTracking() on area.FloorId equals floor.Id
+            where endpoint.IsActive && endpoint.EndpointType == "WAYPOINT"
+            orderby area.Name
+            select ToFacilityDetail(area, floor, endpoint, map))
+            .ToListAsync(cancellationToken);
+
+    public Task<FacilityGuidanceDetail?> GetReadingRoomAsync(CancellationToken cancellationToken) =>
+        (
+            from area in db.Areas.AsNoTracking()
+            join endpoint in db.Endpoints.AsNoTracking() on area.EndpointId equals endpoint.Id
+            join map in db.Maps.AsNoTracking() on endpoint.MapId equals map.Id
+            join floor in db.Floors.AsNoTracking() on area.FloorId equals floor.Id
+            where endpoint.IsActive && endpoint.EndpointType == "WAYPOINT" && area.Name == ReadingRoomName
+            orderby area.Id
+            select ToFacilityDetail(area, floor, endpoint, map))
+            .FirstOrDefaultAsync(cancellationToken);
 
     public Task<FacilityGuidanceDetail?> GetFacilityAsync(Guid facilityId, CancellationToken cancellationToken) =>
         (
+            from area in db.Areas.AsNoTracking()
+            join endpoint in db.Endpoints.AsNoTracking() on area.EndpointId equals endpoint.Id
             from area in db.Areas.AsNoTracking()
             join endpoint in db.Endpoints.AsNoTracking() on area.EndpointId equals endpoint.Id
             join map in db.Maps.AsNoTracking() on endpoint.MapId equals map.Id

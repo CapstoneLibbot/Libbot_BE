@@ -3,12 +3,14 @@ using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
 using LiBot.Application.Robot;
 using LiBot.Domain.Library;
+using LiBot.Domain.Library;
 using Microsoft.AspNetCore.Mvc;
+using LibraryEndpoint = LiBot.Domain.Library.Endpoint;
 
 namespace LiBot.Api.Controllers;
 
 /// <summary>Quản lý bản đồ thư viện và bản đồ occupancy do robot lưu lại.</summary>
-/// <remarks>Dùng <c>/api/maps</c> cho bản đồ thư viện và <c>/api/robot-runtimes/real/maps</c> cho snapshot robot.</remarks>
+/// <remarks>Dùng <c>/api/robot-runtimes/real/maps</c> để liệt kê và lưu snapshot occupancy của robot.</remarks>
 [ApiController]
 [Route("api/maps")]
 public class MapController(
@@ -17,11 +19,6 @@ public class MapController(
     IRobotRuntimeService runtimes,
     ILogger<MapController> logger) : ControllerBase
 {
-    /// <summary>Lấy danh sách bản đồ thư viện đã lưu.</summary>
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken cancellationToken) =>
-        Ok(await maps.GetAllAsync(cancellationToken));
-
     /// <summary>Lấy các bản đồ occupancy robot thật đã lưu.</summary>
     [HttpGet("/api/robot-runtimes/real/maps")]
     public async Task<IActionResult> GetRobotMaps(CancellationToken cancellationToken) =>
@@ -112,8 +109,13 @@ public class MapController(
         Guid id,
         [FromQuery] string? armLeaseId,
         [FromQuery] string? runtimeId,
+        [FromQuery] string? runtimeId,
         CancellationToken cancellationToken)
     {
+        runtimeId = string.IsNullOrWhiteSpace(runtimeId) ? "real" : runtimeId.Trim().ToLowerInvariant();
+        if (runtimeId is not ("real" or "sim") || runtimes.Get(runtimeId) is null)
+            return BadRequest(new { message = "runtimeId must identify a configured 'real' or 'sim' runtime." });
+
         runtimeId = string.IsNullOrWhiteSpace(runtimeId) ? "real" : runtimeId.Trim().ToLowerInvariant();
         if (runtimeId is not ("real" or "sim") || runtimes.Get(runtimeId) is null)
             return BadRequest(new { message = "runtimeId must identify a configured 'real' or 'sim' runtime." });

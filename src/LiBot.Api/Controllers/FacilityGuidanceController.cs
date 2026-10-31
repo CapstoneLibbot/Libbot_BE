@@ -18,14 +18,34 @@ public sealed class FacilityGuidanceController(
     [HttpGet("search")]
     public async Task<ActionResult<FacilitySearchResponse>> Search(
         [FromQuery] string? query = null,
+        [FromQuery] string? query = null,
         [FromQuery] string matchMode = "FUZZY",
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
         if (!string.Equals(matchMode, "FUZZY", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(matchMode, "EXACT", StringComparison.OrdinalIgnoreCase))
             return BadRequest("matchMode must be FUZZY or EXACT.");
+        if (page < 1) return BadRequest("page must be at least 1.");
+        if (pageSize is < 1 or > 100) return BadRequest("pageSize must be between 1 and 100.");
+        if ((long)(page - 1) * pageSize > int.MaxValue) return BadRequest("page is too large.");
 
-        return Ok(await service.SearchAsync(query, matchMode, cancellationToken));
+        return Ok(await service.SearchAsync(query, matchMode, page, pageSize, cancellationToken));
+    }
+
+    /// <summary>Lấy toàn bộ facility đang hoạt động cùng vị trí điều hướng.</summary>
+    [HttpGet("facilities")]
+    public async Task<ActionResult<IReadOnlyList<FacilityGuidanceDetail>>> GetAllFacilities(
+        CancellationToken cancellationToken) =>
+        Ok(await service.GetAllFacilitiesAsync(cancellationToken));
+
+    /// <summary>Lấy thông tin và vị trí điều hướng của phòng đọc sách.</summary>
+    [HttpGet("facilities/reading-room")]
+    public async Task<ActionResult<FacilityGuidanceDetail>> GetReadingRoom(CancellationToken cancellationToken)
+    {
+        var readingRoom = await service.GetReadingRoomAsync(cancellationToken);
+        return readingRoom is null ? NotFound("Reading room facility not found.") : Ok(readingRoom);
     }
 
     /// <summary>Lấy vị trí và thông tin điều hướng của một địa điểm.</summary>
@@ -119,12 +139,24 @@ public sealed class FacilityGuidanceController(
         if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
         if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.FacilityId is null)
             return BadRequest("runtimeId and facilityId are required.");
+        if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.FacilityId is null)
+            return BadRequest("runtimeId and facilityId are required.");
 
+        var runtimeId = request.RuntimeId.Trim().ToLowerInvariant();
         var runtimeId = request.RuntimeId.Trim().ToLowerInvariant();
         if (runtimes.Get(runtimeId) is null)
             return BadRequest(new { message = $"Robot runtime '{runtimeId}' is not configured." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
             return Conflict(new { message = "Start Gazebo runs from the mission Run button so execution state stays transient." });
+
+        var facility = await service.GetFacilityAsync(request.FacilityId.Value, cancellationToken);
+        if (facility is null) return NotFound("Facility not found.");
+        var endpoint = facility.Location.Endpoint;
+        if (!double.IsFinite(endpoint.X) || !double.IsFinite(endpoint.Y) || !double.IsFinite(endpoint.Theta))
+            return UnprocessableEntity(new { message = "Selected facility has no valid navigation endpoint." });
+
+        var runtimeError = runtimes.ValidateGuidanceStart(runtimeId, request.ArmLeaseId);
+        if (runtimeError is not null) return Conflict(new { message = runtimeError });
 
         var facility = await service.GetFacilityAsync(request.FacilityId.Value, cancellationToken);
         if (facility is null) return NotFound("Facility not found.");
@@ -152,6 +184,9 @@ public sealed class FacilityGuidanceController(
 
             if (!result.IsAccepted)
             {
+                var message = GetString(result.Robot, "message") ?? GetString(result.Robot, "error")
+                    ?? "Robot runtime did not accept the facility guidance workflow.";
+                return UnprocessableEntity(new { message, missionId = result.MissionId, robot = result.Robot });
                 var message = GetString(result.Robot, "message") ?? GetString(result.Robot, "error")
                     ?? "Robot runtime did not accept the facility guidance workflow.";
                 return UnprocessableEntity(new { message, missionId = result.MissionId, robot = result.Robot });
@@ -187,8 +222,23 @@ public sealed class FacilityGuidanceController(
     {
         if (string.IsNullOrWhiteSpace(request.EventType)) return BadRequest("eventType is required.");
         if (string.IsNullOrWhiteSpace(request.ExecutionId)) return BadRequest("executionId is required.");
+        if (string.IsNullOrWhiteSpace(request.ExecutionId)) return BadRequest("executionId is required.");
         try
         {
+            var response = await service.SubmitEventAsync(request, cancellationToken);
+            var status = GetString(response, "status");
+            if (string.Equals(status, "accepted", StringComparison.OrdinalIgnoreCase))
+                return Accepted(response);
+
+            if (string.Equals(status, "error", StringComparison.OrdinalIgnoreCase))
+            {
+                var code = GetString(response, "code");
+                return code is "INVALID_EVENT_DATA" or "INVALID_NAVIGATION_TARGET"
+                    ? UnprocessableEntity(response)
+                    : Conflict(response);
+            }
+
+            return StatusCode(StatusCodes.Status502BadGateway, response);
             var response = await service.SubmitEventAsync(request, cancellationToken);
             var status = GetString(response, "status");
             if (string.Equals(status, "accepted", StringComparison.OrdinalIgnoreCase))
@@ -215,6 +265,10 @@ public sealed class FacilityGuidanceController(
         {
             return NotFound(new { message = exception.Message });
         }
+        catch (FacilityGuidanceExecutionNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
+        }
     }
 
     /// <summary>Lấy trạng thái lần chạy hướng dẫn địa điểm.</summary>
@@ -229,6 +283,10 @@ public sealed class FacilityGuidanceController(
             return string.Equals(GetString(response, "status"), "error", StringComparison.OrdinalIgnoreCase)
                 ? NotFound(response)
                 : Ok(response);
+            var response = await service.GetExecutionAsync(executionId, cancellationToken);
+            return string.Equals(GetString(response, "status"), "error", StringComparison.OrdinalIgnoreCase)
+                ? NotFound(response)
+                : Ok(response);
         }
         catch (FacilityGuidanceRobotUnavailableException exception)
         {
@@ -236,6 +294,10 @@ public sealed class FacilityGuidanceController(
                 statusCode: StatusCodes.Status503ServiceUnavailable,
                 title: "LiBot is unavailable",
                 detail: exception.Message);
+        }
+        catch (FacilityGuidanceExecutionNotFoundException exception)
+        {
+            return NotFound(new { message = exception.Message });
         }
         catch (FacilityGuidanceExecutionNotFoundException exception)
         {

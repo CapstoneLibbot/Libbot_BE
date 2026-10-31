@@ -72,6 +72,7 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
         _runtimes.TryGetValue(runtimeId, out var runtime) ? ToResponse(runtime) : null;
 
     public string? ValidateGuidanceStart(string runtimeId, string? armLeaseId)
+    public string? ValidateGuidanceStart(string runtimeId, string? armLeaseId)
     {
         if (!_runtimes.TryGetValue(runtimeId, out var runtime))
             return "Robot runtime was not found.";
@@ -81,6 +82,7 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
             return "Robot runtime is offline or its telemetry is stale.";
         if (!string.Equals(runtime.Telemetry?.LocalizationState, "LOCALIZED", StringComparison.OrdinalIgnoreCase))
             return "Robot must be localized before starting guidance.";
+            return "Robot must be localized before starting guidance.";
         if (runtime.Telemetry?.NavigationReady != true)
             return "Nav2 is not ready. Set the initial pose and wait for activation.";
         if (string.Equals(runtime.Endpoint.Kind, "REAL", StringComparison.OrdinalIgnoreCase)
@@ -89,6 +91,9 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
 
         return null;
     }
+
+    public string? ValidateBookGuidanceStart(string runtimeId, string? armLeaseId) =>
+        ValidateGuidanceStart(runtimeId, armLeaseId);
 
     public ArmRuntimeResponse? Arm(string runtimeId)
     {
@@ -259,6 +264,13 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
         IReadOnlyList<NavigationZonePolicy> zones,
         string? leaseId,
         CancellationToken cancellationToken)
+    public async Task<CommandResult> StartNavigationModeAsync(
+        string runtimeId,
+        Guid mapId,
+        string mapPath,
+        IReadOnlyList<NavigationZonePolicy> zones,
+        string? leaseId,
+        CancellationToken cancellationToken)
     {
         if (!TryGetReadyRuntime(runtimeId, leaseId, requireLocalized: false, out var runtime, out var error))
             return CommandResult.Fail(error!);
@@ -347,6 +359,43 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
             }
         }
         return result;
+    }
+
+    public async Task<CommandResult> UpdateNavigationZonesAsync(
+        string runtimeId,
+        Guid mapId,
+        IReadOnlyList<NavigationZonePolicy> zones,
+        CancellationToken cancellationToken)
+    {
+        if (!_runtimes.TryGetValue(runtimeId, out var runtime))
+            return CommandResult.Fail("Robot runtime was not found.");
+
+        var response = ToResponse(runtime);
+        if (!response.Connected || response.Stale)
+            return CommandResult.Fail("Robot telemetry is offline or stale.");
+        if (!response.NavigationActive
+            || !Guid.TryParse(response.Telemetry?.ActiveMapId, out var activeMapId)
+            || activeMapId != mapId)
+            return CommandResult.Fail("The requested map is not currently active in navigation.");
+
+        return await SendCommandAsync(
+            runtime,
+            new
+            {
+                command = "update_navigation_zones",
+                map_id = mapId.ToString("D"),
+                zones = zones.Select(zone => new
+                {
+                    zone_type = zone.ZoneType,
+                    min_x = zone.MinX,
+                    min_y = zone.MinY,
+                    max_x = zone.MaxX,
+                    max_y = zone.MaxY,
+                    max_speed = zone.MaxSpeed,
+                }),
+            },
+            cancellationToken,
+            TimeSpan.FromSeconds(20));
     }
 
     public async Task<CommandResult> SetInitialPoseAsync(

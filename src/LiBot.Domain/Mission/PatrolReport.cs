@@ -26,3 +26,4 @@ public class PatrolReport : Entity
         Data = data.Trim();
     }
 }
+
