@@ -11,13 +11,6 @@ public class Endpoint : Entity
         "PARK"
     };
 
-    public static readonly IReadOnlySet<string> SupportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "WAYPOINT",
-        "CHARGER",
-        "PARK"
-    };
-
     public Guid MapId { get; private set; }
     public string Name { get; private set; }
     public string EndpointType { get; private set; }
@@ -34,10 +27,6 @@ public class Endpoint : Entity
             throw new ArgumentException("Map id is required.", nameof(mapId));
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Endpoint name is required.", nameof(name));
-        if (!double.IsFinite(positionX) || !double.IsFinite(positionY) || !double.IsFinite(theta))
-            throw new ArgumentException("Endpoint coordinates and heading must be finite.");
-        if (string.IsNullOrWhiteSpace(endpointType) || !SupportedTypes.Contains(endpointType.Trim()))
-            throw new ArgumentException($"Unsupported endpoint type '{endpointType}'.", nameof(endpointType));
         if (!double.IsFinite(positionX) || !double.IsFinite(positionY) || !double.IsFinite(theta))
             throw new ArgumentException("Endpoint coordinates and heading must be finite.");
         if (string.IsNullOrWhiteSpace(endpointType) || !SupportedTypes.Contains(endpointType.Trim()))
@@ -62,5 +51,17 @@ public class Endpoint : Entity
         PositionX = positionX;
         PositionY = positionY;
         Theta = theta;
+    }
+
+    public void Update(Guid mapId, string name, double positionX, double positionY, double theta, bool isActive)
+    {
+        var updated = new Endpoint(mapId, name, positionX, positionY, theta, Description, EndpointType);
+        MapId = updated.MapId;
+        Name = updated.Name;
+        PositionX = updated.PositionX;
+        PositionY = updated.PositionY;
+        Theta = updated.Theta;
+        IsActive = isActive;
+        SetUpdated();
     }
 }

@@ -23,4 +23,14 @@ public class Aisle : Entity
         Name = name.Trim();
         Description = description?.Trim();
     }
+
+    public void Update(Guid floorId, string code, string name, string? description)
+    {
+        var updated = new Aisle(floorId, code, name, description);
+        FloorId = updated.FloorId;
+        Code = updated.Code;
+        Name = updated.Name;
+        Description = updated.Description;
+        SetUpdated();
+    }
 }

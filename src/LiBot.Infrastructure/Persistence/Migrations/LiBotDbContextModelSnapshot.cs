@@ -1327,7 +1327,6 @@ namespace LiBot.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("LiBot.Domain.Mission.InventoryReport", b =>
                 {
                     b.HasOne("LiBot.Domain.Mission.Mission", null)
-                    b.HasOne("LiBot.Domain.Mission.Mission", null)
                         .WithMany()
                         .HasForeignKey("JobId")
                         .OnDelete(DeleteBehavior.SetNull);
@@ -1391,7 +1390,6 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("LiBot.Domain.Mission.PatrolReport", b =>
                 {
-                    b.HasOne("LiBot.Domain.Mission.Mission", null)
                     b.HasOne("LiBot.Domain.Mission.Mission", null)
                         .WithMany()
                         .HasForeignKey("JobId")

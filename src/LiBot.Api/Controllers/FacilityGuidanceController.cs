@@ -18,7 +18,6 @@ public sealed class FacilityGuidanceController(
     [HttpGet("search")]
     public async Task<ActionResult<FacilitySearchResponse>> Search(
         [FromQuery] string? query = null,
-        [FromQuery] string? query = null,
         [FromQuery] string matchMode = "FUZZY",
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
@@ -139,24 +138,12 @@ public sealed class FacilityGuidanceController(
         if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
         if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.FacilityId is null)
             return BadRequest("runtimeId and facilityId are required.");
-        if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.FacilityId is null)
-            return BadRequest("runtimeId and facilityId are required.");
 
-        var runtimeId = request.RuntimeId.Trim().ToLowerInvariant();
         var runtimeId = request.RuntimeId.Trim().ToLowerInvariant();
         if (runtimes.Get(runtimeId) is null)
             return BadRequest(new { message = $"Robot runtime '{runtimeId}' is not configured." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
             return Conflict(new { message = "Start Gazebo runs from the mission Run button so execution state stays transient." });
-
-        var facility = await service.GetFacilityAsync(request.FacilityId.Value, cancellationToken);
-        if (facility is null) return NotFound("Facility not found.");
-        var endpoint = facility.Location.Endpoint;
-        if (!double.IsFinite(endpoint.X) || !double.IsFinite(endpoint.Y) || !double.IsFinite(endpoint.Theta))
-            return UnprocessableEntity(new { message = "Selected facility has no valid navigation endpoint." });
-
-        var runtimeError = runtimes.ValidateGuidanceStart(runtimeId, request.ArmLeaseId);
-        if (runtimeError is not null) return Conflict(new { message = runtimeError });
 
         var facility = await service.GetFacilityAsync(request.FacilityId.Value, cancellationToken);
         if (facility is null) return NotFound("Facility not found.");
@@ -184,9 +171,6 @@ public sealed class FacilityGuidanceController(
 
             if (!result.IsAccepted)
             {
-                var message = GetString(result.Robot, "message") ?? GetString(result.Robot, "error")
-                    ?? "Robot runtime did not accept the facility guidance workflow.";
-                return UnprocessableEntity(new { message, missionId = result.MissionId, robot = result.Robot });
                 var message = GetString(result.Robot, "message") ?? GetString(result.Robot, "error")
                     ?? "Robot runtime did not accept the facility guidance workflow.";
                 return UnprocessableEntity(new { message, missionId = result.MissionId, robot = result.Robot });
@@ -222,23 +206,8 @@ public sealed class FacilityGuidanceController(
     {
         if (string.IsNullOrWhiteSpace(request.EventType)) return BadRequest("eventType is required.");
         if (string.IsNullOrWhiteSpace(request.ExecutionId)) return BadRequest("executionId is required.");
-        if (string.IsNullOrWhiteSpace(request.ExecutionId)) return BadRequest("executionId is required.");
         try
         {
-            var response = await service.SubmitEventAsync(request, cancellationToken);
-            var status = GetString(response, "status");
-            if (string.Equals(status, "accepted", StringComparison.OrdinalIgnoreCase))
-                return Accepted(response);
-
-            if (string.Equals(status, "error", StringComparison.OrdinalIgnoreCase))
-            {
-                var code = GetString(response, "code");
-                return code is "INVALID_EVENT_DATA" or "INVALID_NAVIGATION_TARGET"
-                    ? UnprocessableEntity(response)
-                    : Conflict(response);
-            }
-
-            return StatusCode(StatusCodes.Status502BadGateway, response);
             var response = await service.SubmitEventAsync(request, cancellationToken);
             var status = GetString(response, "status");
             if (string.Equals(status, "accepted", StringComparison.OrdinalIgnoreCase))
@@ -260,10 +229,6 @@ public sealed class FacilityGuidanceController(
                 statusCode: StatusCodes.Status503ServiceUnavailable,
                 title: "LiBot is unavailable",
                 detail: exception.Message);
-        }
-        catch (FacilityGuidanceExecutionNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
         }
         catch (FacilityGuidanceExecutionNotFoundException exception)
         {
@@ -283,10 +248,6 @@ public sealed class FacilityGuidanceController(
             return string.Equals(GetString(response, "status"), "error", StringComparison.OrdinalIgnoreCase)
                 ? NotFound(response)
                 : Ok(response);
-            var response = await service.GetExecutionAsync(executionId, cancellationToken);
-            return string.Equals(GetString(response, "status"), "error", StringComparison.OrdinalIgnoreCase)
-                ? NotFound(response)
-                : Ok(response);
         }
         catch (FacilityGuidanceRobotUnavailableException exception)
         {
@@ -294,10 +255,6 @@ public sealed class FacilityGuidanceController(
                 statusCode: StatusCodes.Status503ServiceUnavailable,
                 title: "LiBot is unavailable",
                 detail: exception.Message);
-        }
-        catch (FacilityGuidanceExecutionNotFoundException exception)
-        {
-            return NotFound(new { message = exception.Message });
         }
         catch (FacilityGuidanceExecutionNotFoundException exception)
         {

@@ -3,7 +3,6 @@ using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
 using LiBot.Application.Robot;
 using LiBot.Domain.Library;
-using LiBot.Domain.Library;
 using Microsoft.AspNetCore.Mvc;
 using LibraryEndpoint = LiBot.Domain.Library.Endpoint;
 
@@ -109,13 +108,8 @@ public class MapController(
         Guid id,
         [FromQuery] string? armLeaseId,
         [FromQuery] string? runtimeId,
-        [FromQuery] string? runtimeId,
         CancellationToken cancellationToken)
     {
-        runtimeId = string.IsNullOrWhiteSpace(runtimeId) ? "real" : runtimeId.Trim().ToLowerInvariant();
-        if (runtimeId is not ("real" or "sim") || runtimes.Get(runtimeId) is null)
-            return BadRequest(new { message = "runtimeId must identify a configured 'real' or 'sim' runtime." });
-
         runtimeId = string.IsNullOrWhiteSpace(runtimeId) ? "real" : runtimeId.Trim().ToLowerInvariant();
         if (runtimeId is not ("real" or "sim") || runtimes.Get(runtimeId) is null)
             return BadRequest(new { message = "runtimeId must identify a configured 'real' or 'sim' runtime." });

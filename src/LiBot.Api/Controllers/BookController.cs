@@ -5,6 +5,8 @@ using LiBot.Application.Models.BookCategory;
 using LiBot.Application.Models.BookItem;
 using LiBot.Domain.Library;
 using Microsoft.AspNetCore.Mvc;
+using BookCategoryResourceDto = LiBot.Application.Models.BookCategoryDto;
+using BookItemResourceDto = LiBot.Application.Models.BookItemDto;
 
 namespace LiBot.Api.Controllers;
 
@@ -14,13 +16,13 @@ namespace LiBot.Api.Controllers;
 public class BookController : ControllerBase
 {
     private readonly IBookService _bookService;
-    private readonly ILibraryResourceService<BookCategory, BookCategoryDto> _categoryService;
-    private readonly ILibraryResourceService<BookItem, BookItemDto> _bookItemService;
+    private readonly ILibraryResourceService<BookCategory, BookCategoryResourceDto> _categoryService;
+    private readonly ILibraryResourceService<BookItem, BookItemResourceDto> _bookItemService;
 
     public BookController(
         IBookService bookService,
-        ILibraryResourceService<BookCategory, BookCategoryDto> categoryService,
-        ILibraryResourceService<BookItem, BookItemDto> bookItemService)
+        ILibraryResourceService<BookCategory, BookCategoryResourceDto> categoryService,
+        ILibraryResourceService<BookItem, BookItemResourceDto> bookItemService)
     {
         _bookService = bookService ?? throw new ArgumentNullException(nameof(bookService));
         _categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
@@ -105,34 +107,34 @@ public class BookController : ControllerBase
 
     [HttpGet("categories")]
     public async Task<IActionResult> GetCategories(CancellationToken cancellationToken) =>
-        Ok(new BaseResponse<IReadOnlyList<BookCategoryDto>>(
+        Ok(new BaseResponse<IReadOnlyList<BookCategoryResourceDto>>(
             await _categoryService.GetAllAsync(cancellationToken)));
 
     [HttpGet("categories/{id:guid}")]
     public async Task<IActionResult> GetCategoryById(Guid id, CancellationToken cancellationToken)
     {
         var category = await _categoryService.GetByIdAsync(id, cancellationToken);
-        return category is null ? NotFound(Error("Book category was not found.")) : Ok(new BaseResponse<BookCategoryDto>(category));
+        return category is null ? NotFound(Error("Book category was not found.")) : Ok(new BaseResponse<BookCategoryResourceDto>(category));
     }
 
     [HttpPost("categories")]
-    public async Task<IActionResult> CreateCategory([FromBody] BookCategoryDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateCategory([FromBody] BookCategoryResourceDto dto, CancellationToken cancellationToken)
     {
         try
         {
             var category = await _categoryService.CreateAsync(dto, cancellationToken);
-            return Created($"/api/books/categories/{category.Id}", new BaseResponse<BookCategoryDto>(category));
+            return Created($"/api/books/categories/{category.Id}", new BaseResponse<BookCategoryResourceDto>(category));
         }
         catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
     }
 
     [HttpPut("categories/{id:guid}")]
-    public async Task<IActionResult> UpdateCategory(Guid id, [FromBody] BookCategoryDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateCategory(Guid id, [FromBody] BookCategoryResourceDto dto, CancellationToken cancellationToken)
     {
         try
         {
             var category = await _categoryService.UpdateAsync(id, dto, cancellationToken);
-            return category is null ? NotFound(Error("Book category was not found.")) : Ok(new BaseResponse<BookCategoryDto>(category));
+            return category is null ? NotFound(Error("Book category was not found.")) : Ok(new BaseResponse<BookCategoryResourceDto>(category));
         }
         catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
     }
@@ -143,34 +145,34 @@ public class BookController : ControllerBase
 
     [HttpGet("items")]
     public async Task<IActionResult> GetBookItems(CancellationToken cancellationToken) =>
-        Ok(new BaseResponse<IReadOnlyList<BookItemDto>>(
+        Ok(new BaseResponse<IReadOnlyList<BookItemResourceDto>>(
             await _bookItemService.GetAllAsync(cancellationToken)));
 
     [HttpGet("items/{id:guid}")]
     public async Task<IActionResult> GetBookItemById(Guid id, CancellationToken cancellationToken)
     {
         var item = await _bookItemService.GetByIdAsync(id, cancellationToken);
-        return item is null ? NotFound(Error("Book item was not found.")) : Ok(new BaseResponse<BookItemDto>(item));
+        return item is null ? NotFound(Error("Book item was not found.")) : Ok(new BaseResponse<BookItemResourceDto>(item));
     }
 
     [HttpPost("items")]
-    public async Task<IActionResult> CreateBookItem([FromBody] BookItemDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateBookItem([FromBody] BookItemResourceDto dto, CancellationToken cancellationToken)
     {
         try
         {
             var item = await _bookItemService.CreateAsync(dto, cancellationToken);
-            return Created($"/api/books/items/{item.Id}", new BaseResponse<BookItemDto>(item));
+            return Created($"/api/books/items/{item.Id}", new BaseResponse<BookItemResourceDto>(item));
         }
         catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
     }
 
     [HttpPut("items/{id:guid}")]
-    public async Task<IActionResult> UpdateBookItem(Guid id, [FromBody] BookItemDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateBookItem(Guid id, [FromBody] BookItemResourceDto dto, CancellationToken cancellationToken)
     {
         try
         {
             var item = await _bookItemService.UpdateAsync(id, dto, cancellationToken);
-            return item is null ? NotFound(Error("Book item was not found.")) : Ok(new BaseResponse<BookItemDto>(item));
+            return item is null ? NotFound(Error("Book item was not found.")) : Ok(new BaseResponse<BookItemResourceDto>(item));
         }
         catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
     }

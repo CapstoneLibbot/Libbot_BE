@@ -28,18 +28,6 @@ public interface IRobotRuntimeService
         Guid mapId,
         IReadOnlyList<NavigationZonePolicy> zones,
         CancellationToken cancellationToken);
-    Task<CommandResult> StartNavigationModeAsync(
-        string runtimeId,
-        Guid mapId,
-        string mapPath,
-        IReadOnlyList<NavigationZonePolicy> zones,
-        string? leaseId,
-        CancellationToken cancellationToken);
-    Task<CommandResult> UpdateNavigationZonesAsync(
-        string runtimeId,
-        Guid mapId,
-        IReadOnlyList<NavigationZonePolicy> zones,
-        CancellationToken cancellationToken);
     Task<CommandResult> StopNavigationModeAsync(string runtimeId, CancellationToken cancellationToken);
     Task<CommandResult> SetInitialPoseAsync(string runtimeId, InitialPoseRequest request, CancellationToken cancellationToken);
     Task<CommandResult> StartNavigationAsync(string runtimeId, NavigationGoalRequest request, CancellationToken cancellationToken);

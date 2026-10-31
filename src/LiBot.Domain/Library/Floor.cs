@@ -17,4 +17,13 @@ public class Floor : Entity
         FloorNumber = floorNumber;
         Description = description?.Trim();
     }
+
+    public void Update(string name, int floorNumber)
+    {
+        var updated = new Floor(name, floorNumber, Description);
+        Name = updated.Name;
+        FloorNumber = updated.FloorNumber;
+        Description = updated.Description;
+        SetUpdated();
+    }
 }

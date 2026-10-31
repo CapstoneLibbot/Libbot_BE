@@ -25,4 +25,14 @@ public class Shelf : Entity
         Code = code.Trim();
         Name = name.Trim();
     }
+
+    public void Update(Guid aisleId, string code, string name)
+    {
+        var updated = new Shelf(aisleId, code, name, EndpointId);
+        AisleId = updated.AisleId;
+        EndpointId = updated.EndpointId;
+        Code = updated.Code;
+        Name = updated.Name;
+        SetUpdated();
+    }
 }

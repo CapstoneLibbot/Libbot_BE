@@ -12,7 +12,6 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
     {
         var source = db.Aisles.AsNoTracking().AsQueryable();
         if (query.FloorId is Guid floorId) source = source.Where(item => item.FloorId == floorId);
-        if (query.EndpointId is Guid endpointId) source = source.Where(item => item.EndpointId == endpointId);
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim();
@@ -40,11 +39,10 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
     }
 
     public Task<bool> FloorExistsAsync(Guid id, CancellationToken cancellationToken) => db.Floors.AnyAsync(item => item.Id == id, cancellationToken);
-    public Task<bool> EndpointExistsAsync(Guid id, CancellationToken cancellationToken) => db.Endpoints.AnyAsync(item => item.Id == id, cancellationToken);
 
     public async Task<AisleResponse> CreateAsync(AisleWriteRequest request, string? expand, CancellationToken cancellationToken)
     {
-        var entity = new Aisle(request.FloorId, request.Code, request.Name, request.EndpointId, request.Description);
+        var entity = new Aisle(request.FloorId, request.Code, request.Name, request.Description);
         db.Aisles.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
         return (await GetByIdAsync(entity.Id, expand, cancellationToken))!;
@@ -54,7 +52,7 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
     {
         var entity = await db.Aisles.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (entity is null) return null;
-        entity.Update(request.FloorId, request.Code, request.Name, request.EndpointId, request.Description);
+        entity.Update(request.FloorId, request.Code, request.Name, request.Description);
         await db.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(id, expand, cancellationToken);
     }
@@ -74,22 +72,16 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var floorIds = entities.Select(item => item.FloorId).Distinct().ToArray();
         var aisleIds = entities.Select(item => item.Id).ToArray();
-        var endpointIds = entities.Where(item => item.EndpointId.HasValue).Select(item => item.EndpointId!.Value).Distinct().ToArray();
         var floors = expansions.Contains("floor")
             ? await db.Floors.AsNoTracking().Where(item => floorIds.Contains(item.Id)).ToDictionaryAsync(item => item.Id, cancellationToken)
-            : [];
-        var endpoints = expansions.Contains("endpoint")
-            ? await db.Endpoints.AsNoTracking().Where(item => endpointIds.Contains(item.Id)).ToDictionaryAsync(item => item.Id, cancellationToken)
             : [];
         var shelves = expansions.Contains("shelves")
             ? await db.Shelves.AsNoTracking().Where(item => aisleIds.Contains(item.AisleId)).ToListAsync(cancellationToken)
             : [];
         return entities.Select(item => new AisleResponse(
-            item.Id, item.FloorId, item.EndpointId, item.Code, item.Name, item.Description,
+            item.Id, item.FloorId, item.Code, item.Name, item.Description,
             item.CreatedAtUtc, item.UpdatedAtUtc,
             floors.TryGetValue(item.FloorId, out var floor) ? new(floor.Id, floor.Name, floor.FloorNumber) : null,
-            item.EndpointId is Guid endpointId && endpoints.TryGetValue(endpointId, out var endpoint)
-                ? new(endpoint.Id, endpoint.MapId, endpoint.Name, endpoint.PositionX, endpoint.PositionY, endpoint.Theta, endpoint.IsActive) : null,
             expansions.Contains("shelves") ? shelves.Where(shelf => shelf.AisleId == item.Id).Select(shelf => new AisleShelfResponse(shelf.Id, shelf.Code, shelf.Name)).ToList() : null
         )).ToList();
     }

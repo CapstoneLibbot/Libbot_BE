@@ -18,7 +18,8 @@ public class ZoneRepository(LiBotDbContext db) : IZoneRepository
         {
             var search = query.Search.Trim();
             source = source.Where(item => EF.Functions.Like(item.ZoneType, $"%{search}%")
-                || (item.PreferredDirection != null && EF.Functions.Like(item.PreferredDirection, $"%{search}%")));
+                || EF.Functions.Like(item.Name, $"%{search}%")
+                || (item.Description != null && EF.Functions.Like(item.Description, $"%{search}%")));
         }
         var total = await source.CountAsync(cancellationToken);
         var descending = query.SortOrder.Equals("desc", StringComparison.OrdinalIgnoreCase);
@@ -42,8 +43,8 @@ public class ZoneRepository(LiBotDbContext db) : IZoneRepository
 
     public async Task<ZoneResponse> CreateAsync(ZoneWriteRequest request, CancellationToken cancellationToken)
     {
-        var entity = new Zone(request.MapId, request.ZoneType, request.MinX, request.MinY, request.MaxX, request.MaxY,
-            request.MaxSpeed, request.PreferredDirection, request.CorridorWidth, request.AllowTurnaround);
+        var entity = new Zone(request.MapId, request.Name, request.ZoneType, request.MinX, request.MinY, request.MaxX, request.MaxY,
+            request.MaxSpeed, request.Description, request.Width, request.Height, request.RotationAngle);
         if (!request.IsActive) entity.Deactivate();
         db.Zones.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
@@ -54,8 +55,8 @@ public class ZoneRepository(LiBotDbContext db) : IZoneRepository
     {
         var entity = await db.Zones.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (entity is null) return null;
-        entity.Update(request.MapId, request.ZoneType, request.MinX, request.MinY, request.MaxX, request.MaxY,
-            request.MaxSpeed, request.PreferredDirection, request.CorridorWidth, request.AllowTurnaround, request.IsActive);
+        entity.Update(request.MapId, request.Name, request.ZoneType, request.MinX, request.MinY, request.MaxX, request.MaxY,
+            request.MaxSpeed, request.Description, request.Width, request.Height, request.RotationAngle, request.IsActive);
         await db.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(id, null, cancellationToken);
     }
@@ -77,8 +78,8 @@ public class ZoneRepository(LiBotDbContext db) : IZoneRepository
         var maps = expansions.Contains("map")
             ? await db.Maps.AsNoTracking().Where(item => ids.Contains(item.Id)).ToDictionaryAsync(item => item.Id, cancellationToken)
             : [];
-        return entities.Select(item => new ZoneResponse(item.Id, item.MapId, item.ZoneType, item.MaxSpeed, item.PreferredDirection,
-            item.CorridorWidth, item.AllowTurnaround, item.MinX, item.MinY, item.MaxX, item.MaxY, item.IsActive,
+        return entities.Select(item => new ZoneResponse(item.Id, item.MapId, item.Name, item.Description, item.ZoneType, item.MaxSpeed,
+            item.MinX, item.MinY, item.MaxX, item.MaxY, item.Width, item.Height, item.RotationAngle, item.IsActive,
             item.CreatedAtUtc, item.UpdatedAtUtc,
             maps.TryGetValue(item.MapId, out var map) ? new ZoneMapResponse(map.Id, map.Name, map.Version, map.Width, map.Height) : null)).ToList();
     }

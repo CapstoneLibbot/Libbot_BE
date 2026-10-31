@@ -1,7 +1,6 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
-using LiBot.Application.Models.Shelf;
-using LiBot.Application.Models.ShelfLevel;
+using LiBot.Domain.Library;
 using Microsoft.AspNetCore.Mvc;
 using LibraryEndpoint = LiBot.Domain.Library.Endpoint;
 

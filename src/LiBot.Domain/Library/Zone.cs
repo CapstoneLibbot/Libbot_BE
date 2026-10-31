@@ -72,20 +72,23 @@ public class Zone : Entity
 
     public void Deactivate() => IsActive = false;
 
-    public void Update(Guid mapId, string zoneType, double minX, double minY, double maxX, double maxY,
-        double maxSpeed, string? preferredDirection, double? corridorWidth, bool allowTurnaround, bool isActive)
+    public void Update(Guid mapId, string name, string zoneType, double minX, double minY, double maxX, double maxY,
+        double maxSpeed, string? description, double? width, double? height, double rotationAngle, bool isActive)
     {
-        var updated = new Zone(mapId, zoneType, minX, minY, maxX, maxY, maxSpeed, preferredDirection, corridorWidth, allowTurnaround);
+        var updated = new Zone(mapId, name, zoneType, minX, minY, maxX, maxY,
+            maxSpeed, description, width, height, rotationAngle);
         MapId = updated.MapId;
+        Name = updated.Name;
+        Description = updated.Description;
         ZoneType = updated.ZoneType;
         MinX = updated.MinX;
         MinY = updated.MinY;
         MaxX = updated.MaxX;
         MaxY = updated.MaxY;
         MaxSpeed = updated.MaxSpeed;
-        PreferredDirection = updated.PreferredDirection;
-        CorridorWidth = updated.CorridorWidth;
-        AllowTurnaround = updated.AllowTurnaround;
+        Width = updated.Width;
+        Height = updated.Height;
+        RotationAngle = updated.RotationAngle;
         IsActive = isActive;
         SetUpdated();
     }

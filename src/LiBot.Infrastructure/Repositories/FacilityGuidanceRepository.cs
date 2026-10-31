@@ -10,10 +10,8 @@ public sealed class FacilityGuidanceRepository(LiBotDbContext db) : IFacilityGui
 {
     private const string ReadingRoomName = "Phòng đọc sách";
 
-    private const string ReadingRoomName = "Phòng đọc sách";
 
     public async Task<FacilitySearchResponse> SearchAsync(
-        string? query,
         string? query,
         bool exact,
         int page,
@@ -24,12 +22,7 @@ public sealed class FacilityGuidanceRepository(LiBotDbContext db) : IFacilityGui
         var facilitiesQuery =
             from area in db.Areas.AsNoTracking()
             join endpoint in db.Endpoints.AsNoTracking() on area.EndpointId equals endpoint.Id
-            from area in db.Areas.AsNoTracking()
-            join endpoint in db.Endpoints.AsNoTracking() on area.EndpointId equals endpoint.Id
             join map in db.Maps.AsNoTracking() on endpoint.MapId equals map.Id
-            join floor in db.Floors.AsNoTracking() on area.FloorId equals floor.Id
-            where endpoint.IsActive && endpoint.EndpointType == "WAYPOINT"
-            select new { Area = area, Endpoint = endpoint, Map = map, Floor = floor };
             join floor in db.Floors.AsNoTracking() on area.FloorId equals floor.Id
             where endpoint.IsActive && endpoint.EndpointType == "WAYPOINT"
             select new { Area = area, Endpoint = endpoint, Map = map, Floor = floor };
@@ -46,16 +39,18 @@ public sealed class FacilityGuidanceRepository(LiBotDbContext db) : IFacilityGui
                     EF.Functions.Like(item.Floor.Name, $"%{term}%"));
         }
 
+        var totalCount = await facilitiesQuery.CountAsync(cancellationToken);
         var facilities = await facilitiesQuery
             .OrderBy(item => item.Area.Name)
             .ThenBy(item => item.Area.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(item => new FacilitySearchItem(
                 item.Area.Id,
                 item.Area.Name,
                 item.Area.Name == ReadingRoomName ? "READING_ROOM" : "AREA",
                 item.Map.Id,
                 item.Map.Name))
-            .Take(50)
             .ToListAsync(cancellationToken);
 
         return new FacilitySearchResponse(
@@ -92,28 +87,10 @@ public sealed class FacilityGuidanceRepository(LiBotDbContext db) : IFacilityGui
         (
             from area in db.Areas.AsNoTracking()
             join endpoint in db.Endpoints.AsNoTracking() on area.EndpointId equals endpoint.Id
-            from area in db.Areas.AsNoTracking()
-            join endpoint in db.Endpoints.AsNoTracking() on area.EndpointId equals endpoint.Id
             join map in db.Maps.AsNoTracking() on endpoint.MapId equals map.Id
             join floor in db.Floors.AsNoTracking() on area.FloorId equals floor.Id
             where area.Id == facilityId && endpoint.IsActive && endpoint.EndpointType == "WAYPOINT"
-            select new FacilityGuidanceDetail(
-                area.Id,
-                area.Name,
-                area.Name == ReadingRoomName ? "READING_ROOM" : "AREA",
-                area.Description ?? floor.Name,
-                new FacilityLocation(
-                    map.Id,
-                    map.Name,
-                    map.Width,
-                    map.Height,
-                    new FacilityGuidanceEndpoint(
-                        endpoint.Id,
-                        endpoint.Name,
-                        endpoint.PositionX,
-                        endpoint.PositionY,
-                        endpoint.Theta)),
-                new[] { "VIEW_LOCATION", "START_GUIDANCE", "RATE" }))
+            select ToFacilityDetail(area, floor, endpoint, map))
             .FirstOrDefaultAsync(cancellationToken);
 
     public async Task<FacilityFeedbackResponse?> SaveFeedbackAsync(
@@ -163,4 +140,27 @@ public sealed class FacilityGuidanceRepository(LiBotDbContext db) : IFacilityGui
 
     private static FacilityFeedbackResponse ToFeedbackResponse(Feedback feedback) =>
         new(feedback.Id, feedback.JobId, feedback.Rating, feedback.Comment);
+
+    private static FacilityGuidanceDetail ToFacilityDetail(
+        LiBot.Domain.Library.Area area,
+        LiBot.Domain.Library.Floor floor,
+        LiBot.Domain.Library.Endpoint endpoint,
+        LiBot.Domain.Library.LibraryMap map) =>
+        new(
+            area.Id,
+            area.Name,
+            area.Name == ReadingRoomName ? "READING_ROOM" : "AREA",
+            area.Description ?? floor.Name,
+            new FacilityLocation(
+                map.Id,
+                map.Name,
+                map.Width,
+                map.Height,
+                new FacilityGuidanceEndpoint(
+                    endpoint.Id,
+                    endpoint.Name,
+                    endpoint.PositionX,
+                    endpoint.PositionY,
+                    endpoint.Theta)),
+            new[] { "VIEW_LOCATION", "START_GUIDANCE", "RATE" });
 }

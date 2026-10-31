@@ -23,7 +23,6 @@ public class AisleController : ControllerBase
         [FromQuery] int pageSize = 20,
         [FromQuery] string? search = null,
         [FromQuery] Guid? floorId = null,
-        [FromQuery] Guid? endpointId = null,
         [FromQuery] string sortBy = "name",
         [FromQuery] string sortOrder = "asc",
         [FromQuery] string? expand = null,
@@ -36,7 +35,7 @@ public class AisleController : ControllerBase
         if (!new[] { "asc", "desc" }.Contains(sortOrder.ToLowerInvariant()))
             return BadRequest(Error("sortOrder must be asc or desc."));
         var response = await _aisleService.GetAllAsync(
-            new AisleQuery(page, pageSize, search, floorId, endpointId, sortBy, sortOrder, expand),
+            new AisleQuery(page, pageSize, search, floorId, sortBy, sortOrder, expand),
             cancellationToken);
         return Ok(new BaseResponse<AisleListResponse>(response));
     }

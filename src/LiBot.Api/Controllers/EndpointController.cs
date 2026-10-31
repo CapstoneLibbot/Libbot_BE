@@ -3,6 +3,7 @@ using LiBot.Application.Models;
 using LiBot.Application.Models.Endpoint;
 using LiBot.Domain.Library;
 using Microsoft.AspNetCore.Mvc;
+using LibraryEndpoint = LiBot.Domain.Library.Endpoint;
 using EndpointGroupDto = LiBot.Application.Models.EndpointGroup.EndpointGroupDto;
 using EndpointGroupMemberDto = LiBot.Application.Models.EndpointGroupMember.EndpointGroupMemberDto;
 
