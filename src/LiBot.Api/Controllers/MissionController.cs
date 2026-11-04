@@ -246,8 +246,12 @@ public class MissionController(
         var initialContext = await ReadInitialContextAsync(id, cancellationToken);
         RestoreLegacyGuidanceQuery(mission, initialContext);
         initialContext["mission_id"] = id.ToString();
+        initialContext["job_id"] = id.ToString();
         initialContext["task_id"] = id.ToString();
         initialContext["runtime_id"] = runtimeId;
+        initialContext["execution_id"] = executionId;
+        if (runtimes.Get(runtimeId)?.Telemetry?.Pose is { } currentPose)
+            initialContext["current_pose"] = new { x = currentPose.X, y = currentPose.Y, theta = currentPose.Yaw };
         initialContext["backend_base_url"] = $"{Request.Scheme}://{Request.Host.Value}";
 
         JsonElement preflightResponse;
@@ -469,7 +473,7 @@ public class MissionController(
     {
         var supportedStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "ACCEPTED", "RUNNING", "WAITING", "STEP_COMPLETED", "STEP_FAILED", "SUCCEEDED", "COMPLETED", "FAILED", "CANCELLED"
+            "QUEUED", "ACCEPTED", "RUNNING", "WAITING", "STEP_COMPLETED", "STEP_FAILED", "SUCCEEDED", "COMPLETED", "FAILED", "CANCELLED"
         };
         if (string.IsNullOrWhiteSpace(request.Status) || !supportedStatuses.Contains(request.Status))
             return BadRequest(new { message = "Unsupported workflow execution status." });
@@ -526,6 +530,12 @@ public class MissionController(
             && !string.Equals(task.RuntimeId, request.RuntimeId, StringComparison.OrdinalIgnoreCase))
             return Conflict(new { message = "Runtime id does not match the assigned mission runtime." });
 
+        if (string.Equals(request.Status, "ACCEPTED", StringComparison.OrdinalIgnoreCase))
+        {
+            if (mission.Status == "Pending") mission.Start();
+            if (!task.StartedAtUtc.HasValue) task.Start();
+        }
+
         var state = new
         {
             missionId = id,
@@ -544,6 +554,7 @@ public class MissionController(
         };
         task.UpdateExecutionState(JsonSerializer.Serialize(state));
         await missionData.AddWorkflowStepEventAsync(id, JsonSerializer.Serialize(state), cancellationToken);
+        await PublishLibrarianWorkflowNotificationAsync(id, task.RuntimeId, request, cancellationToken);
         await hub.Clients.All.SendAsync("MissionStepChanged", state, cancellationToken);
         return Accepted(state);
     }
@@ -655,6 +666,78 @@ public class MissionController(
         new(mission.Id, mission.WorkflowId, mission.Name, mission.Description,
             statusOverride ?? (mission.Status == "Pending" ? "QUEUED" : mission.Status.ToUpperInvariant()), FormatPriority(mission.Priority),
             mission.CreatedAtUtc, mission.StartedAtUtc, mission.CompletedAtUtc, robotId, robotName, runtimeId);
+
+    private async Task PublishLibrarianWorkflowNotificationAsync(
+        Guid missionId,
+        string runtimeId,
+        MissionExecutionStateRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(request.Status, "STEP_COMPLETED", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(request.StepType, "NOTIFY", StringComparison.OrdinalIgnoreCase)
+            || request.Result is not JsonElement result
+            || result.ValueKind != JsonValueKind.Object
+            || !result.TryGetProperty("channel", out var channel)
+            || channel.ValueKind != JsonValueKind.String
+            || !string.Equals(channel.GetString(), "LIBRARIAN_WS", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var message = result.TryGetProperty("message", out var content) && content.ValueKind == JsonValueKind.String
+            ? content.GetString()
+            : null;
+        if (string.IsNullOrWhiteSpace(message)) return;
+        var eventType = result.TryGetProperty("event_type", out var eventTypeValue)
+            && eventTypeValue.ValueKind == JsonValueKind.String
+                ? eventTypeValue.GetString()
+                : null;
+
+        var payload = result.TryGetProperty("payload", out var notificationPayload)
+            && notificationPayload.ValueKind == JsonValueKind.Object
+                ? notificationPayload
+                : default;
+        if (string.Equals(eventType, "PATROL_COMPLETED", StringComparison.OrdinalIgnoreCase))
+        {
+            var reportId = payload.ValueKind == JsonValueKind.Object && TryReadGuid(payload, "report_id", out var parsedReportId)
+                ? parsedReportId
+                : Guid.Empty;
+            await hub.Clients.Group(RobotHub.LibrarianGroup).SendAsync("PATROL_COMPLETED", new
+            {
+                missionId,
+                reportId,
+                reportType = ReadString(payload, "report_type") ?? "PATROL",
+                runtimeId,
+                observationCount = ReadInt(payload, "observation_count"),
+                fallenBookCount = ReadInt(payload, "fallen_book_count"),
+                unknownObstacleCount = ReadInt(payload, "obstacle_count"),
+                otherWarningCount = ReadInt(payload, "warning_count"),
+                completedAtUtc = DateTime.UtcNow
+            }, cancellationToken);
+        }
+        await hub.Clients.Group(RobotHub.LibrarianGroup).SendAsync("LibrarianNotification", new
+        {
+            type = eventType ?? "WORKFLOW_NOTIFICATION",
+            runtimeId,
+            missionId,
+            executionId = request.ExecutionId,
+            message,
+            createdAt = DateTime.UtcNow
+        }, cancellationToken);
+    }
+
+    private static string? ReadString(JsonElement element, string propertyName) =>
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(propertyName, out var value)
+        && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static int ReadInt(JsonElement element, string propertyName) =>
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(propertyName, out var value)
+        && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number) ? number : 0;
+
+    private static bool TryReadGuid(JsonElement element, string propertyName, out Guid value)
+    {
+        value = Guid.Empty;
+        return element.ValueKind == JsonValueKind.Object && element.TryGetProperty(propertyName, out var item)
+            && item.ValueKind == JsonValueKind.String && Guid.TryParse(item.GetString(), out value);
+    }
 
     private static string? GetTransientSimulationStatus(Guid missionId, string? runtimeId)
     {

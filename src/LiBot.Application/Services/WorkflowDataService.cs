@@ -15,6 +15,13 @@ public sealed class WorkflowDataService(IWorkflowDataRepository repository) : IW
     public Task<WorkflowMissionRecord?> GetMissionAsync(Guid missionId, CancellationToken cancellationToken) =>
         repository.GetMissionAsync(missionId, cancellationToken);
 
+    public Task<PatrolMapRecord?> GetPatrolMapAsync(Guid mapId, CancellationToken cancellationToken) =>
+        repository.GetPatrolMapAsync(mapId, cancellationToken);
+
+    public Task<IReadOnlyList<PatrolEndpointRecord>> GetPatrolEndpointsAsync(
+        IReadOnlyCollection<Guid> endpointIds, CancellationToken cancellationToken) =>
+        repository.GetPatrolEndpointsAsync(endpointIds, cancellationToken);
+
     public Task<Guid?> ResolveShelfLevelAsync(string? shelfCode, CancellationToken cancellationToken) =>
         repository.ResolveShelfLevelAsync(shelfCode, cancellationToken);
 
@@ -24,7 +31,7 @@ public sealed class WorkflowDataService(IWorkflowDataRepository repository) : IW
     public Task RecordInventoryAsync(string barcode, Guid? shelfLevelId, CancellationToken cancellationToken) =>
         repository.RecordInventoryAsync(barcode, shelfLevelId, cancellationToken);
 
-    public Task AddJobEventAsync(Guid missionId, string eventType, string? data, CancellationToken cancellationToken) =>
+    public Task<Guid> AddJobEventAsync(Guid missionId, string eventType, string? data, CancellationToken cancellationToken) =>
         repository.AddJobEventAsync(missionId, eventType, data, cancellationToken);
 
     public Task<IReadOnlyList<string?>> GetJobEventDataAsync(Guid missionId, string eventType, CancellationToken cancellationToken) =>

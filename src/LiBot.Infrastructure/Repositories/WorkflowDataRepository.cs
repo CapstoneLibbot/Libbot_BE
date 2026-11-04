@@ -28,6 +28,23 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
         return task is null ? null : new WorkflowMissionRecord(task.RuntimeId, task.StartedAtUtc);
     }
 
+    public async Task<PatrolMapRecord?> GetPatrolMapAsync(Guid mapId, CancellationToken cancellationToken)
+    {
+        var map = await db.Maps.AsNoTracking().FirstOrDefaultAsync(item => item.Id == mapId, cancellationToken);
+        return map is null ? null : new PatrolMapRecord(map.Id, map.FloorId, map.Status);
+    }
+
+    public async Task<IReadOnlyList<PatrolEndpointRecord>> GetPatrolEndpointsAsync(
+        IReadOnlyCollection<Guid> endpointIds, CancellationToken cancellationToken)
+    {
+        if (endpointIds.Count == 0) return Array.Empty<PatrolEndpointRecord>();
+        return await db.Endpoints.AsNoTracking()
+            .Where(item => endpointIds.Contains(item.Id))
+            .Select(item => new PatrolEndpointRecord(item.Id, item.MapId, item.Name,
+                item.PositionX, item.PositionY, item.Theta, item.IsActive))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<Guid?> ResolveShelfLevelAsync(string? shelfCode, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(shelfCode)) return null;
@@ -60,10 +77,12 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task AddJobEventAsync(Guid missionId, string eventType, string? data, CancellationToken cancellationToken)
+    public async Task<Guid> AddJobEventAsync(Guid missionId, string eventType, string? data, CancellationToken cancellationToken)
     {
-        await db.JobEvents.AddAsync(new JobEvent(missionId, eventType, data), cancellationToken);
+        var jobEvent = new JobEvent(missionId, eventType, data);
+        await db.JobEvents.AddAsync(jobEvent, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        return jobEvent.Id;
     }
 
     public async Task<IReadOnlyList<string?>> GetJobEventDataAsync(

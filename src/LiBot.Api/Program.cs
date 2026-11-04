@@ -1,5 +1,6 @@
 using LiBot.Api.Hubs;
 using LiBot.Api.Middleware;
+using LiBot.Api.Services;
 using LiBot.Api.VoiceTools;
 using LiBot.Application.Models;
 using LiBot.Application.Services.Robot;
@@ -69,6 +70,8 @@ builder.Services.AddSwaggerGen(options =>
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, "LiBot.Api.xml"), includeControllerXmlComments: true);
 });
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddSingleton<LowBatteryChargingCoordinator>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<LowBatteryChargingCoordinator>());
 
 var app = builder.Build();
 

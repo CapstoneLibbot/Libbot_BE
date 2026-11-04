@@ -8,10 +8,12 @@ public interface IWorkflowDataRepository
     Task<SimulationEndpointRecord?> GetSimulationEndpointAsync(CancellationToken cancellationToken);
     Task<SimulationMapRecord?> GetMapAsync(Guid mapId, CancellationToken cancellationToken);
     Task<WorkflowMissionRecord?> GetMissionAsync(Guid missionId, CancellationToken cancellationToken);
+    Task<PatrolMapRecord?> GetPatrolMapAsync(Guid mapId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<PatrolEndpointRecord>> GetPatrolEndpointsAsync(IReadOnlyCollection<Guid> endpointIds, CancellationToken cancellationToken);
     Task<Guid?> ResolveShelfLevelAsync(string? shelfCode, CancellationToken cancellationToken);
     Task<InventoryBookRecord?> GetInventoryBookAsync(string barcode, CancellationToken cancellationToken);
     Task RecordInventoryAsync(string barcode, Guid? shelfLevelId, CancellationToken cancellationToken);
-    Task AddJobEventAsync(Guid missionId, string eventType, string? data, CancellationToken cancellationToken);
+    Task<Guid> AddJobEventAsync(Guid missionId, string eventType, string? data, CancellationToken cancellationToken);
     Task<IReadOnlyList<string?>> GetJobEventDataAsync(Guid missionId, string eventType, CancellationToken cancellationToken);
     Task<int> CountMissingBooksAsync(IReadOnlyCollection<Guid> shelfLevelIds, IReadOnlyCollection<string> scannedBarcodes,
         CancellationToken cancellationToken);
