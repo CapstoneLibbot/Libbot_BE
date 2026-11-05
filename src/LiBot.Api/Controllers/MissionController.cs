@@ -261,7 +261,8 @@ public class MissionController(
             {
                 command = "preflight_workflow",
                 runtime_id = runtimeId,
-                require_hardware = !isSimulation
+                require_hardware = !isSimulation,
+                require_robot_ui = RequiresRobotUi(document.Steps)
             }, cancellationToken);
             preflightResponse = response.RootElement.Clone();
         }
@@ -727,6 +728,30 @@ public class MissionController(
     private static string? ReadString(JsonElement element, string propertyName) =>
         element.ValueKind == JsonValueKind.Object && element.TryGetProperty(propertyName, out var value)
         && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static bool RequiresRobotUi(IReadOnlyList<JsonElement> steps)
+    {
+        foreach (var step in steps)
+        {
+            var stepType = ReadString(step, "type")?.Trim().ToUpperInvariant();
+            var parameters = step.ValueKind == JsonValueKind.Object
+                && step.TryGetProperty("params", out var nestedParameters)
+                && nestedParameters.ValueKind == JsonValueKind.Object
+                    ? nestedParameters
+                    : step;
+
+            if (stepType == "DISPLAY") return true;
+            if (stepType != "WAIT"
+                || !string.Equals(ReadString(parameters, "wait_for"), "USER_TOUCH", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!parameters.TryGetProperty("show_ui", out var showUi)
+                || showUi.ValueKind != JsonValueKind.False)
+                return true;
+        }
+
+        return false;
+    }
 
     private static int ReadInt(JsonElement element, string propertyName) =>
         element.ValueKind == JsonValueKind.Object && element.TryGetProperty(propertyName, out var value)
