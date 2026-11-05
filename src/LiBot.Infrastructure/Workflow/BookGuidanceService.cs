@@ -3,6 +3,7 @@ using LiBot.Application.Robot;
 using LiBot.Application.Interfaces;
 using LiBot.Application.Workflow.BookGuidance;
 using LiBot.Application.Models;
+using LiBot.Application.Models.Endpoint;
 using LiBot.Contracts.Workflow;
 using LiBot.Domain.Mission;
 using LiBot.Infrastructure.Robot;
@@ -98,11 +99,35 @@ public sealed class BookGuidanceService(
             steps.Add(definition);
         }
 
-        return new BookGuidanceLoadedWorkflow(workflow.Id, workflow.Type, workflow.Name, steps);
+        // The mobile app has already selected an endpoint. Book-search interaction
+        // steps in older persisted workflows must not block endpoint-only guidance.
+        var endpointSteps = new List<IReadOnlyDictionary<string, object?>>
+        {
+            new Dictionary<string, object?>
+            {
+                ["id"] = "S120", ["name"] = "MOVE_TO_ENDPOINT", ["type"] = "MOVE",
+                ["target"] = "${destination}",
+                ["speed_mode"] = "SLOW_GUIDE", ["obstacle_policy"] = "WAIT_RESUME",
+                ["timeout_sec"] = 180,
+                ["transitions"] = new { on_success = "S200", on_error = "S210", on_timeout = "S210" }
+            },
+            new Dictionary<string, object?>
+            {
+                ["id"] = "S200", ["name"] = "GUIDANCE_SUCCEEDED", ["type"] = "END",
+                ["result_status"] = "SUCCEEDED"
+            },
+            new Dictionary<string, object?>
+            {
+                ["id"] = "S210", ["name"] = "GUIDANCE_FAILED", ["type"] = "END",
+                ["result_status"] = "FAILED"
+            }
+        };
+        return new BookGuidanceLoadedWorkflow(workflow.Id, workflow.Type, workflow.Name, endpointSteps);
     }
 
     public async Task<BookGuidanceStartResult> StartAsync(
         StartBookGuidanceRequest request,
+        EndpointResponse endpoint,
         string backendBaseUrl,
         CancellationToken cancellationToken)
     {
@@ -112,7 +137,7 @@ public sealed class BookGuidanceService(
             return new BookGuidanceStartResult(Guid.Empty, null, default, false);
         }
 
-        var mission = new Mission("Search & Guide to Book", $"Reader search: {request.Query.Trim()}");
+        var mission = new Mission($"Navigate to {endpoint.Name}", $"Robot navigation to endpoint {request.EndpointId}");
         mission.Update(
             mission.Name,
             mission.Description,
@@ -135,9 +160,15 @@ public sealed class BookGuidanceService(
         }));
         var initialContext = JsonSerializer.Serialize(new Dictionary<string, object?>
         {
-            ["query"] = request.Query.Trim(),
-            ["book_id"] = request.BookId?.ToString(),
-            ["book_item_id"] = request.BookItemId?.ToString(),
+            ["endpoint_id"] = request.EndpointId?.ToString(),
+            ["destination_name"] = endpoint.Name,
+            ["destination"] = new Dictionary<string, object?>
+            {
+                ["endpoint_id"] = endpoint.Id.ToString(),
+                ["x"] = endpoint.PositionX,
+                ["y"] = endpoint.PositionY,
+                ["theta"] = endpoint.Theta
+            },
             ["runtime_id"] = runtimeId,
             ["task_id"] = mission.Id.ToString(),
             ["backend_base_url"] = backendBaseUrl
@@ -150,9 +181,15 @@ public sealed class BookGuidanceService(
             mission.Id.ToString(),
             new Dictionary<string, object?>
             {
-                ["query"] = request.Query.Trim(),
-                ["book_id"] = request.BookId?.ToString(),
-                ["book_item_id"] = request.BookItemId?.ToString(),
+                ["endpoint_id"] = request.EndpointId?.ToString(),
+                ["destination_name"] = endpoint.Name,
+                ["destination"] = new Dictionary<string, object?>
+                {
+                    ["endpoint_id"] = endpoint.Id.ToString(),
+                    ["x"] = endpoint.PositionX,
+                    ["y"] = endpoint.PositionY,
+                    ["theta"] = endpoint.Theta
+                },
                 ["runtime_id"] = runtimeId,
                 ["task_id"] = mission.Id.ToString(),
                 ["backend_base_url"] = backendBaseUrl
@@ -256,14 +293,11 @@ public sealed class BookGuidanceService(
         CompleteBookGuidanceRequest request,
         CancellationToken cancellationToken)
     {
-        var mission = await workflowRepository.GetMissionAsync(taskId, cancellationToken);
-        if (mission is null) return false;
-        if (mission.Status is "Completed" or "Failed" or "Cancelled") return true;
-
-        if (string.Equals(request.Status, "SUCCEEDED", StringComparison.OrdinalIgnoreCase)) mission.Complete();
-        else mission.Fail();
-        await workflowRepository.SaveChangesAsync(cancellationToken);
-        return true;
+        return await workflowRepository.CompleteExecutionAsync(
+            taskId,
+            string.Equals(request.Status, "SUCCEEDED", StringComparison.OrdinalIgnoreCase),
+            request.Message,
+            cancellationToken);
     }
 
     private static bool IsAccepted(JsonElement response) =>

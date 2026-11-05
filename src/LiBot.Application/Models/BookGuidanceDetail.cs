@@ -11,8 +11,8 @@ public sealed record BookGuidanceDetail(
     string? Publisher,
     int? PublicationYear,
     string? Classification,
-    IReadOnlyList<string> Actions,
-    string? Image)
+    string? Image,
+    string? Description)
 {
     public IReadOnlyList<BookGuidanceBookItem> BookItems { get; init; } = [];
 }

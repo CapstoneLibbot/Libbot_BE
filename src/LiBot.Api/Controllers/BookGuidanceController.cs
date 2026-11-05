@@ -1,4 +1,6 @@
 using LiBot.Application.Workflow.BookGuidance;
+using LiBot.Application.Interfaces;
+using LiBot.Application.Models.Endpoint;
 using LiBot.Contracts.Workflow;
 using LiBot.Infrastructure.Workflow;
 using Microsoft.AspNetCore.Mvc;
@@ -11,6 +13,7 @@ namespace LiBot.Api.Controllers;
 public sealed class BookGuidanceController(
     IBookGuidanceService service,
     IRobotRuntimeService runtimes,
+    IEndpointService endpoints,
     IConfiguration configuration) : ControllerBase
 {
     /// <summary>Tìm đầu sách theo tên, ISBN, tác giả hoặc danh mục.</summary>
@@ -115,33 +118,26 @@ public sealed class BookGuidanceController(
     [HttpPost("start")]
     public async Task<IActionResult> Start(StartBookGuidanceRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
-        if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.BookId is null || request.BookItemId is null)
-            return BadRequest("runtimeId, bookId, and bookItemId are required.");
+        if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.EndpointId is null)
+            return BadRequest("runtimeId and endpointId are required.");
         if (string.Equals(request.RuntimeId, "sim", StringComparison.OrdinalIgnoreCase))
             return Conflict(new { message = "Start Gazebo runs from the mission Run button so execution state stays transient." });
 
-        var book = await service.GetBookAsync(request.BookId.Value, cancellationToken);
-        if (book is null) return NotFound("Book not found.");
-        var selectedCopy = book.BookItems.FirstOrDefault(item => item.Id == request.BookItemId.Value);
-        if (selectedCopy is null) return NotFound("Selected book copy was not found.");
-        if (!string.Equals(selectedCopy.Status, "Available", StringComparison.OrdinalIgnoreCase))
-            return Conflict(new { message = "Selected book copy is not available." });
-        var endpoint = selectedCopy.Location?.Endpoint;
-        if (endpoint is null || !double.IsFinite(endpoint.X) || !double.IsFinite(endpoint.Y) || !double.IsFinite(endpoint.Theta))
-            return UnprocessableEntity(new { message = "Selected book copy has no valid navigation endpoint." });
+        var endpoint = await endpoints.GetByIdAsync(request.EndpointId.Value, null, cancellationToken);
+        if (endpoint is null) return NotFound("Navigation endpoint was not found.");
+        if (!endpoint.IsActive || !double.IsFinite(endpoint.PositionX)
+            || !double.IsFinite(endpoint.PositionY) || !double.IsFinite(endpoint.Theta))
+            return UnprocessableEntity(new { message = "Navigation endpoint is not active or has invalid coordinates." });
 
         var runtimeError = runtimes.ValidateGuidanceStart(request.RuntimeId, request.ArmLeaseId);
         if (runtimeError is not null) return Conflict(new { message = runtimeError });
 
-        var baseUrl = !string.IsNullOrWhiteSpace(request.BackendBaseUrl)
-            ? request.BackendBaseUrl.TrimEnd('/')
-            : configuration["LiBot:BackendBaseUrl"]?.TrimEnd('/')
-                ?? $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
+        var baseUrl = configuration["LiBot:BackendBaseUrl"]?.TrimEnd('/')
+            ?? $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
         try
         {
-            var result = await service.StartAsync(request, baseUrl, cancellationToken);
+            var result = await service.StartAsync(request, endpoint, baseUrl, cancellationToken);
             if (result.Workflow is null)
             {
                 return WorkflowConfigurationProblem(

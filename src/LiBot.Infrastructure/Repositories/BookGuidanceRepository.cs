@@ -76,47 +76,48 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
                 item.Publisher,
                 item.PublicationYear,
                 item.Image,
+                item.Description,
                 Classification = category == null ? null : category.Name
             })
             .FirstOrDefaultAsync(cancellationToken);
         if (book is null) return null;
 
-        var copies = await db.BookItems
-            .AsNoTracking()
-            .Where(copy => copy.BookId == bookId)
-            .OrderBy(copy => copy.Barcode)
-            .Select(copy => new { copy.Id, copy.Barcode, copy.Status })
-            .ToListAsync(cancellationToken);
-
-        var locationsByCopyId = await (
+        var candidates = await (
             from copy in db.BookItems.AsNoTracking()
             join level in db.ShelfLevels.AsNoTracking() on copy.ExpectedShelfLevelId equals level.Id
             join shelf in db.Shelves.AsNoTracking() on level.ShelfId equals shelf.Id
             join aisle in db.Aisles.AsNoTracking() on shelf.AisleId equals aisle.Id
             join floor in db.Floors.AsNoTracking() on aisle.FloorId equals floor.Id
-            join endpoint in db.Endpoints.AsNoTracking().Where(item => item.IsActive)
-                on shelf.EndpointId equals endpoint.Id into endpoints
-            from endpoint in endpoints.DefaultIfEmpty()
+            join endpoint in db.Endpoints.AsNoTracking() on shelf.EndpointId equals endpoint.Id
             where copy.BookId == bookId
+                && copy.Status == "Available"
+                && endpoint.IsActive
+            orderby copy.Barcode, copy.Id
             select new
             {
                 copy.Id,
+                copy.Barcode,
+                copy.Status,
+                Endpoint = new NavigationEndpoint(
+                    endpoint.Id, endpoint.Name, endpoint.PositionX, endpoint.PositionY, endpoint.Theta),
                 Location = new BookLocation(
                     floor.Id, floor.Name, floor.FloorNumber, aisle.Id, aisle.Code, aisle.Name,
                     shelf.Id, shelf.Code, shelf.Name, level.Id, level.LevelNumber,
-                    endpoint == null ? null : new NavigationEndpoint(
-                        endpoint.Id, endpoint.Name, endpoint.PositionX, endpoint.PositionY, endpoint.Theta))
+                    new NavigationEndpoint(endpoint.Id, endpoint.Name, endpoint.PositionX, endpoint.PositionY, endpoint.Theta))
             })
-            .ToDictionaryAsync(item => item.Id, item => item.Location, cancellationToken);
+            .ToListAsync(cancellationToken);
 
-        var bookItems = copies
-            .Select(copy => new BookGuidanceBookItem(
-                copy.Id, copy.Barcode, copy.Status, locationsByCopyId.GetValueOrDefault(copy.Id)))
-            .ToList();
+        var selected = candidates.FirstOrDefault(item =>
+            double.IsFinite(item.Endpoint.X)
+            && double.IsFinite(item.Endpoint.Y)
+            && double.IsFinite(item.Endpoint.Theta));
+        IReadOnlyList<BookGuidanceBookItem> bookItems = selected is null
+            ? []
+            : [new BookGuidanceBookItem(selected.Id, selected.Barcode, selected.Status, selected.Location)];
 
         return new BookGuidanceDetail(
             book.Id, book.Isbn, book.Title, book.Author, book.Publisher, book.PublicationYear,
-            book.Classification, ["VIEW_LOCATION", "START_GUIDANCE", "RATE"], book.Image)
+            book.Classification, book.Image, book.Description)
         {
             BookItems = bookItems
         };
@@ -126,7 +127,9 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
         FeedbackRequest request,
         CancellationToken cancellationToken)
     {
-        if (!await db.Jobs.AnyAsync(job => job.Id == request.TaskId, cancellationToken)) return null;
+        if (!await db.Jobs.AnyAsync(
+                job => job.Id == request.TaskId && job.Status == "Completed",
+                cancellationToken)) return null;
 
         var feedback = new Feedback(request.TaskId, request.Rating, request.Comment);
         db.Feedback.Add(feedback);

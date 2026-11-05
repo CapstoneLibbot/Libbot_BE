@@ -17,5 +17,6 @@ public interface IGuidanceWorkflowRepository
         CancellationToken cancellationToken);
 
     Task<Mission?> GetMissionAsync(Guid missionId, CancellationToken cancellationToken);
+    Task<bool> CompleteExecutionAsync(Guid missionId, bool succeeded, string? message, CancellationToken cancellationToken);
     Task SaveChangesAsync(CancellationToken cancellationToken);
 }

@@ -3,6 +3,7 @@ using LiBot.Application.Models;
 using LiBot.Domain.Mission;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace LiBot.Infrastructure.Repositories;
 
@@ -99,6 +100,38 @@ public sealed class GuidanceWorkflowRepository(LiBotDbContext db) : IGuidanceWor
 
     public Task<Mission?> GetMissionAsync(Guid missionId, CancellationToken cancellationToken) =>
         db.Jobs.FirstOrDefaultAsync(job => job.Id == missionId, cancellationToken);
+
+    public async Task<bool> CompleteExecutionAsync(
+        Guid missionId,
+        bool succeeded,
+        string? message,
+        CancellationToken cancellationToken)
+    {
+        var mission = await db.Jobs.FirstOrDefaultAsync(job => job.Id == missionId, cancellationToken);
+        if (mission is null) return false;
+        if (mission.Status is "Completed" or "Failed" or "Cancelled") return true;
+
+        if (succeeded) mission.Complete();
+        else mission.Fail();
+
+        var status = succeeded ? "COMPLETED" : "FAILED";
+        var tasks = await db.JobTasks.Where(task => task.JobId == missionId).ToListAsync(cancellationToken);
+        foreach (var task in tasks)
+        {
+            task.UpdateExecutionState(JsonSerializer.Serialize(new
+            {
+                missionId,
+                executionId = task.ExecutionId,
+                runtimeId = task.RuntimeId,
+                status,
+                error = succeeded ? null : message,
+                updatedAt = DateTime.UtcNow
+            }));
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
 
     public Task SaveChangesAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);
 }

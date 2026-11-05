@@ -1,5 +1,6 @@
 using System.Text.Json;
 using LiBot.Application.Models;
+using LiBot.Application.Models.Endpoint;
 
 namespace LiBot.Application.Workflow.BookGuidance;
 
@@ -31,6 +32,7 @@ public interface IBookGuidanceService
 
     Task<BookGuidanceStartResult> StartAsync(
         StartBookGuidanceRequest request,
+        EndpointResponse endpoint,
         string backendBaseUrl,
         CancellationToken cancellationToken);
 
