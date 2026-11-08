@@ -5,6 +5,10 @@ namespace LiBot.Domain.Workflow;
 public class Schedule : Entity
 {
     public Guid? CreatedBy { get; private set; }
+    public Guid? WorkflowId { get; private set; }
+    public string? Name { get; private set; }
+    public string? Data { get; private set; }
+    public bool IsActive { get; private set; } = true;
     public string ScheduleType { get; private set; }
     public TimeOnly ScheduleTime { get; private set; }
     public DateOnly StartDate { get; private set; }

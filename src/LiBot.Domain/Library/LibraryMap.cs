@@ -1,16 +1,20 @@
 using LiBot.Domain.Common;
+using LiBot.Domain.Enums;
 
 namespace LiBot.Domain.Library;
 
 public class LibraryMap : Entity
 {
+    public Guid? FloorId { get; private set; }
     public string Name { get; private set; }
     public string Version { get; private set; }
     public int Width { get; private set; }
     public int Height { get; private set; }
     public string MapData { get; private set; }
+    public MapStatus Status { get; private set; } = MapStatus.Active;
 
-    public LibraryMap(string name, string version, int width, int height, string mapData)
+    public LibraryMap(string name, string version, int width, int height, string mapData,
+        Guid? floorId = null, MapStatus status = MapStatus.Active)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Map name is required.", nameof(name));
@@ -26,6 +30,8 @@ public class LibraryMap : Entity
         Width = width;
         Height = height;
         MapData = mapData;
+        FloorId = floorId;
+        Status = status;
     }
 
     public void Update(string name, string version, int width, int height, string mapData)

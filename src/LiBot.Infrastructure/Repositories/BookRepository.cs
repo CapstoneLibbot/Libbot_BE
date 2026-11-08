@@ -57,7 +57,7 @@ public class BookRepository(LiBotDbContext db) : IBookRepository
     public async Task<BookResponse> CreateAsync(BookWriteRequest request, CancellationToken cancellationToken)
     {
         var book = new Book(request.Isbn, request.Title, request.Author, request.CategoryId,
-            request.Publisher, request.PublicationYear, request.Image);
+            request.Publisher, request.PublicationYear, request.ImageUrl ?? request.Image, request.Description);
         db.Books.Add(book);
         await db.SaveChangesAsync(cancellationToken);
         return (await GetByIdAsync(book.Id, null, cancellationToken))!;
@@ -68,7 +68,7 @@ public class BookRepository(LiBotDbContext db) : IBookRepository
         var book = await db.Books.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (book is null) return null;
         book.Update(request.Isbn, request.Title, request.Author, request.CategoryId,
-            request.Publisher, request.PublicationYear, request.Image);
+            request.Publisher, request.PublicationYear, request.ImageUrl ?? request.Image, request.Description);
         await db.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(id, null, cancellationToken);
     }
@@ -110,6 +110,7 @@ public class BookRepository(LiBotDbContext db) : IBookRepository
             book.Publisher,
             book.PublicationYear,
             book.Image,
+            book.Description,
             book.CreatedAtUtc,
             book.UpdatedAtUtc,
             book.CategoryId is Guid id && categories.TryGetValue(id, out var category)
@@ -118,7 +119,7 @@ public class BookRepository(LiBotDbContext db) : IBookRepository
             expansions.Contains("items")
                 ? items.Where(item => item.BookId == book.Id)
                     .Select(item => new BookItemResponse(item.Id, item.Barcode, item.ExpectedShelfLevelId,
-                        item.CurrentShelfLevelId, item.LastInventoryAtUtc, item.Status,
+                        item.CurrentShelfLevelId, item.LastInventoryAtUtc, item.Status.ToString(),
                         item.CreatedAtUtc, item.UpdatedAtUtc)).ToList()
                 : null)).ToList();
     }

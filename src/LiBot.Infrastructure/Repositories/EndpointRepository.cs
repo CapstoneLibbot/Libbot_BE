@@ -51,7 +51,7 @@ public class EndpointRepository(LiBotDbContext db) : IEndpointRepository
 
     public async Task<EndpointResponse> CreateAsync(EndpointWriteRequest request, CancellationToken cancellationToken)
     {
-        var endpoint = new Endpoint(request.MapId, request.Name, request.PositionX, request.PositionY, request.Theta);
+        var endpoint = new Endpoint(request.MapId, request.Name, request.PositionX, request.PositionY, request.Theta, request.Description, request.EndpointType);
         if (!request.IsActive) endpoint.Deactivate();
         db.Endpoints.Add(endpoint);
         await db.SaveChangesAsync(cancellationToken);
@@ -62,7 +62,7 @@ public class EndpointRepository(LiBotDbContext db) : IEndpointRepository
     {
         var endpoint = await db.Endpoints.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (endpoint is null) return null;
-        endpoint.Update(request.MapId, request.Name, request.PositionX, request.PositionY, request.Theta, request.IsActive);
+        endpoint.Update(request.MapId, request.Name, request.PositionX, request.PositionY, request.Theta, request.IsActive, request.Description, request.EndpointType);
         await db.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(id, null, cancellationToken);
     }
@@ -98,6 +98,8 @@ public class EndpointRepository(LiBotDbContext db) : IEndpointRepository
             endpoint.PositionY,
             endpoint.Theta,
             endpoint.IsActive,
+            endpoint.Description,
+            endpoint.EndpointType,
             endpoint.CreatedAtUtc,
             endpoint.UpdatedAtUtc,
             maps.TryGetValue(endpoint.MapId, out var map)

@@ -8,6 +8,8 @@ public class EndpointResponse(
     double PositionY,
     double Theta,
     bool IsActive,
+    string? Description,
+    string? EndpointType,
     DateTime CreatedAtUtc,
     DateTime? UpdatedAtUtc,
     EndpointMapResponse? Map = null)
@@ -19,6 +21,8 @@ public class EndpointResponse(
     public double PositionY { get; } = PositionY;
     public double Theta { get; } = Theta;
     public bool IsActive { get; } = IsActive;
+    public string? Description { get; } = Description;
+    public string? EndpointType { get; } = EndpointType;
     public DateTime CreatedAtUtc { get; } = CreatedAtUtc;
     public DateTime? UpdatedAtUtc { get; } = UpdatedAtUtc;
     public EndpointMapResponse? Map { get; } = Map;

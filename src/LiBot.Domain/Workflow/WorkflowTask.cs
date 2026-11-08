@@ -7,8 +7,9 @@ public class WorkflowTask : Entity
     public Guid WorkflowId { get; private set; }
     public int SequenceNumber { get; private set; }
     public string Name { get; private set; }
+    public string? Description { get; private set; }
 
-    public WorkflowTask(Guid workflowId, int sequenceNumber, string name)
+    public WorkflowTask(Guid workflowId, int sequenceNumber, string name, string? description = null)
     {
         if (workflowId == Guid.Empty)
             throw new ArgumentException("Workflow id is required.", nameof(workflowId));
@@ -20,6 +21,7 @@ public class WorkflowTask : Entity
         WorkflowId = workflowId;
         SequenceNumber = sequenceNumber;
         Name = name.Trim();
+        Description = description?.Trim();
     }
 
     public void Update(int sequenceNumber, string name)

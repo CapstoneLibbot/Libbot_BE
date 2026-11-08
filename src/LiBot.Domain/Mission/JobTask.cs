@@ -6,6 +6,10 @@ public class JobTask : Entity
 {
     public Guid JobId { get; private set; }
     public Guid? RobotId { get; private set; }
+    public Guid? WorkflowTaskId { get; private set; }
+    public string? Name { get; private set; }
+    public string? Status { get; private set; }
+    public string? Description { get; private set; }
     public string RuntimeId { get; private set; } = "real";
     public string? ExecutionId { get; private set; }
     public string? ExecutionState { get; private set; }

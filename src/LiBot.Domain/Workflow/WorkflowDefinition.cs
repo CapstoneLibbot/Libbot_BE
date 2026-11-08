@@ -1,4 +1,5 @@
 namespace LiBot.Domain.Workflow;
+using LiBot.Domain.Enums;
 
 public class WorkflowDefinition
 {
@@ -7,6 +8,8 @@ public class WorkflowDefinition
     public string Description { get; private set; }
     public string Type { get; private set; } = "GENERAL";
     public bool IsActive { get; private set; } = true;
+    public WorkflowStatus Status { get; private set; } = WorkflowStatus.Draft;
+    public DateTime CreatedAtUtc { get; private set; } = DateTime.UtcNow;
 
     public WorkflowDefinition(string name, string description)
     {

@@ -7,6 +7,9 @@ public class JobStep : Entity
     public Guid JobTaskId { get; private set; }
     public Guid TaskStepId { get; private set; }
     public int Sequence { get; private set; }
+    public string? StepType { get; private set; }
+    public string? Status { get; private set; }
+    public string? Description { get; private set; }
 
     public JobStep(Guid jobTaskId, Guid taskStepId, int sequence)
     {

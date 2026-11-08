@@ -1,4 +1,6 @@
 namespace LiBot.Domain.Mission;
+using LiBot.Domain.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 public class Mission
 {
@@ -10,13 +12,21 @@ public class Mission
     public Guid? SourceEndpointId { get; private set; }
     public Guid? DestinationEndpointId { get; private set; }
     public Guid? WorkflowId { get; private set; }
-    public int Priority { get; private set; }
+    public Guid? RobotId { get; private set; }
+    public int Priority { get; private set; } = (int)JobPriority.Normal;
+
+    [NotMapped]
+    public JobStatus StatusCode => Enum.TryParse<JobStatus>(Status, true, out var value) ? value : JobStatus.Pending;
+
+    [NotMapped]
+    public JobPriority PriorityCode => Enum.IsDefined(typeof(JobPriority), Priority)
+        ? (JobPriority)Priority : JobPriority.Normal;
     public DateTime CreatedAtUtc { get; private set; } = DateTime.UtcNow;
     public DateTime? StartedAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
 
     public Mission(string name, string description, Guid? createdBy = null,
-        Guid? sourceEndpointId = null, Guid? destinationEndpointId = null, int priority = 0)
+        Guid? sourceEndpointId = null, Guid? destinationEndpointId = null, int priority = (int)JobPriority.Normal)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Mission name is required.", nameof(name));

@@ -36,7 +36,7 @@ public class FloorRepository(LiBotDbContext db) : IFloorRepository
 
     public async Task<FloorResponse> CreateAsync(FloorWriteRequest request, string? expand, CancellationToken cancellationToken)
     {
-        var entity = new Floor(request.Name, request.FloorNumber);
+        var entity = new Floor(request.Name, request.FloorNumber, request.Description, request.Status ?? LiBot.Domain.Enums.FloorStatus.Active);
         db.Floors.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
         return (await GetByIdAsync(entity.Id, expand, cancellationToken))!;
@@ -46,7 +46,7 @@ public class FloorRepository(LiBotDbContext db) : IFloorRepository
     {
         var entity = await db.Floors.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (entity is null) return null;
-        entity.Update(request.Name, request.FloorNumber);
+        entity.Update(request.Name, request.FloorNumber, request.Description, request.Status);
         await db.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(id, expand, cancellationToken);
     }
@@ -71,8 +71,8 @@ public class FloorRepository(LiBotDbContext db) : IFloorRepository
         var areas = expansions.Contains("areas")
             ? await db.Areas.AsNoTracking().Where(item => ids.Contains(item.FloorId)).ToListAsync(cancellationToken)
             : [];
-        return entities.Select(item => new FloorResponse(item.Id, item.Name, item.FloorNumber, item.CreatedAtUtc, item.UpdatedAtUtc,
-            expansions.Contains("aisles") ? aisles.Where(value => value.FloorId == item.Id).Select(value => new FloorAisleResponse(value.Id, value.Code, value.Name)).ToList() : null,
+        return entities.Select(item => new FloorResponse(item.Id, item.Name, item.FloorNumber, item.Description, item.Status, item.CreatedAtUtc, item.UpdatedAtUtc,
+            expansions.Contains("aisles") ? aisles.Where(value => value.FloorId == item.Id).Select(value => new FloorAisleResponse(value.Id, value.Name)).ToList() : null,
             expansions.Contains("areas") ? areas.Where(value => value.FloorId == item.Id).Select(value => new FloorAreaResponse(value.Id, value.Name, value.Description)).ToList() : null)).ToList();
     }
 }

@@ -3,6 +3,7 @@ namespace LiBot.Domain.Identity;
 public class User
 {
     public Guid Id { get; private set; } = Guid.NewGuid();
+    public Guid? RoleId { get; private set; }
     public string? Username { get; private set; }
     public string? PasswordHash { get; private set; }
     public string? Role { get; private set; }
@@ -12,6 +13,7 @@ public class User
     public UserStatus Status { get; private set; }
     public bool IsActive => Status == UserStatus.Active;
     public DateTime CreatedAtUtc { get; private set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAtUtc { get; private set; }
     public DateTime? LastLoginAtUtc { get; private set; }
 
     public User(string email, string fullName, string? username = null, string? passwordHash = null,

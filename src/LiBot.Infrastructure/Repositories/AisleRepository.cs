@@ -8,89 +8,232 @@ namespace LiBot.Infrastructure.Repositories;
 
 public class AisleRepository(LiBotDbContext db) : IAisleRepository
 {
-    public async Task<(IReadOnlyList<AisleResponse> Items, int TotalCount)> SearchAsync(AisleQuery query, CancellationToken cancellationToken)
+    public async Task<(IReadOnlyList<AisleResponse> Items, int TotalCount)> SearchAsync(
+        AisleQuery query,
+        CancellationToken cancellationToken)
     {
-        var source = db.Aisles.AsNoTracking().AsQueryable();
-        if (query.FloorId is Guid floorId) source = source.Where(item => item.FloorId == floorId);
-        if (query.EndpointId is Guid endpointId) source = source.Where(item => item.EndpointId == endpointId);
+        var source = db.Aisles
+            .AsNoTracking()
+            .AsQueryable();
+
+        if (query.FloorId is Guid floorId)
+        {
+            source = source.Where(item => item.FloorId == floorId);
+        }
+
+        if (query.Status is not null)
+        {
+            source = source.Where(item => item.Status == query.Status);
+        }
+
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim();
-            source = source.Where(item => EF.Functions.Like(item.Code, $"%{search}%")
-                || EF.Functions.Like(item.Name, $"%{search}%")
-                || (item.Description != null && EF.Functions.Like(item.Description, $"%{search}%")));
+
+            source = source.Where(item =>
+                EF.Functions.Like(item.Name, $"%{search}%")
+                || (item.Description != null
+                    && EF.Functions.Like(item.Description, $"%{search}%")));
         }
 
         var total = await source.CountAsync(cancellationToken);
-        var descending = string.Equals(query.SortOrder, "desc", StringComparison.OrdinalIgnoreCase);
+
+        var descending = string.Equals(
+            query.SortOrder,
+            "desc",
+            StringComparison.OrdinalIgnoreCase);
+
         source = query.SortBy.ToLowerInvariant() switch
         {
-            "code" => descending ? source.OrderByDescending(item => item.Code) : source.OrderBy(item => item.Code),
-            "createdatutc" or "created" => descending ? source.OrderByDescending(item => item.CreatedAtUtc) : source.OrderBy(item => item.CreatedAtUtc),
-            _ => descending ? source.OrderByDescending(item => item.Name) : source.OrderBy(item => item.Name)
+            "createdatutc" or "created" =>
+                descending
+                    ? source.OrderByDescending(item => item.CreatedAtUtc)
+                    : source.OrderBy(item => item.CreatedAtUtc),
+
+            "status" =>
+                descending
+                    ? source.OrderByDescending(item => item.Status)
+                    : source.OrderBy(item => item.Status),
+
+            _ =>
+                descending
+                    ? source.OrderByDescending(item => item.Name)
+                    : source.OrderBy(item => item.Name)
         };
-        var entities = await source.Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToListAsync(cancellationToken);
-        return (await ProjectAsync(entities, query.Expand, cancellationToken), total);
+
+        var entities = await source
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
+            .ToListAsync(cancellationToken);
+
+        return (
+            await ProjectAsync(entities, query.Expand, cancellationToken),
+            total
+        );
     }
 
-    public async Task<AisleResponse?> GetByIdAsync(Guid id, string? expand, CancellationToken cancellationToken)
+    public async Task<AisleResponse?> GetByIdAsync(
+        Guid id,
+        string? expand,
+        CancellationToken cancellationToken)
     {
-        var entity = await db.Aisles.AsNoTracking().FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
-        return entity is null ? null : (await ProjectAsync([entity], expand, cancellationToken)).Single();
+        var entity = await db.Aisles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                item => item.Id == id,
+                cancellationToken);
+
+        if (entity is null)
+            return null;
+
+        return (await ProjectAsync(
+            [entity],
+            expand,
+            cancellationToken)).Single();
     }
 
-    public Task<bool> FloorExistsAsync(Guid id, CancellationToken cancellationToken) => db.Floors.AnyAsync(item => item.Id == id, cancellationToken);
-    public Task<bool> EndpointExistsAsync(Guid id, CancellationToken cancellationToken) => db.Endpoints.AnyAsync(item => item.Id == id, cancellationToken);
-
-    public async Task<AisleResponse> CreateAsync(AisleWriteRequest request, string? expand, CancellationToken cancellationToken)
+    public Task<bool> FloorExistsAsync(
+        Guid id,
+        CancellationToken cancellationToken)
     {
-        var entity = new Aisle(request.FloorId, request.Code, request.Name, request.EndpointId, request.Description);
+        return db.Floors.AnyAsync(
+            item => item.Id == id,
+            cancellationToken);
+    }
+
+    public async Task<AisleResponse> CreateAsync(
+        AisleWriteRequest request,
+        string? expand,
+        CancellationToken cancellationToken)
+    {
+        var entity = new Aisle(
+            request.FloorId,
+            request.Name,
+            request.Description);
+
         db.Aisles.Add(entity);
+
         await db.SaveChangesAsync(cancellationToken);
-        return (await GetByIdAsync(entity.Id, expand, cancellationToken))!;
+
+        return (await GetByIdAsync(
+            entity.Id,
+            expand,
+            cancellationToken))!;
     }
 
-    public async Task<AisleResponse?> UpdateAsync(Guid id, AisleWriteRequest request, string? expand, CancellationToken cancellationToken)
+    public async Task<AisleResponse?> UpdateAsync(
+        Guid id,
+        AisleWriteRequest request,
+        string? expand,
+        CancellationToken cancellationToken)
     {
-        var entity = await db.Aisles.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
-        if (entity is null) return null;
-        entity.Update(request.FloorId, request.Code, request.Name, request.EndpointId, request.Description);
+        var entity = await db.Aisles
+            .FirstOrDefaultAsync(
+                item => item.Id == id,
+                cancellationToken);
+
+        if (entity is null)
+            return null;
+
+        entity.Update(
+            request.FloorId,
+            request.Name,
+            request.Description,
+            request.Status);
+
         await db.SaveChangesAsync(cancellationToken);
-        return await GetByIdAsync(id, expand, cancellationToken);
+
+        return await GetByIdAsync(
+            id,
+            expand,
+            cancellationToken);
     }
 
-    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<bool> DeleteAsync(
+        Guid id,
+        CancellationToken cancellationToken)
     {
-        var entity = await db.Aisles.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
-        if (entity is null) return false;
+        var entity = await db.Aisles
+            .FirstOrDefaultAsync(
+                item => item.Id == id,
+                cancellationToken);
+
+        if (entity is null)
+            return false;
+
         db.Aisles.Remove(entity);
+
         await db.SaveChangesAsync(cancellationToken);
+
         return true;
     }
 
-    private async Task<IReadOnlyList<AisleResponse>> ProjectAsync(IReadOnlyList<Aisle> entities, string? expand, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<AisleResponse>> ProjectAsync(
+        IReadOnlyList<Aisle> entities,
+        string? expand,
+        CancellationToken cancellationToken)
     {
-        var expansions = (expand ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        var expansions = (expand ?? string.Empty)
+            .Split(
+                ',',
+                StringSplitOptions.RemoveEmptyEntries
+                | StringSplitOptions.TrimEntries)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var floorIds = entities.Select(item => item.FloorId).Distinct().ToArray();
-        var aisleIds = entities.Select(item => item.Id).ToArray();
-        var endpointIds = entities.Where(item => item.EndpointId.HasValue).Select(item => item.EndpointId!.Value).Distinct().ToArray();
+
+        var floorIds = entities
+            .Select(item => item.FloorId)
+            .Distinct()
+            .ToArray();
+
+        var aisleIds = entities
+            .Select(item => item.Id)
+            .ToArray();
+
         var floors = expansions.Contains("floor")
-            ? await db.Floors.AsNoTracking().Where(item => floorIds.Contains(item.Id)).ToDictionaryAsync(item => item.Id, cancellationToken)
-            : [];
-        var endpoints = expansions.Contains("endpoint")
-            ? await db.Endpoints.AsNoTracking().Where(item => endpointIds.Contains(item.Id)).ToDictionaryAsync(item => item.Id, cancellationToken)
-            : [];
+            ? await db.Floors
+                .AsNoTracking()
+                .Where(item => floorIds.Contains(item.Id))
+                .ToDictionaryAsync(
+                    item => item.Id,
+                    cancellationToken)
+            : new Dictionary<Guid, Floor>();
+
         var shelves = expansions.Contains("shelves")
-            ? await db.Shelves.AsNoTracking().Where(item => aisleIds.Contains(item.AisleId)).ToListAsync(cancellationToken)
+            ? await db.Shelves
+                .AsNoTracking()
+                .Where(item => aisleIds.Contains(item.AisleId))
+                .ToListAsync(cancellationToken)
             : [];
-        return entities.Select(item => new AisleResponse(
-            item.Id, item.FloorId, item.EndpointId, item.Code, item.Name, item.Description,
-            item.CreatedAtUtc, item.UpdatedAtUtc,
-            floors.TryGetValue(item.FloorId, out var floor) ? new(floor.Id, floor.Name, floor.FloorNumber) : null,
-            item.EndpointId is Guid endpointId && endpoints.TryGetValue(endpointId, out var endpoint)
-                ? new(endpoint.Id, endpoint.MapId, endpoint.Name, endpoint.PositionX, endpoint.PositionY, endpoint.Theta, endpoint.IsActive) : null,
-            expansions.Contains("shelves") ? shelves.Where(shelf => shelf.AisleId == item.Id).Select(shelf => new AisleShelfResponse(shelf.Id, shelf.Code, shelf.Name)).ToList() : null
-        )).ToList();
+
+        return entities.Select(item =>
+        {
+            var floorResponse =
+                floors.TryGetValue(item.FloorId, out var floor)
+                    ? new AisleFloorResponse(
+                        floor.Id,
+                        floor.Name,
+                        floor.FloorNumber)
+                    : null;
+
+            var shelfResponses = expansions.Contains("shelves")
+                ? shelves
+                    .Where(shelf => shelf.AisleId == item.Id)
+                    .Select(shelf => new AisleShelfResponse(
+                        shelf.Id,
+                        shelf.Name))
+                    .ToList()
+                : null;
+
+            return new AisleResponse(
+                item.Id,
+                item.FloorId,
+                item.Name,
+                item.Description,
+                item.Status,
+                item.CreatedAtUtc,
+                item.UpdatedAtUtc,
+                floorResponse,
+                shelfResponses);
+        }).ToList();
     }
 }

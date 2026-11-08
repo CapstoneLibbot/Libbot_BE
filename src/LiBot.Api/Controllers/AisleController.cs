@@ -1,6 +1,7 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
 using LiBot.Application.Models.Aisle;
+using LiBot.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LiBot.Api.Controllers;
@@ -23,7 +24,7 @@ public class AisleController : ControllerBase
         [FromQuery] int pageSize = 20,
         [FromQuery] string? search = null,
         [FromQuery] Guid? floorId = null,
-        [FromQuery] Guid? endpointId = null,
+        [FromQuery] AisleStatus? status = null,
         [FromQuery] string sortBy = "name",
         [FromQuery] string sortOrder = "asc",
         [FromQuery] string? expand = null,
@@ -31,12 +32,12 @@ public class AisleController : ControllerBase
     {
         if (page < 1 || pageSize is < 1 or > 100 || (long)(page - 1) * pageSize > int.MaxValue)
             return BadRequest(Error("page must be at least 1 and pageSize must be between 1 and 100."));
-        if (!new[] { "name", "code", "created", "createdatutc" }.Contains(sortBy.ToLowerInvariant()))
-            return BadRequest(Error("sortBy must be name, code or created."));
+        if (!new[] { "name", "status", "created", "createdatutc" }.Contains(sortBy.ToLowerInvariant()))
+            return BadRequest(Error("sortBy must be name, status or created."));
         if (!new[] { "asc", "desc" }.Contains(sortOrder.ToLowerInvariant()))
             return BadRequest(Error("sortOrder must be asc or desc."));
         var response = await _aisleService.GetAllAsync(
-            new AisleQuery(page, pageSize, search, floorId, endpointId, sortBy, sortOrder, expand),
+            new AisleQuery(page, pageSize, search, floorId, status, sortBy, sortOrder, expand),
             cancellationToken);
         return Ok(new BaseResponse<AisleListResponse>(response));
     }

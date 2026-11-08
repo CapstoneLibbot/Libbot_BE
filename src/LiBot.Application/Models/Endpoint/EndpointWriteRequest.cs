@@ -6,7 +6,9 @@ public class EndpointWriteRequest(
     double PositionX,
     double PositionY,
     double Theta = 0,
-    bool IsActive = true)
+    bool IsActive = true,
+    string? Description = null,
+    string? EndpointType = null)
 {
     public Guid MapId { get; } = MapId;
     public string Name { get; } = Name;
@@ -14,4 +16,6 @@ public class EndpointWriteRequest(
     public double PositionY { get; } = PositionY;
     public double Theta { get; } = Theta;
     public bool IsActive { get; } = IsActive;
+    public string? Description { get; } = Description;
+    public string? EndpointType { get; } = EndpointType;
 }

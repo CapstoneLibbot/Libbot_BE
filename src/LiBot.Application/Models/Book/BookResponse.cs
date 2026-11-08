@@ -9,6 +9,7 @@ public class BookResponse(
     string? Publisher,
     int? PublicationYear,
     string? Image,
+    string? Description,
     DateTime CreatedAtUtc,
     DateTime? UpdatedAtUtc,
     BookCategoryResponse? Category = null,
@@ -22,6 +23,8 @@ public class BookResponse(
     public string? Publisher { get; } = Publisher;
     public int? PublicationYear { get; } = PublicationYear;
     public string? Image { get; } = Image;
+    public string? ImageUrl { get; } = Image;
+    public string? Description { get; } = Description;
     public DateTime CreatedAtUtc { get; } = CreatedAtUtc;
     public DateTime? UpdatedAtUtc { get; } = UpdatedAtUtc;
     public BookCategoryResponse? Category { get; } = Category;

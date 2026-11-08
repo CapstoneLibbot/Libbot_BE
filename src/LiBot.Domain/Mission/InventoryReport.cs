@@ -5,12 +5,15 @@ namespace LiBot.Domain.Mission;
 public class InventoryReport : Entity
 {
     public Guid ReportId { get; private set; }
+    public Guid? FloorId { get; private set; }
+    public Guid? JobId { get; private set; }
     public string ScopeType { get; private set; }
     public int TotalShelves { get; private set; }
     public int TotalBooksScanned { get; private set; }
     public int TotalAvailable { get; private set; }
     public int TotalMisplaced { get; private set; }
     public int TotalMissing { get; private set; }
+    public string? Data { get; private set; }
 
     public InventoryReport(Guid reportId, string scopeType, int totalShelves, int totalBooksScanned,
         int totalAvailable, int totalMisplaced, int totalMissing)

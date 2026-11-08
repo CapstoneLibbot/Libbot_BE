@@ -1,3 +1,5 @@
+using LiBot.Domain.Enums;
+
 namespace LiBot.Application.Models.Aisle;
 
 public class AisleQuery(
@@ -5,7 +7,7 @@ public class AisleQuery(
     int PageSize = 20,
     string? Search = null,
     Guid? FloorId = null,
-    Guid? EndpointId = null,
+    AisleStatus? Status = null,
     string SortBy = "name",
     string SortOrder = "asc",
     string? Expand = null)
@@ -14,7 +16,7 @@ public class AisleQuery(
     public int PageSize { get; } = PageSize;
     public string? Search { get; } = Search;
     public Guid? FloorId { get; } = FloorId;
-    public Guid? EndpointId { get; } = EndpointId;
+    public AisleStatus? Status { get; } = Status;
     public string SortBy { get; } = SortBy;
     public string SortOrder { get; } = SortOrder;
     public string? Expand { get; } = Expand;

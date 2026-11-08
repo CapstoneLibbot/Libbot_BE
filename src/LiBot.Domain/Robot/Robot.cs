@@ -5,8 +5,11 @@ public class Robot
     public Guid Id { get; private set; } = Guid.NewGuid();
     public string Name { get; private set; }
     public string SerialNumber { get; private set; }
+    public Guid? MapId { get; private set; }
     public string Status { get; private set; } = "Offline";
     public double BatteryLevel { get; private set; }
+    public DateTime CreatedAtUtc { get; private set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAtUtc { get; private set; }
 
     public Robot(string name, string serialNumber)
     {
@@ -23,10 +26,12 @@ public class Robot
     public void UpdateStatus(string status)
     {
         Status = status;
+        UpdatedAtUtc = DateTime.UtcNow;
     }
 
     public void UpdateBattery(double batteryLevel)
     {
         BatteryLevel = Math.Clamp(batteryLevel, 0, 100);
+        UpdatedAtUtc = DateTime.UtcNow;
     }
 }

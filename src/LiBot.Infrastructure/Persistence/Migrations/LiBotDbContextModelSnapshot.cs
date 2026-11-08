@@ -17,7 +17,7 @@ namespace LiBot.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "8.0.31")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -134,10 +134,16 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<string>("Role")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<Guid?>("RoleId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("Username")
                         .HasColumnType("nvarchar(450)");
@@ -160,18 +166,11 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<Guid?>("EndpointId")
-                        .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid>("FloorId")
                         .HasColumnType("uniqueidentifier");
@@ -180,12 +179,15 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("EndpointId");
 
                     b.HasIndex("FloorId");
 
@@ -237,8 +239,12 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("Image")
+                    b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ImageUrl")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("ImageUrl");
 
                     b.Property<string>("Isbn")
                         .IsRequired()
@@ -318,7 +324,8 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
@@ -345,6 +352,12 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("EndpointType")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
@@ -383,6 +396,9 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -433,12 +449,20 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("FloorNumber")
                         .HasColumnType("int");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
@@ -457,6 +481,9 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid?>("FloorId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("Height")
                         .HasColumnType("int");
 
@@ -467,6 +494,11 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
@@ -480,6 +512,8 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("FloorId");
+
                     b.ToTable("MAP", (string)null);
                 });
 
@@ -492,16 +526,23 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("AisleId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("EndpointId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
@@ -509,6 +550,8 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AisleId");
+
+                    b.HasIndex("EndpointId");
 
                     b.ToTable("SHELF", (string)null);
                 });
@@ -525,8 +568,16 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<int>("LevelNumber")
                         .HasColumnType("int");
 
+                    b.Property<string>("Name")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<Guid>("ShelfId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
@@ -553,6 +604,9 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
@@ -573,6 +627,9 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
                     b.Property<double>("MinY")
                         .HasColumnType("float");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("PreferredDirection")
                         .HasColumnType("nvarchar(max)");
@@ -628,6 +685,15 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("Data")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("FloorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("ReportId")
                         .HasColumnType("uniqueidentifier");
 
@@ -654,6 +720,10 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("FloorId");
+
+                    b.HasIndex("JobId");
 
                     b.HasIndex("ReportId");
 
@@ -701,11 +771,20 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<Guid>("JobTaskId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("Sequence")
                         .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("StepType")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<Guid>("TaskStepId")
                         .HasColumnType("uniqueidentifier");
@@ -734,14 +813,8 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<Guid>("JobId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("RuntimeId")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasDefaultValue("real")
-                        .HasColumnType("nvarchar(32)");
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ExecutionId")
                         .HasMaxLength(64)
@@ -750,20 +823,41 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<string>("ExecutionState")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<Guid?>("RobotId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RuntimeId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
+                        .HasDefaultValue("real");
 
                     b.Property<DateTime?>("StartedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("Status")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("WorkflowTaskId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
 
                     b.HasIndex("JobId");
 
                     b.HasIndex("RobotId");
+
+                    b.HasIndex("WorkflowTaskId");
 
                     b.ToTable("JOB_TASK", (string)null);
                 });
@@ -790,15 +884,15 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("DestinationEndpointId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid?>("WorkflowId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("Priority")
                         .HasColumnType("int");
+
+                    b.Property<Guid?>("RobotId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid?>("SourceEndpointId")
                         .HasColumnType("uniqueidentifier");
@@ -810,11 +904,16 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<Guid?>("WorkflowId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedBy");
 
                     b.HasIndex("DestinationEndpointId");
+
+                    b.HasIndex("RobotId");
 
                     b.HasIndex("SourceEndpointId");
 
@@ -829,14 +928,23 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("Data")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("DurationSeconds")
                         .HasColumnType("int");
 
                     b.Property<int>("FallenBookCount")
                         .HasColumnType("int");
+
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("ObservationCount")
                         .HasColumnType("int");
@@ -851,6 +959,9 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ReportId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTime?>("StartedAtUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<int>("UnknownObstacleCount")
                         .HasColumnType("int");
 
@@ -861,6 +972,8 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("JobId");
 
                     b.HasIndex("ReportId");
 
@@ -901,6 +1014,12 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<double>("BatteryLevel")
                         .HasColumnType("float");
 
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("MapId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -913,7 +1032,12 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("MapId");
 
                     b.HasIndex("SerialNumber")
                         .IsUnique();
@@ -970,16 +1094,33 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<double>("CurrentBatteryLevel")
                         .HasColumnType("float");
 
+                    b.Property<string>("Data")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("MapId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<double?>("PositionX")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("PositionY")
+                        .HasColumnType("float");
+
                     b.Property<DateTime>("RecordedAtUtc")
                         .HasColumnType("datetime2");
 
                     b.Property<Guid>("RobotId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Status")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("MapId");
 
                     b.HasIndex("RobotId");
 
@@ -998,11 +1139,20 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Data")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateOnly?>("EndDate")
                         .HasColumnType("date");
 
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime?>("LastRunAtUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("NextRunAtUtc")
                         .HasColumnType("datetime2");
@@ -1020,9 +1170,14 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid?>("WorkflowId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedBy");
+
+                    b.HasIndex("WorkflowId");
 
                     b.ToTable("SCHEDULE", (string)null);
                 });
@@ -1115,11 +1270,14 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Configuration")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("Configuration")
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("SequenceNumber")
+                        .HasColumnType("int");
 
                     b.Property<string>("StepType")
                         .IsRequired()
@@ -1144,16 +1302,24 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<string>("Type")
                         .IsRequired()
@@ -1172,6 +1338,9 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1211,11 +1380,6 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("LiBot.Domain.Library.Aisle", b =>
                 {
-                    b.HasOne("LiBot.Domain.Library.Endpoint", null)
-                        .WithMany()
-                        .HasForeignKey("EndpointId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("LiBot.Domain.Library.Floor", null)
                         .WithMany()
                         .HasForeignKey("FloorId")
@@ -1283,6 +1447,14 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("LiBot.Domain.Library.LibraryMap", b =>
+                {
+                    b.HasOne("LiBot.Domain.Library.Floor", null)
+                        .WithMany()
+                        .HasForeignKey("FloorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
             modelBuilder.Entity("LiBot.Domain.Library.Shelf", b =>
                 {
                     b.HasOne("LiBot.Domain.Library.Aisle", null)
@@ -1290,6 +1462,11 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .HasForeignKey("AisleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("LiBot.Domain.Library.Endpoint", null)
+                        .WithMany()
+                        .HasForeignKey("EndpointId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("LiBot.Domain.Library.ShelfLevel", b =>
@@ -1321,6 +1498,16 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("LiBot.Domain.Mission.InventoryReport", b =>
                 {
+                    b.HasOne("LiBot.Domain.Library.Floor", null)
+                        .WithMany()
+                        .HasForeignKey("FloorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("LiBot.Domain.Mission.Mission", null)
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("LiBot.Domain.Mission.Report", null)
                         .WithMany()
                         .HasForeignKey("ReportId")
@@ -1364,6 +1551,11 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("RobotId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("LiBot.Domain.Workflow.WorkflowTask", null)
+                        .WithMany()
+                        .HasForeignKey("WorkflowTaskId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("LiBot.Domain.Mission.Mission", b =>
@@ -1378,14 +1570,16 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                         .HasForeignKey("DestinationEndpointId")
                         .OnDelete(DeleteBehavior.NoAction);
 
+                    b.HasOne("LiBot.Domain.Robot.Robot", null)
+                        .WithMany()
+                        .HasForeignKey("RobotId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("LiBot.Domain.Library.Endpoint", null)
                         .WithMany()
                         .HasForeignKey("SourceEndpointId")
                         .OnDelete(DeleteBehavior.NoAction);
-                });
 
-            modelBuilder.Entity("LiBot.Domain.Mission.Mission", b =>
-                {
                     b.HasOne("LiBot.Domain.Workflow.WorkflowDefinition", null)
                         .WithMany()
                         .HasForeignKey("WorkflowId")
@@ -1394,11 +1588,24 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("LiBot.Domain.Mission.PatrolReport", b =>
                 {
+                    b.HasOne("LiBot.Domain.Mission.Mission", null)
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("LiBot.Domain.Mission.Report", null)
                         .WithMany()
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("LiBot.Domain.Robot.Robot", b =>
+                {
+                    b.HasOne("LiBot.Domain.Library.LibraryMap", null)
+                        .WithMany()
+                        .HasForeignKey("MapId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("LiBot.Domain.Robot.RobotConfigLog", b =>
@@ -1417,6 +1624,11 @@ namespace LiBot.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("LiBot.Domain.Robot.RobotLog", b =>
                 {
+                    b.HasOne("LiBot.Domain.Library.LibraryMap", null)
+                        .WithMany()
+                        .HasForeignKey("MapId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("LiBot.Domain.Robot.Robot", null)
                         .WithMany()
                         .HasForeignKey("RobotId")
@@ -1429,6 +1641,11 @@ namespace LiBot.Infrastructure.Persistence.Migrations
                     b.HasOne("LiBot.Domain.Identity.User", null)
                         .WithMany()
                         .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("LiBot.Domain.Workflow.WorkflowDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("WorkflowId")
                         .OnDelete(DeleteBehavior.SetNull);
                 });
 

@@ -13,6 +13,8 @@ public class Zone : Entity
     };
 
     public Guid MapId { get; private set; }
+    public string? Name { get; private set; }
+    public string? Description { get; private set; }
     public string ZoneType { get; private set; }
     public double MaxSpeed { get; private set; }
     public string? PreferredDirection { get; private set; }
@@ -26,7 +28,7 @@ public class Zone : Entity
 
     public Zone(Guid mapId, string zoneType, double minX, double minY, double maxX, double maxY,
         double maxSpeed = 0, string? preferredDirection = null, double? corridorWidth = null,
-        bool allowTurnaround = false)
+        bool allowTurnaround = false, string? name = null, string? description = null)
     {
         if (mapId == Guid.Empty)
             throw new ArgumentException("Map id is required.", nameof(mapId));
@@ -49,6 +51,8 @@ public class Zone : Entity
             throw new ArgumentException("NARROW_CORRIDOR requires corridorWidth greater than zero.", nameof(corridorWidth));
 
         MapId = mapId;
+        Name = name?.Trim();
+        Description = description?.Trim();
         ZoneType = normalizedType;
         MinX = minX;
         MinY = minY;

@@ -7,7 +7,9 @@ public class BookWriteRequest(
     string Author,
     string? Publisher = null,
     int? PublicationYear = null,
-    string? Image = null)
+    string? Image = null,
+    string? Description = null,
+    string? ImageUrl = null)
 {
     public Guid? CategoryId { get; } = CategoryId;
     public string Isbn { get; } = Isbn;
@@ -16,4 +18,6 @@ public class BookWriteRequest(
     public string? Publisher { get; } = Publisher;
     public int? PublicationYear { get; } = PublicationYear;
     public string? Image { get; } = Image;
+    public string? Description { get; } = Description;
+    public string? ImageUrl { get; } = ImageUrl;
 }

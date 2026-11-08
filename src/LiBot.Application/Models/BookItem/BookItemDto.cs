@@ -1,5 +1,6 @@
 using LiBot.Application.Models;
 using BookItemEntity = LiBot.Domain.Library.BookItem;
+using LiBot.Domain.Enums;
 
 namespace LiBot.Application.Models.BookItem;
 
@@ -12,5 +13,6 @@ public class BookItemDto : LibraryResourceDto<BookItemEntity>
     public DateTime? LastInventoryAtUtc { get; set; }
     public string Status { get; set; } = "Available";
 
-    public override BookItemEntity ToEntity() => new(BookId, Barcode, ExpectedShelfLevelId, CurrentShelfLevelId, Status);
+    public override BookItemEntity ToEntity() => new(BookId, Barcode, ExpectedShelfLevelId, CurrentShelfLevelId,
+        Enum.TryParse<BookItemStatus>(Status, true, out var status) ? status : BookItemStatus.Available);
 }

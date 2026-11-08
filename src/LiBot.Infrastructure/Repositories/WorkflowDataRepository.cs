@@ -33,7 +33,7 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
         if (string.IsNullOrWhiteSpace(shelfCode)) return null;
         return await (from level in db.ShelfLevels.AsNoTracking()
                       join shelf in db.Shelves.AsNoTracking() on level.ShelfId equals shelf.Id
-                      where shelf.Code == shelfCode
+                      where shelf.Name == shelfCode
                       orderby level.LevelNumber
                       select (Guid?)level.Id).FirstOrDefaultAsync(cancellationToken);
     }
@@ -47,7 +47,7 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
             ? await (from level in db.ShelfLevels.AsNoTracking()
                      join shelf in db.Shelves.AsNoTracking() on level.ShelfId equals shelf.Id
                      where level.Id == levelId
-                     select shelf.Code).FirstOrDefaultAsync(cancellationToken)
+                     select shelf.Name).FirstOrDefaultAsync(cancellationToken)
             : null;
         return new InventoryBookRecord(item.ExpectedShelfLevelId, expectedShelfCode);
     }

@@ -1,15 +1,15 @@
+using LiBot.Domain.Enums;
+
 namespace LiBot.Application.Models.Aisle;
 
 public class AisleWriteRequest(
     Guid FloorId,
-    Guid? EndpointId,
-    string Code,
     string Name,
-    string? Description)
+    string? Description,
+    AisleStatus? Status = null)
 {
     public Guid FloorId { get; } = FloorId;
-    public Guid? EndpointId { get; } = EndpointId;
-    public string Code { get; } = Code;
     public string Name { get; } = Name;
     public string? Description { get; } = Description;
+    public AisleStatus? Status { get; } = Status;
 }
