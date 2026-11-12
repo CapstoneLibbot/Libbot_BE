@@ -5,10 +5,11 @@ namespace LiBot.Domain.Workflow;
 public class TaskStep : Entity
 {
     public Guid WorkflowTaskId { get; private set; }
+    public int SequenceNo { get; private set; }
     public string StepType { get; private set; }
     public string? Configuration { get; private set; }
 
-    public TaskStep(Guid workflowTaskId, string stepType, string? configuration = null)
+    public TaskStep(Guid workflowTaskId, string stepType, string? configuration = null, int sequenceNo = 0)
     {
         if (workflowTaskId == Guid.Empty)
             throw new ArgumentException("Workflow task id is required.", nameof(workflowTaskId));
@@ -16,6 +17,7 @@ public class TaskStep : Entity
             throw new ArgumentException("Step type is required.", nameof(stepType));
 
         WorkflowTaskId = workflowTaskId;
+        SequenceNo = sequenceNo;
         StepType = stepType.Trim();
         Configuration = configuration;
     }

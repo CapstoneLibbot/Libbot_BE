@@ -6,8 +6,12 @@ public class Shelf : Entity
 {
     public Guid AisleId { get; private set; }
     public Guid? EndpointId { get; private set; }
+    public Guid StartEndpointId { get; private set; }
+    public Guid EndEndpointId { get; private set; }
     public string Code { get; private set; }
     public string Name { get; private set; }
+    public string? Description { get; private set; }
+    public string Status { get; private set; } = "Active";
 
     public Shelf(Guid aisleId, string code, string name, Guid? endpointId = null)
     {
@@ -22,8 +26,18 @@ public class Shelf : Entity
 
         AisleId = aisleId;
         EndpointId = endpointId;
+        StartEndpointId = endpointId ?? Guid.Empty;
+        EndEndpointId = endpointId ?? Guid.Empty;
         Code = code.Trim();
         Name = name.Trim();
+    }
+
+    public void SetEndpoints(Guid startEndpointId, Guid endEndpointId)
+    {
+        if (startEndpointId == Guid.Empty || endEndpointId == Guid.Empty)
+            throw new ArgumentException("Shelf endpoints are required.");
+        StartEndpointId = startEndpointId;
+        EndEndpointId = endEndpointId;
     }
 
     public void Update(Guid aisleId, string code, string name)

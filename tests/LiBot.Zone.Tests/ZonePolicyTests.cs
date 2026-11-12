@@ -48,5 +48,5 @@ public sealed class ZonePolicyTests
     }
 
     private static Zone Create(string type, double maxSpeed = 0) =>
-        new(MapId, type, 0, 0, 1, 1, maxSpeed);
+        new(MapId, "test-zone", type, 0, 0, 1, 1, maxSpeed);
 }
