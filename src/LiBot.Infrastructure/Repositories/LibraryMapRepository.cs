@@ -35,6 +35,10 @@ public sealed class LibraryMapRepository(LiBotDbContext db) : ILibraryMapReposit
     public Task<int> CountByNameAsync(string name, CancellationToken cancellationToken) =>
         db.Maps.CountAsync(map => map.Name == name, cancellationToken);
 
+    public Task<Guid?> GetFirstFloorIdAsync(CancellationToken cancellationToken) =>
+        db.Floors.AsNoTracking().OrderBy(floor => floor.FloorNumber)
+            .Select(floor => (Guid?)floor.Id).FirstOrDefaultAsync(cancellationToken);
+
     public async Task AddAsync(LibraryMap map, CancellationToken cancellationToken)
     {
         await db.Maps.AddAsync(map, cancellationToken);

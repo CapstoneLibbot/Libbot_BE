@@ -123,7 +123,7 @@ public sealed class LowBatteryChargingCoordinator(
             var missionData = scope.ServiceProvider.GetRequiredService<IMissionDataRepository>();
 
             var chargingWorkflowId = await db.Workflows.AsNoTracking()
-                .Where(item => item.Type == "ROBOT_RETURN_AND_CHARGING" && item.IsActive)
+                .Where(item => item.Type == "ROBOT_RETURN_AND_CHARGING" && item.Status == "Active")
                 .Select(item => (Guid?)item.Id)
                 .FirstOrDefaultAsync(cancellationToken);
 
@@ -289,11 +289,21 @@ public sealed class LowBatteryChargingCoordinator(
                 return;
             }
 
+            var robotId = await missionData.GetRobotIdByMapAsync(mapId, cancellationToken);
+            if (robotId is null)
+            {
+                await NotifyBlockedAsync(episode, battery,
+                    "No database robot is assigned to the active map, so the automatic charging mission cannot be recorded.",
+                    cancellationToken);
+                return;
+            }
+
             var mission = new Mission(
                 "Automatic return to charger",
                 $"Battery reached {battery:0.##}%; return to CHARGER endpoint '{charger.Name}'.",
+                robotId.Value,
+                workflow.Id,
                 priority: 4);
-            mission.Update(mission.Name, mission.Description, mission.Priority, workflow.Id);
 
             var initialContext = new Dictionary<string, object?>
             {

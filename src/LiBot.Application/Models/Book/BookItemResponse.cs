@@ -6,9 +6,7 @@ public class BookItemResponse(
     Guid? ExpectedShelfLevelId,
     Guid? CurrentShelfLevelId,
     DateTime? LastInventoryAtUtc,
-    string Status,
-    DateTime CreatedAtUtc,
-    DateTime? UpdatedAtUtc)
+    string Status)
 {
     public Guid Id { get; } = Id;
     public string Barcode { get; } = Barcode;
@@ -16,6 +14,4 @@ public class BookItemResponse(
     public Guid? CurrentShelfLevelId { get; } = CurrentShelfLevelId;
     public DateTime? LastInventoryAtUtc { get; } = LastInventoryAtUtc;
     public string Status { get; } = Status;
-    public DateTime CreatedAtUtc { get; } = CreatedAtUtc;
-    public DateTime? UpdatedAtUtc { get; } = UpdatedAtUtc;
 }

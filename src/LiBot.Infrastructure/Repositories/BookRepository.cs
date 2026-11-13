@@ -31,7 +31,6 @@ public class BookRepository(LiBotDbContext db) : IBookRepository
             "isbn" => descending ? source.OrderByDescending(book => book.Isbn) : source.OrderBy(book => book.Isbn),
             "author" => descending ? source.OrderByDescending(book => book.Author) : source.OrderBy(book => book.Author),
             "publicationyear" => descending ? source.OrderByDescending(book => book.PublicationYear) : source.OrderBy(book => book.PublicationYear),
-            "created" or "createdatutc" => descending ? source.OrderByDescending(book => book.CreatedAtUtc) : source.OrderBy(book => book.CreatedAtUtc),
             _ => descending ? source.OrderByDescending(book => book.Title) : source.OrderBy(book => book.Title)
         };
 
@@ -57,7 +56,7 @@ public class BookRepository(LiBotDbContext db) : IBookRepository
     public async Task<BookResponse> CreateAsync(BookWriteRequest request, CancellationToken cancellationToken)
     {
         var book = new Book(request.Isbn, request.Title, request.Author, request.CategoryId,
-            request.Publisher, request.PublicationYear, request.Image);
+            request.Publisher, request.PublicationYear, request.Image, request.Description);
         db.Books.Add(book);
         await db.SaveChangesAsync(cancellationToken);
         return (await GetByIdAsync(book.Id, null, cancellationToken))!;
@@ -68,7 +67,7 @@ public class BookRepository(LiBotDbContext db) : IBookRepository
         var book = await db.Books.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (book is null) return null;
         book.Update(request.Isbn, request.Title, request.Author, request.CategoryId,
-            request.Publisher, request.PublicationYear, request.Image);
+            request.Publisher, request.PublicationYear, request.Image, request.Description);
         await db.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(id, null, cancellationToken);
     }
@@ -110,16 +109,14 @@ public class BookRepository(LiBotDbContext db) : IBookRepository
             book.Publisher,
             book.PublicationYear,
             book.Image,
-            book.CreatedAtUtc,
-            book.UpdatedAtUtc,
+            book.Description,
             book.CategoryId is Guid id && categories.TryGetValue(id, out var category)
                 ? new BookCategoryResponse(category.Id, category.Name, category.Description)
                 : null,
             expansions.Contains("items")
                 ? items.Where(item => item.BookId == book.Id)
                     .Select(item => new BookItemResponse(item.Id, item.Barcode, item.ExpectedShelfLevelId,
-                        item.CurrentShelfLevelId, item.LastInventoryAtUtc, item.Status,
-                        item.CreatedAtUtc, item.UpdatedAtUtc)).ToList()
+                        item.CurrentShelfLevelId, item.LastInventoryAtUtc, item.Status)).ToList()
                 : null)).ToList();
     }
 }

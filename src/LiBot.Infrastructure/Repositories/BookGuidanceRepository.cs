@@ -95,15 +95,15 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
             join aisle in db.Aisles.AsNoTracking() on shelf.AisleId equals aisle.Id
             join floor in db.Floors.AsNoTracking() on aisle.FloorId equals floor.Id
             join endpoint in db.Endpoints.AsNoTracking().Where(item => item.IsActive)
-                on shelf.EndpointId equals endpoint.Id into endpoints
+                on shelf.StartEndpointId equals endpoint.Id into endpoints
             from endpoint in endpoints.DefaultIfEmpty()
             where copy.BookId == bookId
             select new
             {
                 copy.Id,
                 Location = new BookLocation(
-                    floor.Id, floor.Name, floor.FloorNumber, aisle.Id, aisle.Code, aisle.Name,
-                    shelf.Id, shelf.Code, shelf.Name, level.Id, level.LevelNumber,
+                    floor.Id, floor.Name, floor.FloorNumber, aisle.Id, aisle.Name, aisle.Name,
+                    shelf.Id, shelf.Name, shelf.Name, level.Id, level.LevelNumber,
                     endpoint == null ? null : new NavigationEndpoint(
                         endpoint.Id, endpoint.Name, endpoint.PositionX, endpoint.PositionY, endpoint.Theta))
             })
@@ -138,7 +138,7 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
     {
         var query = db.Feedback.AsNoTracking();
         if (taskId.HasValue) query = query.Where(item => item.JobId == taskId.Value);
-        return await query.OrderByDescending(item => item.CreatedAtUtc)
+        return await query.OrderByDescending(item => item.Id)
             .Select(item => new FeedbackResponse(item.Id, item.JobId, item.Rating, item.Comment))
             .ToListAsync(cancellationToken);
     }

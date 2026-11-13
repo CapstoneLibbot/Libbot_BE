@@ -27,6 +27,15 @@ public static class LiBotDatabaseInitializer
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
+        var floor = await db.Floors.FirstOrDefaultAsync(
+            item => item.FloorNumber == 1 && item.Name == "Tầng 1",
+            cancellationToken);
+        if (floor is null)
+        {
+            floor = new Floor("Tầng 1", 1);
+            db.Floors.Add(floor);
+        }
+
         var map = await db.Maps.FirstOrDefaultAsync(
             item => item.Name == "Thư viện chính - Tầng 1",
             cancellationToken);
@@ -37,8 +46,13 @@ public static class LiBotDatabaseInitializer
                 "1.0",
                 30,
                 20,
-                "{\"unit\":\"meter\",\"origin\":[0,0],\"resolution\":0.05}");
+                "{\"unit\":\"meter\",\"origin\":[0,0],\"resolution\":0.05}",
+                floor.Id);
             db.Maps.Add(map);
+        }
+        else
+        {
+            map.AssignFloor(floor.Id);
         }
 
         var endpoint = await db.Endpoints.FirstOrDefaultAsync(
@@ -63,32 +77,21 @@ public static class LiBotDatabaseInitializer
             readingRoom.UpdatePosition(4.07, 1.86, readingRoom.Theta);
         }
 
-        var floor = await db.Floors.FirstOrDefaultAsync(
-            item => item.FloorNumber == 1 && item.Name == "Tầng 1",
-            cancellationToken);
-        if (floor is null)
-        {
-            floor = new Floor("Tầng 1", 1);
-            db.Floors.Add(floor);
-        }
-
-        map.AssignFloor(floor.Id);
-
         var aisle = await db.Aisles.FirstOrDefaultAsync(
-            item => item.FloorId == floor.Id && item.Code == "A",
+            item => item.FloorId == floor.Id && item.Name == "Dãy sách A",
             cancellationToken);
         if (aisle is null)
         {
-            aisle = new Aisle(floor.Id, "A", "Dãy sách A", "Khu sách công nghệ");
+            aisle = new Aisle(floor.Id, "Dãy sách A", "Khu sách công nghệ");
             db.Aisles.Add(aisle);
         }
 
         var shelf = await db.Shelves.FirstOrDefaultAsync(
-            item => item.AisleId == aisle.Id && item.Code == "A3",
+            item => item.AisleId == aisle.Id && item.Name == "Kệ Công nghệ A3",
             cancellationToken);
         if (shelf is null)
         {
-            shelf = new Shelf(aisle.Id, "A3", "Kệ Công nghệ A3", endpoint.Id);
+            shelf = new Shelf(aisle.Id, endpoint.Id, endpoint.Id, "Kệ Công nghệ A3");
             db.Shelves.Add(shelf);
         }
 

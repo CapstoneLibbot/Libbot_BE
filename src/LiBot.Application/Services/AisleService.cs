@@ -42,8 +42,8 @@ public class AisleService(IAisleRepository repository) : IAisleService
 
     private async Task ValidateReferencesAsync(AisleWriteRequest request, CancellationToken cancellationToken)
     {
-        if (request.FloorId == Guid.Empty || string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.Name))
-            throw new ArgumentException("floorId, code and name are required.");
+        if (request.FloorId == Guid.Empty || string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Status))
+            throw new ArgumentException("floorId, name and status are required.");
         if (!await repository.FloorExistsAsync(request.FloorId, cancellationToken))
             throw new KeyNotFoundException("Floor was not found.");
     }

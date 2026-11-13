@@ -8,6 +8,7 @@ public class BookItem : Entity
     public string Barcode { get; private set; }
     public Guid? ExpectedShelfLevelId { get; private set; }
     public Guid? CurrentShelfLevelId { get; private set; }
+    [System.ComponentModel.DataAnnotations.Schema.Column("LastInventoryAt")]
     public DateTime? LastInventoryAtUtc { get; private set; }
     public string Status { get; private set; }
 

@@ -23,9 +23,6 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
     public DbSet<LibraryMap> Maps => Set<LibraryMap>();
     public DbSet<Floor> Floors => Set<Floor>();
     public DbSet<Zone> Zones => Set<Zone>();
-    // Retained only to keep the removed Area implementation source-compatible during the API transition.
-    // It is explicitly ignored below and is not part of the ERD schema.
-    public DbSet<Area> Areas => Set<Area>();
     public DbSet<Aisle> Aisles => Set<Aisle>();
     public DbSet<Shelf> Shelves => Set<Shelf>();
     public DbSet<ShelfLevel> ShelfLevels => Set<ShelfLevel>();
@@ -57,9 +54,9 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("ACCOUNT");
             entity.HasKey(x => x.Id);
-            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
-            entity.HasIndex(x => x.Email).IsUnique();
-            entity.HasIndex(x => x.Username).IsUnique().HasFilter("[Username] IS NOT NULL");
+            entity.Property(x => x.Username).HasMaxLength(450);
+            entity.Property(x => x.Email).HasMaxLength(450);
+            entity.Property(x => x.Status).HasConversion<string>();
         });
 
         modelBuilder.Entity<AuditLog>(entity =>
@@ -80,7 +77,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("ROBOT");
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => x.SerialNumber).IsUnique();
+            entity.Property(x => x.SerialNumber).HasMaxLength(450);
             entity.HasOne<LibraryMap>().WithMany().HasForeignKey(x => x.MapId).OnDelete(DeleteBehavior.NoAction);
         });
         modelBuilder.Entity<RobotLog>(entity =>
@@ -100,14 +97,14 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("BOOK");
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => x.Isbn).IsUnique();
+            entity.Property(x => x.Isbn).HasMaxLength(450);
             entity.HasOne<BookCategory>().WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.NoAction);
         });
         modelBuilder.Entity<BookItem>(entity =>
         {
             entity.ToTable("BOOK_ITEM");
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => x.Barcode).IsUnique();
+            entity.Property(x => x.Barcode).HasMaxLength(450);
             entity.HasOne<Book>().WithMany().HasForeignKey(x => x.BookId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.ExpectedShelfLevelId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.CurrentShelfLevelId).OnDelete(DeleteBehavior.NoAction);
@@ -119,6 +116,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.ToTable("MAP");
             entity.HasKey(x => x.Id);
             entity.HasOne<Floor>().WithMany().HasForeignKey(x => x.FloorId).OnDelete(DeleteBehavior.NoAction);
+            entity.Ignore(x => x.CreatedAtUtc).Ignore(x => x.UpdatedAtUtc);
         });
         modelBuilder.Entity<Floor>(entity =>
         {
@@ -131,7 +129,6 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.HasKey(x => x.Id);
             entity.HasOne<LibraryMap>().WithMany().HasForeignKey(x => x.MapId).OnDelete(DeleteBehavior.NoAction);
         });
-        modelBuilder.Ignore<Area>();
         modelBuilder.Entity<Aisle>(entity =>
         {
             entity.ToTable("AISLE");
@@ -142,8 +139,6 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("SHELF");
             entity.HasKey(x => x.Id);
-            entity.Ignore(x => x.Code);
-            entity.Ignore(x => x.EndpointId);
             entity.HasOne<Aisle>().WithMany().HasForeignKey(x => x.AisleId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.StartEndpointId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.EndEndpointId).OnDelete(DeleteBehavior.NoAction);
@@ -158,7 +153,6 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("ENDPOINT");
             entity.HasKey(x => x.Id);
-            entity.Property(x => x.EndpointType).HasDefaultValue("WAYPOINT");
             entity.HasOne<LibraryMap>().WithMany().HasForeignKey(x => x.MapId).OnDelete(DeleteBehavior.NoAction);
         });
         modelBuilder.Entity<EndpointGroup>(entity =>
@@ -172,7 +166,6 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.HasKey(x => x.Id);
             entity.HasOne<EndpointGroup>().WithMany().HasForeignKey(x => x.EndpointGroupId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.EndpointId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasIndex(x => new { x.EndpointGroupId, x.EndpointId }).IsUnique();
         });
 
         modelBuilder.Entity<Mission>(entity =>
@@ -187,9 +180,11 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("JOB_TASK");
             entity.HasKey(x => x.Id);
+            entity.Ignore(x => x.Description);
             entity.Ignore(x => x.RuntimeId);
             entity.Ignore(x => x.ExecutionId);
             entity.Ignore(x => x.ExecutionState);
+            entity.Property(x => x.PersistencePayload).HasColumnName("Description");
             entity.Property(x => x.Name).IsRequired();
             entity.Property(x => x.Status).IsRequired();
             entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
@@ -231,6 +226,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("WORKFLOW");
             entity.HasKey(x => x.Id);
+            entity.Ignore(x => x.IsActive);
         });
         modelBuilder.Entity<WorkflowTask>(entity =>
         {
@@ -285,12 +281,13 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.DetectedShelfLevelId).OnDelete(DeleteBehavior.NoAction);
         });
 
-        // Logical ERD deliberately omits audit columns from these entities.
+        // Keep the EF schema limited to the columns defined in the SQL ERD.
         IgnoreAuditColumns<BookCategory, Book, BookItem, Aisle, Floor, Shelf, ShelfLevel, Endpoint,
             EndpointGroup, EndpointGroupMember, Feedback, JobTask, JobStep, BookReceipt, BookReceiptDetail,
             BookIssue, BookIssueDetail, InventoryReportDetail>(modelBuilder);
         IgnoreUpdatedAt<AuditLog, Notification, Zone, WorkflowTask, TaskStep, InventoryReport, PatrolReport>(modelBuilder);
         IgnoreAuditColumns<RobotLog>(modelBuilder);
+        modelBuilder.Entity<JobEvent>().Ignore(x => x.CreatedAtUtc).Ignore(x => x.UpdatedAtUtc);
     }
 
     private static void IgnoreAuditColumns<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18>(ModelBuilder modelBuilder)

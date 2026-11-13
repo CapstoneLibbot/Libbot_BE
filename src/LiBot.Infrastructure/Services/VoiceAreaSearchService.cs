@@ -14,11 +14,12 @@ public sealed class VoiceAreaSearchService(LiBotDbContext db) : IVoiceAreaSearch
     {
         var term = query.Trim().ToLowerInvariant();
         var areas =
-            from area in db.Areas.AsNoTracking()
-            join floor in db.Floors.AsNoTracking() on area.FloorId equals floor.Id
-            where area.Name.ToLower().Contains(term) ||
-                  (area.Description != null && area.Description.ToLower().Contains(term))
-            select new { area.Name, FloorName = floor.Name, floor.FloorNumber };
+            from endpoint in db.Endpoints.AsNoTracking()
+            join map in db.Maps.AsNoTracking() on endpoint.MapId equals map.Id
+            join floor in db.Floors.AsNoTracking() on map.FloorId equals floor.Id
+            where endpoint.IsActive && endpoint.EndpointType == "WAYPOINT"
+                  && endpoint.Name.ToLower().Contains(term)
+            select new { endpoint.Name, FloorName = floor.Name, floor.FloorNumber };
 
         var totalMatches = await areas.CountAsync(cancellationToken);
         var results = await areas

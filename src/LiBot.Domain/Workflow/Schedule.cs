@@ -13,8 +13,16 @@ public class Schedule : Entity
     public TimeOnly ScheduleTime { get; private set; }
     public DateOnly StartDate { get; private set; }
     public DateOnly? EndDate { get; private set; }
+    [System.ComponentModel.DataAnnotations.Schema.Column("LastRunAt")]
     public DateTime? LastRunAtUtc { get; private set; }
+    [System.ComponentModel.DataAnnotations.Schema.Column("NextRunAt")]
     public DateTime? NextRunAtUtc { get; private set; }
+
+    private Schedule()
+    {
+        Name = string.Empty;
+        ScheduleType = string.Empty;
+    }
 
     public Schedule(string name, string? data, string scheduleType, TimeOnly scheduleTime, DateOnly startDate,
         DateOnly? endDate = null, Guid? createdBy = null, Guid workflowId = default, bool isActive = true)

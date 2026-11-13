@@ -4,7 +4,7 @@ namespace LiBot.Domain.Library;
 
 public class LibraryMap : Entity
 {
-    public Guid? FloorId { get; private set; }
+    public Guid FloorId { get; private set; }
     public string Name { get; private set; }
     public string Version { get; private set; }
     public int Width { get; private set; }
@@ -13,7 +13,7 @@ public class LibraryMap : Entity
     public string Status { get; private set; }
 
     public LibraryMap(string name, string version, int width, int height, string mapData,
-        Guid? floorId = null, string status = "Active")
+        Guid floorId, string status = "Active")
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Map name is required.", nameof(name));
@@ -23,6 +23,8 @@ public class LibraryMap : Entity
             throw new ArgumentOutOfRangeException(nameof(height));
         if (mapData is null)
             throw new ArgumentNullException(nameof(mapData));
+        if (floorId == Guid.Empty)
+            throw new ArgumentException("Floor id is required.", nameof(floorId));
         if (string.IsNullOrWhiteSpace(status))
             throw new ArgumentException("Map status is required.", nameof(status));
 
@@ -36,7 +38,7 @@ public class LibraryMap : Entity
     }
 
     public void Update(string name, string version, int width, int height, string mapData,
-        Guid? floorId = null, string status = "Active")
+        Guid floorId, string status = "Active")
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Map name is required.", nameof(name));
@@ -46,6 +48,8 @@ public class LibraryMap : Entity
             throw new ArgumentOutOfRangeException(nameof(height));
         if (mapData is null)
             throw new ArgumentNullException(nameof(mapData));
+        if (floorId == Guid.Empty)
+            throw new ArgumentException("Floor id is required.", nameof(floorId));
         if (string.IsNullOrWhiteSpace(status))
             throw new ArgumentException("Map status is required.", nameof(status));
 
@@ -59,5 +63,10 @@ public class LibraryMap : Entity
         SetUpdated();
     }
 
-    public void AssignFloor(Guid? floorId) => FloorId = floorId;
+    public void AssignFloor(Guid floorId)
+    {
+        if (floorId == Guid.Empty)
+            throw new ArgumentException("Floor id is required.", nameof(floorId));
+        FloorId = floorId;
+    }
 }

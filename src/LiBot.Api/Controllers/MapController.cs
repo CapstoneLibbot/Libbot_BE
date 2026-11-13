@@ -122,8 +122,7 @@ public class MapController(
         var activeZones = (await zones.GetAllAsync(cancellationToken))
             .Where(zone => zone.MapId == id && zone.IsActive)
             .Select(zone => new NavigationZonePolicy(
-                zone.ZoneType, zone.MinX, zone.MinY, zone.MaxX, zone.MaxY, zone.MaxSpeed,
-                zone.Width, zone.Height, zone.RotationAngle))
+                zone.ZoneType, zone.MinX, zone.MinY, zone.MaxX, zone.MaxY, zone.MaxSpeed))
             .ToList();
         var expectedZoneCounts = activeZones
             .GroupBy(zone => zone.ZoneType.Trim(), StringComparer.OrdinalIgnoreCase)

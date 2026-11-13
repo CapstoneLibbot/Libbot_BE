@@ -9,8 +9,10 @@ public class JobStep : Entity
     public int Sequence { get; private set; }
     public string StepType { get; private set; }
     public string Status { get; private set; }
+    public string? Description { get; private set; }
 
-    public JobStep(Guid jobTaskId, Guid taskStepId, int sequence, string stepType, string status = "Pending")
+    public JobStep(Guid jobTaskId, Guid taskStepId, int sequence, string stepType, string status = "Pending",
+        string? description = null)
     {
         if (jobTaskId == Guid.Empty)
             throw new ArgumentException("Job task id is required.", nameof(jobTaskId));
@@ -28,5 +30,6 @@ public class JobStep : Entity
         Sequence = sequence;
         StepType = stepType.Trim();
         Status = status.Trim();
+        Description = description?.Trim();
     }
 }

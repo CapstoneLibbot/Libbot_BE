@@ -40,6 +40,10 @@ public sealed class MissionDataRepository(LiBotDbContext db) : IMissionDataRepos
     public Task<bool> RobotExistsAsync(Guid id, CancellationToken cancellationToken) =>
         db.Robots.AsNoTracking().AnyAsync(item => item.Id == id, cancellationToken);
 
+    public Task<Guid?> GetRobotIdByMapAsync(Guid mapId, CancellationToken cancellationToken) =>
+        db.Robots.AsNoTracking().Where(item => item.MapId == mapId)
+            .OrderBy(item => item.Id).Select(item => (Guid?)item.Id).FirstOrDefaultAsync(cancellationToken);
+
     public Task<string?> GetRobotNameAsync(Guid id, CancellationToken cancellationToken) =>
         db.Robots.AsNoTracking().Where(item => item.Id == id).Select(item => item.Name).FirstOrDefaultAsync(cancellationToken);
 
@@ -50,12 +54,18 @@ public sealed class MissionDataRepository(LiBotDbContext db) : IMissionDataRepos
         string? initialContext, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        if (mission.WorkflowId != workflowId)
+            throw new InvalidOperationException("Mission workflow id must match the workflow being created.");
+        var primaryWorkflowTask = await db.WorkflowTasks.AsNoTracking()
+            .Where(item => item.WorkflowId == workflowId)
+            .OrderBy(item => item.SequenceNumber)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new InvalidOperationException("A mission workflow must contain at least one task.");
         await db.Jobs.AddAsync(mission, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         var workflowTasks = await db.WorkflowTasks.Where(item => item.WorkflowId == workflowId)
             .OrderBy(item => item.SequenceNumber).ToListAsync(cancellationToken);
-        var primaryWorkflowTask = workflowTasks.FirstOrDefault();
-        var jobTask = new JobTask(mission.Id, primaryWorkflowTask?.Id, primaryWorkflowTask?.Name ?? mission.Name, runtimeId);
+        var jobTask = new JobTask(mission.Id, primaryWorkflowTask.Id, primaryWorkflowTask.Name, runtimeId);
         await db.JobTasks.AddAsync(jobTask, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         var taskIds = workflowTasks.Select(item => item.Id).ToArray();
@@ -96,9 +106,12 @@ public sealed class MissionDataRepository(LiBotDbContext db) : IMissionDataRepos
             .Where(item => workflowTaskIds.Contains(item.WorkflowTaskId)).OrderBy(item => item.CreatedAtUtc)
             .ToListAsync(cancellationToken);
         var primaryWorkflowTaskId = workflowTaskIds.FirstOrDefault();
-        var primaryWorkflowTask = primaryWorkflowTaskId == Guid.Empty ? null
-            : await db.WorkflowTasks.AsNoTracking().FirstOrDefaultAsync(item => item.Id == primaryWorkflowTaskId, cancellationToken);
-        var jobTask = new JobTask(missionId, primaryWorkflowTask?.Id, primaryWorkflowTask?.Name ?? "Mission task", runtimeId);
+        if (primaryWorkflowTaskId == Guid.Empty)
+            throw new InvalidOperationException("A mission workflow must contain at least one task.");
+        var primaryWorkflowTask = await db.WorkflowTasks.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == primaryWorkflowTaskId, cancellationToken)
+            ?? throw new InvalidOperationException("The primary workflow task was not found.");
+        var jobTask = new JobTask(missionId, primaryWorkflowTask.Id, primaryWorkflowTask.Name, runtimeId);
         await db.JobTasks.AddAsync(jobTask, cancellationToken);
         var stepsByTask = workflowSteps.GroupBy(item => item.WorkflowTaskId)
             .ToDictionary(group => group.Key, group => group.ToList());
@@ -112,6 +125,10 @@ public sealed class MissionDataRepository(LiBotDbContext db) : IMissionDataRepos
         await db.SaveChangesAsync(cancellationToken);
         return jobTask;
     }
+
+    public Task<Guid?> GetPrimaryWorkflowTaskIdAsync(Guid workflowId, CancellationToken cancellationToken) =>
+        db.WorkflowTasks.AsNoTracking().Where(item => item.WorkflowId == workflowId)
+            .OrderBy(item => item.SequenceNumber).Select(item => (Guid?)item.Id).FirstOrDefaultAsync(cancellationToken);
 
     public async Task<IReadOnlyList<string?>> GetWorkflowStepEventDataAsync(Guid missionId,
         CancellationToken cancellationToken) =>
