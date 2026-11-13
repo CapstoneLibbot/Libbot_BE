@@ -6,6 +6,7 @@ public class ShelfWriteRequest(Guid AisleId, Guid StartEndpointId, Guid EndEndpo
     public Guid AisleId { get; } = AisleId;
     public Guid StartEndpointId { get; } = StartEndpointId;
     public Guid EndEndpointId { get; } = EndEndpointId;
+    public Guid? EndpointId => StartEndpointId == Guid.Empty ? null : StartEndpointId;
     public string Name { get; } = Name;
     public string? Description { get; } = Description;
     public string Status { get; } = Status;

@@ -1,4 +1,5 @@
 using LiBot.Domain.Common;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace LiBot.Domain.Library;
 
@@ -10,12 +11,15 @@ public class Book : Entity
     public string Author { get; private set; }
     public string? Publisher { get; private set; }
     public int? PublicationYear { get; private set; }
-    [System.ComponentModel.DataAnnotations.Schema.Column("ImageUrl")]
-    public string? Image { get; private set; }
+    public string? ImageUrl { get; private set; }
     public string? Description { get; private set; }
 
+    [NotMapped]
+    public string? Image => ImageUrl;
+
     public Book(string isbn, string title, string author, Guid? categoryId = null,
-        string? publisher = null, int? publicationYear = null, string? image = null, string? description = null)
+        string? publisher = null, int? publicationYear = null, string? imageUrl = null,
+        string? description = null)
     {
         if (string.IsNullOrWhiteSpace(isbn))
             throw new ArgumentException("ISBN is required.", nameof(isbn));
@@ -32,12 +36,13 @@ public class Book : Entity
         CategoryId = categoryId;
         Publisher = publisher?.Trim();
         PublicationYear = publicationYear;
-        Image = image?.Trim();
+        ImageUrl = imageUrl?.Trim();
         Description = description?.Trim();
     }
 
     public void Update(string isbn, string title, string author, Guid? categoryId = null,
-        string? publisher = null, int? publicationYear = null, string? image = null, string? description = null)
+        string? publisher = null, int? publicationYear = null, string? imageUrl = null,
+        string? description = null)
     {
         if (string.IsNullOrWhiteSpace(isbn))
             throw new ArgumentException("ISBN is required.", nameof(isbn));
@@ -54,7 +59,7 @@ public class Book : Entity
         CategoryId = categoryId;
         Publisher = publisher?.Trim();
         PublicationYear = publicationYear;
-        Image = image?.Trim();
+        ImageUrl = imageUrl?.Trim();
         Description = description?.Trim();
         SetUpdated();
     }

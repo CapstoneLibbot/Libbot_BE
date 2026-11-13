@@ -117,8 +117,9 @@ public sealed class FacilityGuidanceService(
             return new FacilityGuidanceStartResult(Guid.Empty, null, default, false);
         }
 
-        var mission = new Mission("Search & Guide to Facility", $"Reader facility search: {request.Query.Trim()}",
-            request.RobotId, loadedWorkflow.Id);
+        var mission = new Mission("Search & Guide to Facility", $"Reader facility search: {request.Query.Trim()}");
+        mission.AssignRobot(request.RobotId);
+        mission.Update(mission.Name, mission.Description, mission.Priority, loadedWorkflow.Id);
         mission.Start();
         var runtimeId = string.IsNullOrWhiteSpace(request.RuntimeId)
             ? "real"

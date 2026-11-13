@@ -16,8 +16,7 @@ public sealed class ShelfController(
     [HttpPost]
     public override async Task<IActionResult> Create(ShelfDto dto, CancellationToken cancellationToken)
     {
-        if (await endpoints.GetByIdAsync(dto.StartEndpointId, cancellationToken) is null
-            || await endpoints.GetByIdAsync(dto.EndEndpointId, cancellationToken) is null)
+        if (dto.EndpointId is Guid endpointId && await endpoints.GetByIdAsync(endpointId, cancellationToken) is null)
             return BadRequest(new { message = "Endpoint was not found." });
 
         return await base.Create(dto, cancellationToken);
@@ -26,8 +25,7 @@ public sealed class ShelfController(
     [HttpPut("{id:guid}")]
     public override async Task<IActionResult> Update(Guid id, ShelfDto dto, CancellationToken cancellationToken)
     {
-        if (await endpoints.GetByIdAsync(dto.StartEndpointId, cancellationToken) is null
-            || await endpoints.GetByIdAsync(dto.EndEndpointId, cancellationToken) is null)
+        if (dto.EndpointId is Guid endpointId && await endpoints.GetByIdAsync(endpointId, cancellationToken) is null)
             return BadRequest(new { message = "Endpoint was not found." });
 
         return await base.Update(id, dto, cancellationToken);

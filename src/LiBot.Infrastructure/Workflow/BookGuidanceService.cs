@@ -112,8 +112,9 @@ public sealed class BookGuidanceService(
             return new BookGuidanceStartResult(Guid.Empty, null, default, false);
         }
 
-        var mission = new Mission("Search & Guide to Book", $"Reader search: {request.Query.Trim()}",
-            request.RobotId, loadedWorkflow.Id);
+        var mission = new Mission("Search & Guide to Book", $"Reader search: {request.Query.Trim()}");
+        mission.AssignRobot(request.RobotId);
+        mission.Update(mission.Name, mission.Description, mission.Priority, loadedWorkflow.Id);
         mission.Start();
         var runtimeId = string.IsNullOrWhiteSpace(request.RuntimeId)
             ? "sim"

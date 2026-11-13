@@ -1,25 +1,31 @@
 namespace LiBot.Application.Models.Endpoint;
 
-public class EndpointResponse(
-    Guid Id,
-    Guid MapId,
-    string Name,
-    string? Description,
-    string EndpointType,
-    double PositionX,
-    double PositionY,
-    double Theta,
-    bool IsActive,
-    EndpointMapResponse? Map = null)
+public class EndpointResponse
 {
-    public Guid Id { get; } = Id;
-    public Guid MapId { get; } = MapId;
-    public string Name { get; } = Name;
-    public string? Description { get; } = Description;
-    public string EndpointType { get; } = EndpointType;
-    public double PositionX { get; } = PositionX;
-    public double PositionY { get; } = PositionY;
-    public double Theta { get; } = Theta;
-    public bool IsActive { get; } = IsActive;
-    public EndpointMapResponse? Map { get; } = Map;
+    public EndpointResponse(Guid id, Guid mapId, string name, string? description, string endpointType,
+        double positionX, double positionY, double theta, bool isActive, EndpointMapResponse? map = null)
+        : this(id, mapId, name, positionX, positionY, theta, isActive, description, endpointType,
+            default, null, map) { }
+
+    public EndpointResponse(Guid id, Guid mapId, string name, double positionX, double positionY, double theta,
+        bool isActive, string? description, string? endpointType, DateTime createdAtUtc, DateTime? updatedAtUtc,
+        EndpointMapResponse? map = null)
+    {
+        Id = id; MapId = mapId; Name = name; Description = description; EndpointType = endpointType ?? string.Empty;
+        PositionX = positionX; PositionY = positionY; Theta = theta; IsActive = isActive;
+        CreatedAtUtc = createdAtUtc; UpdatedAtUtc = updatedAtUtc; Map = map;
+    }
+
+    public Guid Id { get; }
+    public Guid MapId { get; }
+    public string Name { get; }
+    public string? Description { get; }
+    public string EndpointType { get; }
+    public double PositionX { get; }
+    public double PositionY { get; }
+    public double Theta { get; }
+    public bool IsActive { get; }
+    public DateTime CreatedAtUtc { get; }
+    public DateTime? UpdatedAtUtc { get; }
+    public EndpointMapResponse? Map { get; }
 }

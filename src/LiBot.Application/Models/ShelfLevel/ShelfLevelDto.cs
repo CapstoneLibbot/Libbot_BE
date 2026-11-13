@@ -9,5 +9,5 @@ public class ShelfLevelDto : LibraryResourceDto<ShelfLevelEntity>
     public string Name { get; set; } = string.Empty;
     public int LevelNumber { get; set; }
     public string Status { get; set; } = "Active";
-    public override ShelfLevelEntity ToEntity() => new(ShelfId, LevelNumber, Name, Status);
+    public override ShelfLevelEntity ToEntity() => new(ShelfId, LevelNumber, Name, Enum.Parse<LiBot.Domain.Enums.ShelfStatus>(Status, true));
 }

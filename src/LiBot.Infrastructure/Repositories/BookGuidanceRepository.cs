@@ -52,7 +52,7 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
                 item.Book.Title,
                 item.Book.Author,
                 item.CategoryName,
-                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == "Available"),
+                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == LiBot.Domain.Enums.BookItemStatus.Available),
                 item.Book.Image))
             .ToListAsync(cancellationToken);
 
@@ -94,24 +94,20 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
             join shelf in db.Shelves.AsNoTracking() on level.ShelfId equals shelf.Id
             join aisle in db.Aisles.AsNoTracking() on shelf.AisleId equals aisle.Id
             join floor in db.Floors.AsNoTracking() on aisle.FloorId equals floor.Id
-            join endpoint in db.Endpoints.AsNoTracking().Where(item => item.IsActive)
-                on shelf.StartEndpointId equals endpoint.Id into endpoints
-            from endpoint in endpoints.DefaultIfEmpty()
             where copy.BookId == bookId
             select new
             {
                 copy.Id,
                 Location = new BookLocation(
                     floor.Id, floor.Name, floor.FloorNumber, aisle.Id, aisle.Name, aisle.Name,
-                    shelf.Id, shelf.Name, shelf.Name, level.Id, level.LevelNumber,
-                    endpoint == null ? null : new NavigationEndpoint(
-                        endpoint.Id, endpoint.Name, endpoint.PositionX, endpoint.PositionY, endpoint.Theta))
+                    shelf.Id, shelf.Code, shelf.Name, level.Id, level.LevelNumber,
+                    null)
             })
             .ToDictionaryAsync(item => item.Id, item => item.Location, cancellationToken);
 
         var bookItems = copies
             .Select(copy => new BookGuidanceBookItem(
-                copy.Id, copy.Barcode, copy.Status, locationsByCopyId.GetValueOrDefault(copy.Id)))
+                copy.Id, copy.Barcode, copy.Status.ToString(), locationsByCopyId.GetValueOrDefault(copy.Id)))
             .ToList();
 
         return new BookGuidanceDetail(
@@ -138,7 +134,7 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
     {
         var query = db.Feedback.AsNoTracking();
         if (taskId.HasValue) query = query.Where(item => item.JobId == taskId.Value);
-        return await query.OrderByDescending(item => item.Id)
+        return await query.OrderByDescending(item => item.CreatedAtUtc)
             .Select(item => new FeedbackResponse(item.Id, item.JobId, item.Rating, item.Comment))
             .ToListAsync(cancellationToken);
     }

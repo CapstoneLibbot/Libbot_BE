@@ -31,6 +31,7 @@ public class BookRepository(LiBotDbContext db) : IBookRepository
             "isbn" => descending ? source.OrderByDescending(book => book.Isbn) : source.OrderBy(book => book.Isbn),
             "author" => descending ? source.OrderByDescending(book => book.Author) : source.OrderBy(book => book.Author),
             "publicationyear" => descending ? source.OrderByDescending(book => book.PublicationYear) : source.OrderBy(book => book.PublicationYear),
+            "created" or "createdatutc" => descending ? source.OrderByDescending(book => book.CreatedAtUtc) : source.OrderBy(book => book.CreatedAtUtc),
             _ => descending ? source.OrderByDescending(book => book.Title) : source.OrderBy(book => book.Title)
         };
 
@@ -110,13 +111,16 @@ public class BookRepository(LiBotDbContext db) : IBookRepository
             book.PublicationYear,
             book.Image,
             book.Description,
+            book.CreatedAtUtc,
+            book.UpdatedAtUtc,
             book.CategoryId is Guid id && categories.TryGetValue(id, out var category)
                 ? new BookCategoryResponse(category.Id, category.Name, category.Description)
                 : null,
             expansions.Contains("items")
                 ? items.Where(item => item.BookId == book.Id)
                     .Select(item => new BookItemResponse(item.Id, item.Barcode, item.ExpectedShelfLevelId,
-                        item.CurrentShelfLevelId, item.LastInventoryAtUtc, item.Status)).ToList()
+                        item.CurrentShelfLevelId, item.LastInventoryAtUtc, item.Status.ToString(),
+                        item.CreatedAtUtc, item.UpdatedAtUtc)).ToList()
                 : null)).ToList();
     }
 }

@@ -15,6 +15,6 @@ public class ZoneDto : LibraryResourceDto<ZoneEntity>
     public double MaxX { get; set; }
     public double MaxY { get; set; }
     public bool IsActive { get; set; } = true;
-    public override ZoneEntity ToEntity() => new(MapId, Name, ZoneType, MinX, MinY, MaxX, MaxY,
-        MaxSpeed, Description);
+    public override ZoneEntity ToEntity() => new(MapId, ZoneType, MinX, MinY, MaxX, MaxY,
+        MaxSpeed, name: Name, description: Description);
 }

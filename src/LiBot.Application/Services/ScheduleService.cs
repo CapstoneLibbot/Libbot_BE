@@ -52,7 +52,7 @@ public sealed class ScheduleService(IGenericRepository<Schedule> repository) : I
             request.EndDate, request.CreatedBy);
 
     private static ScheduleResponse ToResponse(Schedule schedule) => new(
-        schedule.Id, schedule.CreatedBy, schedule.Name, schedule.Data, schedule.ScheduleType, schedule.ScheduleTime,
+        schedule.Id, schedule.CreatedBy, schedule.Name ?? schedule.ScheduleType, schedule.Data, schedule.ScheduleType, schedule.ScheduleTime,
         schedule.StartDate, schedule.EndDate, schedule.LastRunAtUtc, schedule.NextRunAtUtc,
         schedule.CreatedAtUtc, schedule.UpdatedAtUtc);
 }

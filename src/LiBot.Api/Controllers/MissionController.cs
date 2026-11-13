@@ -30,7 +30,7 @@ public class MissionController(
         foreach (var mission in missions)
         {
             var task = await missionData.GetTaskAsync(mission.Id, tracking: false, cancellationToken);
-            var robotName = await missionData.GetRobotNameAsync(mission.RobotId, cancellationToken);
+            var robotName = await missionData.GetRobotNameAsync(mission.RobotId ?? Guid.Empty, cancellationToken);
             responses.Add(ToResponse(mission, robotName, mission.RobotId, task?.RuntimeId,
                 GetTransientSimulationStatus(mission.Id, task?.RuntimeId)));
         }
@@ -44,7 +44,7 @@ public class MissionController(
         var mission = await missionData.GetMissionAsync(id, tracking: false, cancellationToken);
         if (mission is null) return NotFound();
         var task = await missionData.GetTaskAsync(id, tracking: false, cancellationToken);
-        var robot = await missionData.GetRobotNameAsync(mission.RobotId, cancellationToken);
+        var robot = await missionData.GetRobotNameAsync(mission.RobotId ?? Guid.Empty, cancellationToken);
         return Ok(ToResponse(mission, robot, mission.RobotId, task?.RuntimeId,
             GetTransientSimulationStatus(mission.Id, task?.RuntimeId)));
     }
@@ -68,7 +68,8 @@ public class MissionController(
         if (!await missionData.RobotExistsAsync(robotId, cancellationToken))
             return NotFound("Robot not found.");
         var mission = new Mission(request.Name ?? workflow.Name, request.Description ?? workflow.Description,
-            robotId, workflowId, priority: ParsePriority(request.Priority));
+            priority: ParsePriority(request.Priority));
+        mission.AssignRobot(robotId);
         mission.Update(mission.Name, mission.Description, mission.Priority, workflowId);
         var initialContextJson = request.InitialContext is { ValueKind: JsonValueKind.Object } initialContext
             ? initialContext.GetRawText()
@@ -111,7 +112,7 @@ public class MissionController(
         if (workflowId.HasValue && workflowId != mission.WorkflowId)
             return Conflict("A mission's workflow cannot be changed after creation.");
         mission.Update(request.Name ?? mission.Name, request.Description ?? mission.Description,
-            ParsePriority(request.Priority), mission.WorkflowId);
+            ParsePriority(request.Priority), mission.WorkflowId, mission.SourceEndpointId, mission.DestinationEndpointId);
         await missionData.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(mission, null, null));
     }
@@ -200,8 +201,7 @@ public class MissionController(
     {
         var mission = await missionData.GetMissionAsync(id, tracking: true, cancellationToken);
         if (mission is null) return NotFound();
-        if (mission.WorkflowId == Guid.Empty) return Conflict("Mission has no workflow.");
-        var workflowId = mission.WorkflowId;
+        if (mission.WorkflowId is not Guid workflowId) return Conflict("Mission has no workflow.");
         var jobTask = await missionData.GetTaskAsync(id, tracking: true, cancellationToken);
         var isRetry = mission.Status is "Failed" or "Cancelled";
         var requestedRuntimeId = string.IsNullOrWhiteSpace(request?.RuntimeId)
@@ -512,8 +512,9 @@ public class MissionController(
             var legacyMission = await missionData.GetMissionAsync(id, tracking: true, cancellationToken);
             if (legacyMission is null) return NotFound();
             if (legacyMission.Status == "Pending") legacyMission.Start();
+            if (legacyMission.WorkflowId is not Guid legacyWorkflowId) return Conflict("Mission has no workflow.");
             task = await missionData.CreateMissingJobTaskAsync(
-                id, legacyMission.WorkflowId, request.RuntimeId ?? "real", cancellationToken);
+                id, legacyWorkflowId, request.RuntimeId ?? "real", cancellationToken);
             task.Start();
             if (!string.IsNullOrWhiteSpace(request.ExecutionId)) task.SetExecutionId(request.ExecutionId);
             await missionData.SaveChangesAsync(cancellationToken);
@@ -662,7 +663,7 @@ public class MissionController(
 
     private static MissionResponse ToResponse(Mission mission, string? robotName, Guid? robotId, string? runtimeId = null,
         string? statusOverride = null) =>
-        new(mission.Id, mission.WorkflowId, mission.Name, mission.Description,
+        new(mission.Id, mission.WorkflowId ?? Guid.Empty, mission.Name, mission.Description,
             statusOverride ?? (mission.Status == "Pending" ? "QUEUED" : mission.Status.ToUpperInvariant()), FormatPriority(mission.Priority),
             mission.CreatedAtUtc, mission.StartedAtUtc, mission.CompletedAtUtc, robotId, robotName, runtimeId);
 

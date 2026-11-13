@@ -7,7 +7,8 @@ public class AisleQuery(
     Guid? FloorId = null,
     string SortBy = "name",
     string SortOrder = "asc",
-    string? Expand = null)
+    string? Expand = null,
+    string? Status = null)
 {
     public int Page { get; } = Page;
     public int PageSize { get; } = PageSize;
@@ -16,4 +17,5 @@ public class AisleQuery(
     public string SortBy { get; } = SortBy;
     public string SortOrder { get; } = SortOrder;
     public string? Expand { get; } = Expand;
+    public string? Status { get; } = Status;
 }

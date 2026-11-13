@@ -3,10 +3,10 @@ using LiBot.Domain.Inventory;
 using LiBot.Domain.Library;
 using LiBot.Domain.Mission;
 using LiBot.Domain.Workflow;
-using LiBot.Domain.Common;
 using Microsoft.EntityFrameworkCore;
 using RobotEntity = LiBot.Domain.Robot.Robot;
 using RobotLog = LiBot.Domain.Robot.RobotLog;
+using RobotConfigLog = LiBot.Domain.Robot.RobotConfigLog;
 
 namespace LiBot.Infrastructure.Persistence;
 
@@ -17,12 +17,14 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<RobotEntity> Robots => Set<RobotEntity>();
     public DbSet<RobotLog> RobotLogs => Set<RobotLog>();
+    public DbSet<RobotConfigLog> RobotConfigLogs => Set<RobotConfigLog>();
     public DbSet<BookCategory> BookCategories => Set<BookCategory>();
     public DbSet<Book> Books => Set<Book>();
     public DbSet<BookItem> BookItems => Set<BookItem>();
     public DbSet<LibraryMap> Maps => Set<LibraryMap>();
     public DbSet<Floor> Floors => Set<Floor>();
     public DbSet<Zone> Zones => Set<Zone>();
+    public DbSet<Area> Areas => Set<Area>();
     public DbSet<Aisle> Aisles => Set<Aisle>();
     public DbSet<Shelf> Shelves => Set<Shelf>();
     public DbSet<ShelfLevel> ShelfLevels => Set<ShelfLevel>();
@@ -44,6 +46,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
     public DbSet<BookReceiptDetail> BookReceiptDetails => Set<BookReceiptDetail>();
     public DbSet<BookIssue> BookIssues => Set<BookIssue>();
     public DbSet<BookIssueDetail> BookIssueDetails => Set<BookIssueDetail>();
+    public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<InventoryReportDetail> InventoryReportDetails => Set<InventoryReportDetail>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -54,38 +57,45 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("ACCOUNT");
             entity.HasKey(x => x.Id);
-            entity.Property(x => x.Username).HasMaxLength(450);
-            entity.Property(x => x.Email).HasMaxLength(450);
-            entity.Property(x => x.Status).HasConversion<string>();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            entity.HasIndex(x => x.Email).IsUnique();
+            entity.HasIndex(x => x.Username).IsUnique().HasFilter("[Username] IS NOT NULL");
         });
 
         modelBuilder.Entity<AuditLog>(entity =>
         {
             entity.ToTable("AUDIT_LOG");
             entity.HasKey(x => x.Id);
-            entity.HasOne<User>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<Notification>(entity =>
         {
             entity.ToTable("NOTIFICATION");
             entity.HasKey(x => x.Id);
-            entity.HasOne<User>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<RobotEntity>(entity =>
         {
             entity.ToTable("ROBOT");
             entity.HasKey(x => x.Id);
-            entity.Property(x => x.SerialNumber).HasMaxLength(450);
-            entity.HasOne<LibraryMap>().WithMany().HasForeignKey(x => x.MapId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasIndex(x => x.SerialNumber).IsUnique();
+            entity.HasOne<LibraryMap>().WithMany().HasForeignKey(x => x.MapId).OnDelete(DeleteBehavior.SetNull);
         });
         modelBuilder.Entity<RobotLog>(entity =>
         {
             entity.ToTable("ROBOT_LOG");
             entity.HasKey(x => x.Id);
-            entity.HasOne<RobotEntity>().WithMany().HasForeignKey(x => x.RobotId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasOne<LibraryMap>().WithMany().HasForeignKey(x => x.MapId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<RobotEntity>().WithMany().HasForeignKey(x => x.RobotId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<LibraryMap>().WithMany().HasForeignKey(x => x.MapId).OnDelete(DeleteBehavior.SetNull);
+        });
+        modelBuilder.Entity<RobotConfigLog>(entity =>
+        {
+            entity.ToTable("CONFIG_LOG");
+            entity.HasKey(x => x.Id);
+            entity.HasOne<RobotEntity>().WithMany().HasForeignKey(x => x.RobotId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<BookCategory>(entity =>
@@ -97,26 +107,27 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("BOOK");
             entity.HasKey(x => x.Id);
-            entity.Property(x => x.Isbn).HasMaxLength(450);
-            entity.HasOne<BookCategory>().WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasIndex(x => x.Isbn).IsUnique();
+            entity.HasOne<BookCategory>().WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.SetNull);
+            entity.Property(x => x.ImageUrl).HasColumnName("ImageUrl");
         });
         modelBuilder.Entity<BookItem>(entity =>
         {
             entity.ToTable("BOOK_ITEM");
             entity.HasKey(x => x.Id);
-            entity.Property(x => x.Barcode).HasMaxLength(450);
-            entity.HasOne<Book>().WithMany().HasForeignKey(x => x.BookId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasIndex(x => x.Barcode).IsUnique();
+            entity.HasOne<Book>().WithMany().HasForeignKey(x => x.BookId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.ExpectedShelfLevelId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.CurrentShelfLevelId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasAlternateKey(x => new { x.Id, x.BookId });
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         });
 
         modelBuilder.Entity<LibraryMap>(entity =>
         {
             entity.ToTable("MAP");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Floor>().WithMany().HasForeignKey(x => x.FloorId).OnDelete(DeleteBehavior.NoAction);
-            entity.Ignore(x => x.CreatedAtUtc).Ignore(x => x.UpdatedAtUtc);
+            entity.HasOne<Floor>().WithMany().HasForeignKey(x => x.FloorId).OnDelete(DeleteBehavior.SetNull);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         });
         modelBuilder.Entity<Floor>(entity =>
         {
@@ -127,33 +138,46 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("ZONE");
             entity.HasKey(x => x.Id);
-            entity.HasOne<LibraryMap>().WithMany().HasForeignKey(x => x.MapId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<LibraryMap>().WithMany().HasForeignKey(x => x.MapId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<Area>(entity =>
+        {
+            entity.ToTable("AREA");
+            entity.HasKey(x => x.Id);
+            entity.HasOne<Floor>().WithMany().HasForeignKey(x => x.FloorId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<Aisle>(entity =>
         {
             entity.ToTable("AISLE");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Floor>().WithMany().HasForeignKey(x => x.FloorId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<Floor>().WithMany().HasForeignKey(x => x.FloorId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+        });
+        modelBuilder.Entity<Floor>(entity =>
+        {
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         });
         modelBuilder.Entity<Shelf>(entity =>
         {
             entity.ToTable("SHELF");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Aisle>().WithMany().HasForeignKey(x => x.AisleId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.StartEndpointId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.EndEndpointId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<Aisle>().WithMany().HasForeignKey(x => x.AisleId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.EndpointId).OnDelete(DeleteBehavior.SetNull);
+            entity.Property(x => x.Status).HasMaxLength(32);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         });
         modelBuilder.Entity<ShelfLevel>(entity =>
         {
             entity.ToTable("SHELF_LEVEL");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Shelf>().WithMany().HasForeignKey(x => x.ShelfId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<Shelf>().WithMany().HasForeignKey(x => x.ShelfId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         });
         modelBuilder.Entity<Endpoint>(entity =>
         {
             entity.ToTable("ENDPOINT");
             entity.HasKey(x => x.Id);
-            entity.HasOne<LibraryMap>().WithMany().HasForeignKey(x => x.MapId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<LibraryMap>().WithMany().HasForeignKey(x => x.MapId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<EndpointGroup>(entity =>
         {
@@ -164,156 +188,133 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("ENDPOINT_GROUP_MEMBER");
             entity.HasKey(x => x.Id);
-            entity.HasOne<EndpointGroup>().WithMany().HasForeignKey(x => x.EndpointGroupId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.EndpointId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<EndpointGroup>().WithMany().HasForeignKey(x => x.EndpointGroupId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.EndpointId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.EndpointGroupId, x.EndpointId }).IsUnique();
         });
 
         modelBuilder.Entity<Mission>(entity =>
         {
             entity.ToTable("JOB");
             entity.HasKey(x => x.Id);
-            entity.Ignore(x => x.CreatedBy);
-            entity.HasOne<RobotEntity>().WithMany().HasForeignKey(x => x.RobotId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasOne<WorkflowDefinition>().WithMany().HasForeignKey(x => x.WorkflowId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.CreatedBy).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.SourceEndpointId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.DestinationEndpointId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<WorkflowDefinition>().WithMany().HasForeignKey(x => x.WorkflowId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<RobotEntity>().WithMany().HasForeignKey(x => x.RobotId).OnDelete(DeleteBehavior.SetNull);
         });
         modelBuilder.Entity<JobTask>(entity =>
         {
             entity.ToTable("JOB_TASK");
             entity.HasKey(x => x.Id);
-            entity.Ignore(x => x.Description);
-            entity.Ignore(x => x.RuntimeId);
-            entity.Ignore(x => x.ExecutionId);
-            entity.Ignore(x => x.ExecutionState);
-            entity.Property(x => x.PersistencePayload).HasColumnName("Description");
-            entity.Property(x => x.Name).IsRequired();
-            entity.Property(x => x.Status).IsRequired();
-            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasOne<WorkflowTask>().WithMany().HasForeignKey(x => x.WorkflowTaskId).OnDelete(DeleteBehavior.NoAction);
+            entity.Property(x => x.RuntimeId).HasMaxLength(32).HasDefaultValue("real");
+            entity.Property(x => x.ExecutionId).HasMaxLength(64);
+            entity.Property(x => x.ExecutionState).HasColumnType("nvarchar(max)");
+            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<RobotEntity>().WithMany().HasForeignKey(x => x.RobotId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<WorkflowTask>().WithMany().HasForeignKey(x => x.WorkflowTaskId).OnDelete(DeleteBehavior.SetNull);
         });
         modelBuilder.Entity<JobStep>(entity =>
         {
             entity.ToTable("JOB_STEP");
             entity.HasKey(x => x.Id);
-            entity.HasOne<JobTask>().WithMany().HasForeignKey(x => x.JobTaskId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<JobTask>().WithMany().HasForeignKey(x => x.JobTaskId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<TaskStep>().WithMany().HasForeignKey(x => x.TaskStepId).OnDelete(DeleteBehavior.NoAction);
         });
         modelBuilder.Entity<JobEvent>(entity =>
         {
             entity.ToTable("JOB_EVENT");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<Feedback>(entity =>
         {
             entity.ToTable("FEEDBACK");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<InventoryReport>(entity =>
         {
             entity.ToTable("INVENTORY_REPORT");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<Floor>().WithMany().HasForeignKey(x => x.FloorId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.SetNull);
         });
         modelBuilder.Entity<PatrolReport>(entity =>
         {
             entity.ToTable("PATROL_REPORT");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<WorkflowDefinition>(entity =>
         {
             entity.ToTable("WORKFLOW");
             entity.HasKey(x => x.Id);
-            entity.Ignore(x => x.IsActive);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         });
         modelBuilder.Entity<WorkflowTask>(entity =>
         {
             entity.ToTable("WORKFLOW_TASK");
             entity.HasKey(x => x.Id);
-            entity.HasOne<WorkflowDefinition>().WithMany().HasForeignKey(x => x.WorkflowId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<WorkflowDefinition>().WithMany().HasForeignKey(x => x.WorkflowId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<TaskStep>(entity =>
         {
             entity.ToTable("TASK_STEP");
             entity.HasKey(x => x.Id);
-            entity.HasOne<WorkflowTask>().WithMany().HasForeignKey(x => x.WorkflowTaskId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<WorkflowTask>().WithMany().HasForeignKey(x => x.WorkflowTaskId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<Schedule>(entity =>
         {
             entity.ToTable("SCHEDULE");
             entity.HasKey(x => x.Id);
-            entity.Ignore(x => x.CreatedBy);
-            entity.HasOne<WorkflowDefinition>().WithMany().HasForeignKey(x => x.WorkflowId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.CreatedBy).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<WorkflowDefinition>().WithMany().HasForeignKey(x => x.WorkflowId).OnDelete(DeleteBehavior.SetNull);
         });
-
         modelBuilder.Entity<BookReceipt>(entity =>
         {
-            entity.ToTable("BOOK_RECEIPT"); entity.HasKey(x => x.Id);
+            entity.ToTable("BOOK_RECEIPT");
+            entity.HasKey(x => x.Id);
         });
         modelBuilder.Entity<BookReceiptDetail>(entity =>
         {
-            entity.ToTable("BOOK_RECEIPT_DETAIL"); entity.HasKey(x => x.Id);
+            entity.ToTable("BOOK_RECEIPT_DETAIL");
+            entity.HasKey(x => x.Id);
             entity.HasOne<BookReceipt>().WithMany().HasForeignKey(x => x.ReceiptId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<Book>().WithMany().HasForeignKey(x => x.BookId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasOne<BookItem>().WithMany().HasForeignKey(x => new { x.BookItemId, x.BookId }).HasPrincipalKey(x => new { x.Id, x.BookId }).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<BookItem>().WithMany().HasForeignKey(x => new { x.BookItemId, x.BookId })
+                .HasPrincipalKey(x => new { x.Id, x.BookId }).OnDelete(DeleteBehavior.NoAction);
             entity.HasIndex(x => new { x.ReceiptId, x.BookItemId }).IsUnique();
         });
         modelBuilder.Entity<BookIssue>(entity =>
         {
-            entity.ToTable("BOOK_ISSUE"); entity.HasKey(x => x.Id);
+            entity.ToTable("BOOK_ISSUE");
+            entity.HasKey(x => x.Id);
         });
         modelBuilder.Entity<BookIssueDetail>(entity =>
         {
-            entity.ToTable("BOOK_ISSUE_DETAIL"); entity.HasKey(x => x.Id);
+            entity.ToTable("BOOK_ISSUE_DETAIL");
+            entity.HasKey(x => x.Id);
             entity.HasOne<BookIssue>().WithMany().HasForeignKey(x => x.IssueId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<Book>().WithMany().HasForeignKey(x => x.BookId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasOne<BookItem>().WithMany().HasForeignKey(x => new { x.BookItemId, x.BookId }).HasPrincipalKey(x => new { x.Id, x.BookId }).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<BookItem>().WithMany().HasForeignKey(x => new { x.BookItemId, x.BookId })
+                .HasPrincipalKey(x => new { x.Id, x.BookId }).OnDelete(DeleteBehavior.NoAction);
             entity.HasIndex(x => new { x.IssueId, x.BookItemId }).IsUnique();
+        });
+        modelBuilder.Entity<InventoryItem>(entity =>
+        {
+            entity.ToTable("INVENTORY_ITEM");
+            entity.HasKey(x => x.Id);
         });
         modelBuilder.Entity<InventoryReportDetail>(entity =>
         {
-            entity.ToTable("INVENTORY_REPORT_DETAIL"); entity.HasKey(x => x.Id);
+            entity.ToTable("INVENTORY_REPORT_DETAIL");
+            entity.HasKey(x => x.Id);
             entity.HasOne<InventoryReport>().WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<BookItem>().WithMany().HasForeignKey(x => x.BookItemId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.ExpectedShelfLevelId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.DetectedShelfLevelId).OnDelete(DeleteBehavior.NoAction);
         });
-
-        // Keep the EF schema limited to the columns defined in the SQL ERD.
-        IgnoreAuditColumns<BookCategory, Book, BookItem, Aisle, Floor, Shelf, ShelfLevel, Endpoint,
-            EndpointGroup, EndpointGroupMember, Feedback, JobTask, JobStep, BookReceipt, BookReceiptDetail,
-            BookIssue, BookIssueDetail, InventoryReportDetail>(modelBuilder);
-        IgnoreUpdatedAt<AuditLog, Notification, Zone, WorkflowTask, TaskStep, InventoryReport, PatrolReport>(modelBuilder);
-        IgnoreAuditColumns<RobotLog>(modelBuilder);
-        modelBuilder.Entity<JobEvent>().Ignore(x => x.CreatedAtUtc).Ignore(x => x.UpdatedAtUtc);
     }
-
-    private static void IgnoreAuditColumns<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18>(ModelBuilder modelBuilder)
-        where T1 : Entity where T2 : Entity where T3 : Entity where T4 : Entity where T5 : Entity where T6 : Entity
-        where T7 : Entity where T8 : Entity where T9 : Entity where T10 : Entity where T11 : Entity where T12 : Entity
-        where T13 : Entity where T14 : Entity where T15 : Entity where T16 : Entity where T17 : Entity where T18 : Entity
-    {
-        IgnoreAuditColumns<T1>(modelBuilder); IgnoreAuditColumns<T2>(modelBuilder); IgnoreAuditColumns<T3>(modelBuilder);
-        IgnoreAuditColumns<T4>(modelBuilder); IgnoreAuditColumns<T5>(modelBuilder); IgnoreAuditColumns<T6>(modelBuilder);
-        IgnoreAuditColumns<T7>(modelBuilder); IgnoreAuditColumns<T8>(modelBuilder); IgnoreAuditColumns<T9>(modelBuilder);
-        IgnoreAuditColumns<T10>(modelBuilder); IgnoreAuditColumns<T11>(modelBuilder); IgnoreAuditColumns<T12>(modelBuilder);
-        IgnoreAuditColumns<T13>(modelBuilder); IgnoreAuditColumns<T14>(modelBuilder); IgnoreAuditColumns<T15>(modelBuilder);
-        IgnoreAuditColumns<T16>(modelBuilder); IgnoreAuditColumns<T17>(modelBuilder); IgnoreAuditColumns<T18>(modelBuilder);
-    }
-
-    private static void IgnoreAuditColumns<T>(ModelBuilder modelBuilder) where T : Entity
-    {
-        modelBuilder.Entity<T>().Ignore(x => x.CreatedAtUtc).Ignore(x => x.UpdatedAtUtc);
-    }
-
-    private static void IgnoreUpdatedAt<T1, T2, T3, T4, T5, T6, T7>(ModelBuilder modelBuilder)
-        where T1 : Entity where T2 : Entity where T3 : Entity where T4 : Entity where T5 : Entity where T6 : Entity where T7 : Entity
-    {
-        IgnoreUpdatedAt<T1>(modelBuilder); IgnoreUpdatedAt<T2>(modelBuilder); IgnoreUpdatedAt<T3>(modelBuilder);
-        IgnoreUpdatedAt<T4>(modelBuilder); IgnoreUpdatedAt<T5>(modelBuilder); IgnoreUpdatedAt<T6>(modelBuilder); IgnoreUpdatedAt<T7>(modelBuilder);
-    }
-
-    private static void IgnoreUpdatedAt<T>(ModelBuilder modelBuilder) where T : Entity => modelBuilder.Entity<T>().Ignore(x => x.UpdatedAtUtc);
 }

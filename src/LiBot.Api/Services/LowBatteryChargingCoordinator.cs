@@ -8,6 +8,7 @@ using LiBot.Application.Services.Robot;
 using LiBot.Application.Services.Workflow;
 using LiBot.Application.Workflow;
 using LiBot.Domain.Mission;
+using LiBot.Domain.Enums;
 using LiBot.Infrastructure.Persistence;
 using LiBot.Infrastructure.Robot;
 using Microsoft.AspNetCore.SignalR;
@@ -123,7 +124,7 @@ public sealed class LowBatteryChargingCoordinator(
             var missionData = scope.ServiceProvider.GetRequiredService<IMissionDataRepository>();
 
             var chargingWorkflowId = await db.Workflows.AsNoTracking()
-                .Where(item => item.Type == "ROBOT_RETURN_AND_CHARGING" && item.Status == "Active")
+                .Where(item => item.Type == "ROBOT_RETURN_AND_CHARGING" && item.Status == WorkflowStatus.Active)
                 .Select(item => (Guid?)item.Id)
                 .FirstOrDefaultAsync(cancellationToken);
 
@@ -137,18 +138,18 @@ public sealed class LowBatteryChargingCoordinator(
                 if (activeMission is not null)
                 {
                     var existingTask = await missionData.GetTaskAsync(activeMission.Id, tracking: false, cancellationToken);
-                    if (!string.IsNullOrWhiteSpace(existingTask?.ExecutionId))
+                    if (existingTask?.ExecutionId is string existingExecutionId)
                     {
                         episode.Triggered = true;
                         await PublishAutoChargeStartedAsync(new
                         {
                             missionId = activeMission.Id,
-                            executionId = existingTask.ExecutionId,
+                            executionId = existingExecutionId,
                             runtimeId = "real",
                             workflowId = existingWorkflowId,
                             batteryPercent = battery,
                             chargerEndpointId = (Guid?)null,
-                            status = existingTask.Status.ToUpperInvariant(),
+                            status = existingTask.Status?.ToUpperInvariant(),
                             queued = existingTask.Status == "Pending"
                         }, cancellationToken);
                         return;
@@ -301,9 +302,9 @@ public sealed class LowBatteryChargingCoordinator(
             var mission = new Mission(
                 "Automatic return to charger",
                 $"Battery reached {battery:0.##}%; return to CHARGER endpoint '{charger.Name}'.",
-                robotId.Value,
-                workflow.Id,
                 priority: 4);
+            mission.AssignRobot(robotId.Value);
+            mission.Update(mission.Name, mission.Description, mission.Priority, workflow.Id);
 
             var initialContext = new Dictionary<string, object?>
             {

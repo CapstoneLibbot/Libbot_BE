@@ -1,4 +1,5 @@
 using LiBot.Domain.Common;
+using LiBot.Domain.Enums;
 
 namespace LiBot.Domain.Library;
 
@@ -6,29 +7,32 @@ public class Floor : Entity
 {
     public string Name { get; private set; }
     public int FloorNumber { get; private set; }
-    public string? Description { get; private set; }
-    public string Status { get; private set; } = "Active";
+    public string? Description { get; set; }
+    public FloorStatus Status { get; set; } = LiBot.Domain.Enums.FloorStatus.Active;
 
-    public Floor(string name, int floorNumber, string? description = null, string status = "Active")
+    private Floor()
+    {
+        Name = string.Empty;
+    }
+
+    public Floor(string name, int floorNumber, string? description = null, FloorStatus status = FloorStatus.Active)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Floor name is required.", nameof(name));
-        if (string.IsNullOrWhiteSpace(status))
-            throw new ArgumentException("Floor status is required.", nameof(status));
 
         Name = name.Trim();
         FloorNumber = floorNumber;
         Description = description?.Trim();
-        Status = status.Trim();
+        Status = status;
     }
 
-    public void Update(string name, int floorNumber, string? description = null, string status = "Active")
+    public void Update(string name, int floorNumber, string? description, FloorStatus? status)
     {
-        var updated = new Floor(name, floorNumber, description, status);
-        Name = updated.Name;
-        FloorNumber = updated.FloorNumber;
-        Description = updated.Description;
-        Status = updated.Status;
+        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Floor name is required.", nameof(name));
+        Name = name.Trim();
+        FloorNumber = floorNumber;
+        Description = description?.Trim();
+        Status = status ?? LiBot.Domain.Enums.FloorStatus.Active;
         SetUpdated();
     }
 }

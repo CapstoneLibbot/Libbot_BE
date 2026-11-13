@@ -1,17 +1,20 @@
 namespace LiBot.Application.Models.Book;
 
-public class BookItemResponse(
-    Guid Id,
-    string Barcode,
-    Guid? ExpectedShelfLevelId,
-    Guid? CurrentShelfLevelId,
-    DateTime? LastInventoryAtUtc,
-    string Status)
+public class BookItemResponse
 {
-    public Guid Id { get; } = Id;
-    public string Barcode { get; } = Barcode;
-    public Guid? ExpectedShelfLevelId { get; } = ExpectedShelfLevelId;
-    public Guid? CurrentShelfLevelId { get; } = CurrentShelfLevelId;
-    public DateTime? LastInventoryAtUtc { get; } = LastInventoryAtUtc;
-    public string Status { get; } = Status;
+    public BookItemResponse(Guid id, string barcode, Guid? expectedShelfLevelId, Guid? currentShelfLevelId,
+        DateTime? lastInventoryAtUtc, string status, DateTime createdAtUtc = default, DateTime? updatedAtUtc = null)
+    {
+        Id = id; Barcode = barcode; ExpectedShelfLevelId = expectedShelfLevelId; CurrentShelfLevelId = currentShelfLevelId;
+        LastInventoryAtUtc = lastInventoryAtUtc; Status = status; CreatedAtUtc = createdAtUtc; UpdatedAtUtc = updatedAtUtc;
+    }
+
+    public Guid Id { get; }
+    public string Barcode { get; }
+    public Guid? ExpectedShelfLevelId { get; }
+    public Guid? CurrentShelfLevelId { get; }
+    public DateTime? LastInventoryAtUtc { get; }
+    public string Status { get; }
+    public DateTime CreatedAtUtc { get; }
+    public DateTime? UpdatedAtUtc { get; }
 }
