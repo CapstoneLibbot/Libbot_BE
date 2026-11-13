@@ -4,6 +4,7 @@ namespace LiBot.Application.Workflow.FacilityGuidance;
 
 public sealed record FacilityGuidanceLoadedWorkflow(
     Guid Id,
+    Guid PrimaryTaskId,
     string Type,
     string Name,
     IReadOnlyList<IReadOnlyDictionary<string, object?>> Steps);

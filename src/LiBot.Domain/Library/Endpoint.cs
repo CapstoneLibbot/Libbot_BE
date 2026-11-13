@@ -53,11 +53,14 @@ public class Endpoint : Entity
         Theta = theta;
     }
 
-    public void Update(Guid mapId, string name, double positionX, double positionY, double theta, bool isActive)
+    public void Update(Guid mapId, string name, double positionX, double positionY, double theta,
+        string? description, string endpointType, bool isActive)
     {
-        var updated = new Endpoint(mapId, name, positionX, positionY, theta, Description, EndpointType);
+        var updated = new Endpoint(mapId, name, positionX, positionY, theta, description, endpointType);
         MapId = updated.MapId;
         Name = updated.Name;
+        EndpointType = updated.EndpointType;
+        Description = updated.Description;
         PositionX = updated.PositionX;
         PositionY = updated.PositionY;
         Theta = updated.Theta;

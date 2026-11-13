@@ -15,8 +15,8 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim();
-            source = source.Where(item => EF.Functions.Like(item.Code, $"%{search}%")
-                || EF.Functions.Like(item.Name, $"%{search}%")
+            source = source.Where(item => EF.Functions.Like(item.Name, $"%{search}%")
+                || EF.Functions.Like(item.Status, $"%{search}%")
                 || (item.Description != null && EF.Functions.Like(item.Description, $"%{search}%")));
         }
 
@@ -24,8 +24,8 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
         var descending = string.Equals(query.SortOrder, "desc", StringComparison.OrdinalIgnoreCase);
         source = query.SortBy.ToLowerInvariant() switch
         {
-            "code" => descending ? source.OrderByDescending(item => item.Code) : source.OrderBy(item => item.Code),
-            "createdatutc" or "created" => descending ? source.OrderByDescending(item => item.CreatedAtUtc) : source.OrderBy(item => item.CreatedAtUtc),
+            "status" => descending ? source.OrderByDescending(item => item.Status) : source.OrderBy(item => item.Status),
+            "code" or "createdatutc" or "created" => descending ? source.OrderByDescending(item => item.Name) : source.OrderBy(item => item.Name),
             _ => descending ? source.OrderByDescending(item => item.Name) : source.OrderBy(item => item.Name)
         };
         var entities = await source.Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToListAsync(cancellationToken);
@@ -42,7 +42,7 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
 
     public async Task<AisleResponse> CreateAsync(AisleWriteRequest request, string? expand, CancellationToken cancellationToken)
     {
-        var entity = new Aisle(request.FloorId, request.Code, request.Name, request.Description);
+        var entity = new Aisle(request.FloorId, request.Name, request.Description, request.Status);
         db.Aisles.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
         return (await GetByIdAsync(entity.Id, expand, cancellationToken))!;
@@ -52,7 +52,7 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
     {
         var entity = await db.Aisles.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (entity is null) return null;
-        entity.Update(request.FloorId, request.Code, request.Name, request.Description);
+        entity.Update(request.FloorId, request.Name, request.Description, request.Status);
         await db.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(id, expand, cancellationToken);
     }
@@ -79,10 +79,9 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
             ? await db.Shelves.AsNoTracking().Where(item => aisleIds.Contains(item.AisleId)).ToListAsync(cancellationToken)
             : [];
         return entities.Select(item => new AisleResponse(
-            item.Id, item.FloorId, item.Code, item.Name, item.Description,
-            item.CreatedAtUtc, item.UpdatedAtUtc,
+            item.Id, item.FloorId, item.Name, item.Description, item.Status,
             floors.TryGetValue(item.FloorId, out var floor) ? new(floor.Id, floor.Name, floor.FloorNumber) : null,
-            expansions.Contains("shelves") ? shelves.Where(shelf => shelf.AisleId == item.Id).Select(shelf => new AisleShelfResponse(shelf.Id, shelf.Code, shelf.Name)).ToList() : null
+            expansions.Contains("shelves") ? shelves.Where(shelf => shelf.AisleId == item.Id).Select(shelf => new AisleShelfResponse(shelf.Id, shelf.Name)).ToList() : null
         )).ToList();
     }
 }

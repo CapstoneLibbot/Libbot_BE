@@ -28,14 +28,14 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
     public async Task<IReadOnlyList<SavedRobotMapResponse>> GetRobotMapsAsync(CancellationToken cancellationToken)
     {
         var maps = await repository.GetAllAsync(occupancyMaps: true, cancellationToken);
-        return maps.OrderByDescending(map => map.CreatedAtUtc).Where(IsRobotMap)
+        return maps.OrderByDescending(map => map.Version).Where(IsRobotMap)
             .Select(map => new SavedRobotMapResponse(map.Id, map.Name, map.Width, map.Height, map.Version)).ToList();
     }
 
     public async Task<SavedRobotMapResponse?> GetLatestRobotMapAsync(CancellationToken cancellationToken)
     {
         var maps = await repository.GetAllAsync(occupancyMaps: true, cancellationToken);
-        var map = maps.OrderByDescending(item => item.CreatedAtUtc).FirstOrDefault(IsRobotMap);
+        var map = maps.OrderByDescending(item => item.Version).FirstOrDefault(IsRobotMap);
         return map is null ? null : new SavedRobotMapResponse(map.Id, map.Name, map.Width, map.Height, map.Version);
     }
 
@@ -47,6 +47,8 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
 
     public async Task<MapResponse> CreateAsync(MapWriteRequest request, CancellationToken cancellationToken)
     {
+        if (request.FloorId == Guid.Empty)
+            throw new ArgumentException("floorId is required.", nameof(request));
         var map = new LibraryMap(request.Name, request.Version ?? string.Empty, request.Width, request.Height,
             request.Data?.GetRawText() ?? "{}", request.FloorId, request.Status ?? "Active");
         await repository.AddAsync(map, cancellationToken);
@@ -67,7 +69,9 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
             cells = grid.Data,
             robotPath
         });
-        var map = new LibraryMap(mapName, version, checked((int)grid.Width), checked((int)grid.Height), data);
+        var floorId = await repository.GetFirstFloorIdAsync(cancellationToken)
+            ?? throw new InvalidOperationException("Create a floor before saving a robot map.");
+        var map = new LibraryMap(mapName, version, checked((int)grid.Width), checked((int)grid.Height), data, floorId);
         await repository.AddAsync(map, cancellationToken);
         return ToResponse(map);
     }
@@ -91,7 +95,8 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
         var map = await repository.GetByIdAsync(id, tracking: true, cancellationToken);
         if (map is null) return null;
         map.Update(request.Name, request.Version ?? map.Version, request.Width, request.Height,
-            request.Data?.GetRawText() ?? map.MapData, request.FloorId ?? map.FloorId, request.Status ?? map.Status);
+            request.Data?.GetRawText() ?? map.MapData,
+            request.FloorId == Guid.Empty ? map.FloorId : request.FloorId, request.Status ?? map.Status);
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(map);
     }

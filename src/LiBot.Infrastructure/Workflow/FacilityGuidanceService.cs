@@ -103,7 +103,7 @@ public sealed class FacilityGuidanceService(
             steps.Add(definition);
         }
 
-        return new FacilityGuidanceLoadedWorkflow(workflow.Id, workflow.Type, workflow.Name, steps);
+        return new FacilityGuidanceLoadedWorkflow(workflow.Id, workflow.Tasks[0].Id, workflow.Type, workflow.Name, steps);
     }
 
     public async Task<FacilityGuidanceStartResult> StartAsync(
@@ -117,17 +117,13 @@ public sealed class FacilityGuidanceService(
             return new FacilityGuidanceStartResult(Guid.Empty, null, default, false);
         }
 
-        var mission = new Mission("Search & Guide to Facility", $"Reader facility search: {request.Query.Trim()}");
-        mission.Update(
-            mission.Name,
-            mission.Description,
-            mission.Priority,
-            loadedWorkflow.Id);
+        var mission = new Mission("Search & Guide to Facility", $"Reader facility search: {request.Query.Trim()}",
+            request.RobotId, loadedWorkflow.Id);
         mission.Start();
         var runtimeId = string.IsNullOrWhiteSpace(request.RuntimeId)
             ? "real"
             : request.RuntimeId.Trim().ToLowerInvariant();
-        var jobTask = new JobTask(mission.Id, null, mission.Name, runtimeId);
+        var jobTask = new JobTask(mission.Id, loadedWorkflow.PrimaryTaskId, mission.Name, runtimeId);
         jobTask.Start();
         jobTask.SetExecutionId(mission.Id.ToString());
         jobTask.UpdateExecutionState(JsonSerializer.Serialize(new

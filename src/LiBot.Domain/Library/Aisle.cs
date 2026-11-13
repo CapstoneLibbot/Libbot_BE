@@ -5,32 +5,32 @@ namespace LiBot.Domain.Library;
 public class Aisle : Entity
 {
     public Guid FloorId { get; private set; }
-    public string Code { get; private set; }
     public string Name { get; private set; }
     public string? Description { get; private set; }
+    public string Status { get; private set; } = "Active";
 
-    public Aisle(Guid floorId, string code, string name, string? description = null)
+    public Aisle(Guid floorId, string name, string? description = null, string status = "Active")
     {
         if (floorId == Guid.Empty)
             throw new ArgumentException("Floor id is required.", nameof(floorId));
-        if (string.IsNullOrWhiteSpace(code))
-            throw new ArgumentException("Aisle code is required.", nameof(code));
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Aisle name is required.", nameof(name));
+        if (string.IsNullOrWhiteSpace(status))
+            throw new ArgumentException("Aisle status is required.", nameof(status));
 
         FloorId = floorId;
-        Code = code.Trim();
         Name = name.Trim();
         Description = description?.Trim();
+        Status = status.Trim();
     }
 
-    public void Update(Guid floorId, string code, string name, string? description)
+    public void Update(Guid floorId, string name, string? description, string status)
     {
-        var updated = new Aisle(floorId, code, name, description);
+        var updated = new Aisle(floorId, name, description, status);
         FloorId = updated.FloorId;
-        Code = updated.Code;
         Name = updated.Name;
         Description = updated.Description;
+        Status = updated.Status;
         SetUpdated();
     }
 }

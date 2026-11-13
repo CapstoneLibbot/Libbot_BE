@@ -5,6 +5,7 @@ namespace LiBot.Domain.Workflow;
 public class WorkflowTask : Entity
 {
     public Guid WorkflowId { get; private set; }
+    [System.ComponentModel.DataAnnotations.Schema.Column("SequenceNo")]
     public int SequenceNumber { get; private set; }
     public string Name { get; private set; }
     public string? Description { get; private set; }

@@ -1,3 +1,5 @@
+using LiBot.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -6,6 +8,7 @@ namespace LiBot.Infrastructure.Persistence.Migrations;
 
 /// <summary>Corrects baseline generation defects without discarding existing data.</summary>
 [Migration("20261113000000_FixLogicalErdSchema")]
+[DbContext(typeof(LiBotDbContext))]
 public partial class FixLogicalErdSchema : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

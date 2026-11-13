@@ -7,7 +7,7 @@ public class TaskStep : Entity
     public Guid WorkflowTaskId { get; private set; }
     public int SequenceNo { get; private set; }
     public string StepType { get; private set; }
-    public string? Configuration { get; private set; }
+    public string Configuration { get; private set; }
 
     public TaskStep(Guid workflowTaskId, string stepType, string? configuration = null, int sequenceNo = 0)
     {
@@ -19,7 +19,7 @@ public class TaskStep : Entity
         WorkflowTaskId = workflowTaskId;
         SequenceNo = sequenceNo;
         StepType = stepType.Trim();
-        Configuration = configuration;
+        Configuration = configuration ?? string.Empty;
     }
 
     public void Update(string stepType, string? configuration)
@@ -27,6 +27,6 @@ public class TaskStep : Entity
         if (string.IsNullOrWhiteSpace(stepType))
             throw new ArgumentException("Step type is required.", nameof(stepType));
         StepType = stepType.Trim();
-        Configuration = configuration;
+        Configuration = configuration ?? string.Empty;
     }
 }

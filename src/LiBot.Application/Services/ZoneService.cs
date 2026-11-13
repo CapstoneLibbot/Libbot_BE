@@ -37,13 +37,8 @@ public class ZoneService(IZoneRepository repository) : IZoneService
     {
         if (request.MapId == Guid.Empty || string.IsNullOrWhiteSpace(request.ZoneType)) throw new ArgumentException("mapId and zoneType are required.");
         if (!double.IsFinite(request.MaxSpeed) || !double.IsFinite(request.MinX) || !double.IsFinite(request.MinY)
-            || !double.IsFinite(request.MaxX) || !double.IsFinite(request.MaxY)
-            || !double.IsFinite(request.RotationAngle)
-            || (request.Width is double width && (!double.IsFinite(width) || width <= 0))
-            || (request.Height is double height && (!double.IsFinite(height) || height <= 0)))
+            || !double.IsFinite(request.MaxX) || !double.IsFinite(request.MaxY))
             throw new ArgumentException("zone numeric fields must be finite numbers.");
-        if ((request.Width is null) != (request.Height is null))
-            throw new ArgumentException("Oriented zones must provide both width and height.");
         if (request.MaxX <= request.MinX || request.MaxY <= request.MinY)
             throw new ArgumentException("Zone bounds must have positive width and height.");
     }

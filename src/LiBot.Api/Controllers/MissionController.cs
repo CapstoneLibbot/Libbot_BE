@@ -30,9 +30,7 @@ public class MissionController(
         foreach (var mission in missions)
         {
             var task = await missionData.GetTaskAsync(mission.Id, tracking: false, cancellationToken);
-            var robotName = mission.RobotId is Guid robotId
-                ? await missionData.GetRobotNameAsync(robotId, cancellationToken)
-                : null;
+            var robotName = await missionData.GetRobotNameAsync(mission.RobotId, cancellationToken);
             responses.Add(ToResponse(mission, robotName, mission.RobotId, task?.RuntimeId,
                 GetTransientSimulationStatus(mission.Id, task?.RuntimeId)));
         }
@@ -46,9 +44,7 @@ public class MissionController(
         var mission = await missionData.GetMissionAsync(id, tracking: false, cancellationToken);
         if (mission is null) return NotFound();
         var task = await missionData.GetTaskAsync(id, tracking: false, cancellationToken);
-        var robot = mission.RobotId is Guid robotId
-            ? await missionData.GetRobotNameAsync(robotId, cancellationToken)
-            : null;
+        var robot = await missionData.GetRobotNameAsync(mission.RobotId, cancellationToken);
         return Ok(ToResponse(mission, robot, mission.RobotId, task?.RuntimeId,
             GetTransientSimulationStatus(mission.Id, task?.RuntimeId)));
     }
@@ -67,19 +63,19 @@ public class MissionController(
         var runtimeId = (request.RuntimeId ?? "real").Trim().ToLowerInvariant();
         if (runtimeId is not ("sim" or "real") || runtimes.Get(runtimeId) is null)
             return BadRequest(new { message = "runtimeId must identify a configured 'sim' or 'real' runtime." });
-        Guid? robotId = Guid.TryParse(request.RobotId, out var parsedRobotId) &&
-            await missionData.RobotExistsAsync(parsedRobotId, cancellationToken) ? parsedRobotId : null;
+        if (!Guid.TryParse(request.RobotId, out var robotId))
+            return BadRequest("A valid robotId is required.");
+        if (!await missionData.RobotExistsAsync(robotId, cancellationToken))
+            return NotFound("Robot not found.");
         var mission = new Mission(request.Name ?? workflow.Name, request.Description ?? workflow.Description,
-            robotId: robotId, priority: ParsePriority(request.Priority));
+            robotId, workflowId, priority: ParsePriority(request.Priority));
         mission.Update(mission.Name, mission.Description, mission.Priority, workflowId);
         var initialContextJson = request.InitialContext is { ValueKind: JsonValueKind.Object } initialContext
             ? initialContext.GetRawText()
             : null;
         await missionData.CreateMissionAsync(mission, workflowId, runtimeId, initialContextJson, cancellationToken);
 
-        var robotName = robotId is Guid id
-            ? await missionData.GetRobotNameAsync(id, cancellationToken)
-            : null;
+        var robotName = await missionData.GetRobotNameAsync(robotId, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = mission.Id }, ToResponse(mission, robotName, robotId, runtimeId));
     }
 
@@ -204,7 +200,8 @@ public class MissionController(
     {
         var mission = await missionData.GetMissionAsync(id, tracking: true, cancellationToken);
         if (mission is null) return NotFound();
-        if (mission.WorkflowId is not Guid workflowId) return Conflict("Mission has no workflow.");
+        if (mission.WorkflowId == Guid.Empty) return Conflict("Mission has no workflow.");
+        var workflowId = mission.WorkflowId;
         var jobTask = await missionData.GetTaskAsync(id, tracking: true, cancellationToken);
         var isRetry = mission.Status is "Failed" or "Cancelled";
         var requestedRuntimeId = string.IsNullOrWhiteSpace(request?.RuntimeId)
@@ -515,10 +512,11 @@ public class MissionController(
             var legacyMission = await missionData.GetMissionAsync(id, tracking: true, cancellationToken);
             if (legacyMission is null) return NotFound();
             if (legacyMission.Status == "Pending") legacyMission.Start();
-            task = new JobTask(id, null, "Mission task", request.RuntimeId ?? "real");
+            task = await missionData.CreateMissingJobTaskAsync(
+                id, legacyMission.WorkflowId, request.RuntimeId ?? "real", cancellationToken);
             task.Start();
             if (!string.IsNullOrWhiteSpace(request.ExecutionId)) task.SetExecutionId(request.ExecutionId);
-            await missionData.AddJobTaskAsync(task, cancellationToken);
+            await missionData.SaveChangesAsync(cancellationToken);
         }
         var mission = await missionData.GetMissionAsync(id, tracking: true, cancellationToken);
         if (mission is null) return NotFound();
@@ -806,9 +804,10 @@ public class MissionController(
             "Search & Guide to Facility" => "Reader facility search: ",
             _ => null
         };
-        if (prefix is null || !mission.Description.StartsWith(prefix, StringComparison.Ordinal)) return;
+        if (prefix is null || mission.Description is not { } description
+            || !description.StartsWith(prefix, StringComparison.Ordinal)) return;
 
-        var query = mission.Description[prefix.Length..].Trim();
+        var query = description[prefix.Length..].Trim();
         if (query.Length > 0) initialContext["query"] = query;
     }
 
