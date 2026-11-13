@@ -1127,7 +1127,7 @@
           "id": "HXGKoDzgvkA9LjbnRyJ3-36",
           "type": "node",
           "parent": "HXGKoDzgvkA9LjbnRyJ3-34",
-          "label": "max_speed&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;"
+          "label": "max_speed"
         },
         {
           "id": "9JHODKyxNnEOFlEZ5WEu-56",
@@ -2982,7 +2982,7 @@
           "id": "gIxPGJ8saMYJQBWOLJ_E-12",
           "type": "node",
           "parent": "gIxPGJ8saMYJQBWOLJ_E-10",
-          "label": "enpoint_group_id"
+          "label": "endpoint_group_id"
         },
         {
           "id": "V0IEQDuVrkUBW5catndO-5",
@@ -3663,23 +3663,6 @@
           "label": "id"
         },
         {
-          "id": "On2XAA4L_RdVWgiSaRSW-34",
-          "type": "node",
-          "parent": "On2XAA4L_RdVWgiSaRSW-24"
-        },
-        {
-          "id": "On2XAA4L_RdVWgiSaRSW-35",
-          "type": "node",
-          "parent": "On2XAA4L_RdVWgiSaRSW-34",
-          "label": "FK"
-        },
-        {
-          "id": "On2XAA4L_RdVWgiSaRSW-36",
-          "type": "node",
-          "parent": "On2XAA4L_RdVWgiSaRSW-34",
-          "label": "book_id"
-        },
-        {
           "id": "On2XAA4L_RdVWgiSaRSW-37",
           "type": "node",
           "parent": "On2XAA4L_RdVWgiSaRSW-24"
@@ -3994,23 +3977,6 @@
           "type": "node",
           "parent": "I-U8yCQK7Ytu7E7hBGJC-29",
           "label": "id"
-        },
-        {
-          "id": "I-U8yCQK7Ytu7E7hBGJC-32",
-          "type": "node",
-          "parent": "I-U8yCQK7Ytu7E7hBGJC-28"
-        },
-        {
-          "id": "I-U8yCQK7Ytu7E7hBGJC-33",
-          "type": "node",
-          "parent": "I-U8yCQK7Ytu7E7hBGJC-32",
-          "label": "FK"
-        },
-        {
-          "id": "I-U8yCQK7Ytu7E7hBGJC-34",
-          "type": "node",
-          "parent": "I-U8yCQK7Ytu7E7hBGJC-32",
-          "label": "book_id"
         },
         {
           "id": "I-U8yCQK7Ytu7E7hBGJC-35",
@@ -4334,13 +4300,6 @@
           "target": "pzRcR5gAqBLYPp6fo7_k-10"
         },
         {
-          "id": "erd-edge-779",
-          "type": "edge",
-          "parent": "1",
-          "source": "G33bMjpl5oWZlfBUhsht-4",
-          "target": "On2XAA4L_RdVWgiSaRSW-36"
-        },
-        {
           "id": "erd-edge-780",
           "type": "edge",
           "parent": "1",
@@ -4360,13 +4319,6 @@
           "parent": "1",
           "source": "U52pe32-ybtWpMfG_P3F-141",
           "target": "On2XAA4L_RdVWgiSaRSW-10"
-        },
-        {
-          "id": "erd-edge-783",
-          "type": "edge",
-          "parent": "1",
-          "source": "G33bMjpl5oWZlfBUhsht-4",
-          "target": "I-U8yCQK7Ytu7E7hBGJC-34"
         },
         {
           "id": "erd-edge-784",

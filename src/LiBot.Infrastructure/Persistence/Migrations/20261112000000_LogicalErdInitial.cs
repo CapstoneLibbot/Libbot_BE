@@ -13,9 +13,7 @@ public partial class LogicalErdInitial : Migration
         migrationBuilder.Sql("""
 -- Generated from docs/database/Logical_ERD.corrected.json.
 -- The source ERD defines business structure; every FK uses ON DELETE NO ACTION.
-""");
 
-        migrationBuilder.Sql("""
 CREATE TABLE dbo.[ACCOUNT] (
     [Id] uniqueidentifier NOT NULL,
     [Username] nvarchar(450) NULL,
@@ -70,7 +68,8 @@ CREATE TABLE dbo.[BOOK_ITEM] (
     [Barcode] nvarchar(450) NOT NULL,
     [LastInventoryAt] datetime2 NULL,
     [Status] nvarchar(max) NOT NULL,
-    CONSTRAINT [PK_BOOK_ITEM] PRIMARY KEY ([Id])
+    CONSTRAINT [PK_BOOK_ITEM] PRIMARY KEY ([Id]),
+    CONSTRAINT [UQ_BOOK_ITEM_Id_BookId] UNIQUE ([Id], [BookId])
 );
 """);
 
@@ -129,7 +128,7 @@ CREATE TABLE dbo.[ZONE] (
     [Name] nvarchar(max) NOT NULL,
     [ZoneType] nvarchar(max) NOT NULL,
     [CreatedAt] datetime2 NOT NULL,
-    [MaxSpeed     ] nvarchar(max) NOT NULL,
+    [MaxSpeed] float NOT NULL,
     [Description] nvarchar(max) NULL,
     [MinX] float NOT NULL,
     [MinY] float NOT NULL,
@@ -326,7 +325,7 @@ CREATE TABLE dbo.[INVENTORY_REPORT] (
         migrationBuilder.Sql("""
 CREATE TABLE dbo.[ENDPOINT_GROUP_MEMBER] (
     [Id] uniqueidentifier NOT NULL,
-    [EnpointGroupId] uniqueidentifier NOT NULL,
+    [EndpointGroupId] uniqueidentifier NOT NULL,
     [EndpointId] uniqueidentifier NOT NULL,
     CONSTRAINT [PK_ENDPOINT_GROUP_MEMBER] PRIMARY KEY ([Id])
 );
@@ -377,8 +376,8 @@ CREATE TABLE dbo.[SCHEDULE] (
     [Name] nvarchar(max) NOT NULL,
     [Data] nvarchar(max) NULL,
     [ScheduleTime] time NOT NULL,
-    [StartDate] nvarchar(max) NOT NULL,
-    [EndDate] nvarchar(max) NULL,
+    [StartDate] date NOT NULL,
+    [EndDate] date NULL,
     [IsActive] bit NOT NULL,
     [LastRunAt] datetime2 NULL,
     [NextRunAt] datetime2 NULL,
@@ -395,14 +394,14 @@ CREATE TABLE dbo.[BOOK_RECEIPT_DETAIL] (
     [BookItemId] uniqueidentifier NOT NULL,
     [BookId] uniqueidentifier NOT NULL,
     [Note] nvarchar(max) NULL,
-    CONSTRAINT [PK_BOOK_RECEIPT_DETAIL] PRIMARY KEY ([Id])
+    CONSTRAINT [PK_BOOK_RECEIPT_DETAIL] PRIMARY KEY ([Id]),
+    CONSTRAINT [UQ_BOOK_RECEIPT_DETAIL_ReceiptId_BookItemId] UNIQUE ([ReceiptId], [BookItemId])
 );
 """);
 
         migrationBuilder.Sql("""
 CREATE TABLE dbo.[BOOK_RECEIPT] (
     [Id] uniqueidentifier NOT NULL,
-    [BookId] uniqueidentifier NOT NULL,
     [ReceiptType] nvarchar(max) NOT NULL,
     [ReceivedDate] date NULL,
     [Status] nvarchar(max) NOT NULL,
@@ -432,14 +431,14 @@ CREATE TABLE dbo.[BOOK_ISSUE_DETAIL] (
     [BookItemId] uniqueidentifier NOT NULL,
     [BookId] uniqueidentifier NOT NULL,
     [Note] nvarchar(max) NULL,
-    CONSTRAINT [PK_BOOK_ISSUE_DETAIL] PRIMARY KEY ([Id])
+    CONSTRAINT [PK_BOOK_ISSUE_DETAIL] PRIMARY KEY ([Id]),
+    CONSTRAINT [UQ_BOOK_ISSUE_DETAIL_IssueId_BookItemId] UNIQUE ([IssueId], [BookItemId])
 );
 """);
 
         migrationBuilder.Sql("""
 CREATE TABLE dbo.[BOOK_ISSUE] (
     [Id] uniqueidentifier NOT NULL,
-    [BookId] uniqueidentifier NOT NULL,
     [IssueType] nvarchar(max) NOT NULL,
     [IssueDate] date NULL,
     [Status] nvarchar(max) NOT NULL,
@@ -518,7 +517,7 @@ ALTER TABLE dbo.[ENDPOINT_GROUP_MEMBER] ADD CONSTRAINT [FK_ENDPOINT_GROUP_MEMBER
 """);
 
         migrationBuilder.Sql("""
-ALTER TABLE dbo.[ENDPOINT_GROUP_MEMBER] ADD CONSTRAINT [FK_ENDPOINT_GROUP_MEMBER_ENDPOINT_GROUP_EnpointGroupId] FOREIGN KEY ([EnpointGroupId]) REFERENCES dbo.[ENDPOINT_GROUP]([Id]) ON DELETE NO ACTION;
+ALTER TABLE dbo.[ENDPOINT_GROUP_MEMBER] ADD CONSTRAINT [FK_ENDPOINT_GROUP_MEMBER_ENDPOINT_GROUP_EndpointGroupId] FOREIGN KEY ([EndpointGroupId]) REFERENCES dbo.[ENDPOINT_GROUP]([Id]) ON DELETE NO ACTION;
 """);
 
         migrationBuilder.Sql("""
@@ -578,23 +577,11 @@ ALTER TABLE dbo.[JOB_STEP] ADD CONSTRAINT [FK_JOB_STEP_JOB_TASK_JobTaskId] FOREI
 """);
 
         migrationBuilder.Sql("""
-ALTER TABLE dbo.[BOOK_RECEIPT] ADD CONSTRAINT [FK_BOOK_RECEIPT_BOOK_BookId] FOREIGN KEY ([BookId]) REFERENCES dbo.[BOOK]([Id]) ON DELETE NO ACTION;
-""");
-
-        migrationBuilder.Sql("""
 ALTER TABLE dbo.[BOOK_RECEIPT_DETAIL] ADD CONSTRAINT [FK_BOOK_RECEIPT_DETAIL_BOOK_RECEIPT_ReceiptId] FOREIGN KEY ([ReceiptId]) REFERENCES dbo.[BOOK_RECEIPT]([Id]) ON DELETE NO ACTION;
 """);
 
         migrationBuilder.Sql("""
 ALTER TABLE dbo.[BOOK_RECEIPT_DETAIL] ADD CONSTRAINT [FK_BOOK_RECEIPT_DETAIL_BOOK_BookId] FOREIGN KEY ([BookId]) REFERENCES dbo.[BOOK]([Id]) ON DELETE NO ACTION;
-""");
-
-        migrationBuilder.Sql("""
-ALTER TABLE dbo.[BOOK_RECEIPT_DETAIL] ADD CONSTRAINT [FK_BOOK_RECEIPT_DETAIL_BOOK_ITEM_BookItemId] FOREIGN KEY ([BookItemId]) REFERENCES dbo.[BOOK_ITEM]([Id]) ON DELETE NO ACTION;
-""");
-
-        migrationBuilder.Sql("""
-ALTER TABLE dbo.[BOOK_ISSUE] ADD CONSTRAINT [FK_BOOK_ISSUE_BOOK_BookId] FOREIGN KEY ([BookId]) REFERENCES dbo.[BOOK]([Id]) ON DELETE NO ACTION;
 """);
 
         migrationBuilder.Sql("""
@@ -606,7 +593,11 @@ ALTER TABLE dbo.[BOOK_ISSUE_DETAIL] ADD CONSTRAINT [FK_BOOK_ISSUE_DETAIL_BOOK_Bo
 """);
 
         migrationBuilder.Sql("""
-ALTER TABLE dbo.[BOOK_ISSUE_DETAIL] ADD CONSTRAINT [FK_BOOK_ISSUE_DETAIL_BOOK_ITEM_BookItemId] FOREIGN KEY ([BookItemId]) REFERENCES dbo.[BOOK_ITEM]([Id]) ON DELETE NO ACTION;
+ALTER TABLE dbo.[BOOK_RECEIPT_DETAIL] ADD CONSTRAINT [FK_BOOK_RECEIPT_DETAIL_BOOK_ITEM_BookItemId_BookId] FOREIGN KEY ([BookItemId], [BookId]) REFERENCES dbo.[BOOK_ITEM]([Id], [BookId]) ON DELETE NO ACTION;
+""");
+
+        migrationBuilder.Sql("""
+ALTER TABLE dbo.[BOOK_ISSUE_DETAIL] ADD CONSTRAINT [FK_BOOK_ISSUE_DETAIL_BOOK_ITEM_BookItemId_BookId] FOREIGN KEY ([BookItemId], [BookId]) REFERENCES dbo.[BOOK_ITEM]([Id], [BookId]) ON DELETE NO ACTION;
 """);
 
         migrationBuilder.Sql("""

@@ -111,6 +111,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.HasOne<Book>().WithMany().HasForeignKey(x => x.BookId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.ExpectedShelfLevelId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.CurrentShelfLevelId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasAlternateKey(x => new { x.Id, x.BookId });
         });
 
         modelBuilder.Entity<LibraryMap>(entity =>
@@ -254,26 +255,26 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         modelBuilder.Entity<BookReceipt>(entity =>
         {
             entity.ToTable("BOOK_RECEIPT"); entity.HasKey(x => x.Id);
-            entity.HasOne<Book>().WithMany().HasForeignKey(x => x.BookId).OnDelete(DeleteBehavior.NoAction);
         });
         modelBuilder.Entity<BookReceiptDetail>(entity =>
         {
             entity.ToTable("BOOK_RECEIPT_DETAIL"); entity.HasKey(x => x.Id);
             entity.HasOne<BookReceipt>().WithMany().HasForeignKey(x => x.ReceiptId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasOne<BookItem>().WithMany().HasForeignKey(x => x.BookItemId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<Book>().WithMany().HasForeignKey(x => x.BookId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<BookItem>().WithMany().HasForeignKey(x => new { x.BookItemId, x.BookId }).HasPrincipalKey(x => new { x.Id, x.BookId }).OnDelete(DeleteBehavior.NoAction);
+            entity.HasIndex(x => new { x.ReceiptId, x.BookItemId }).IsUnique();
         });
         modelBuilder.Entity<BookIssue>(entity =>
         {
             entity.ToTable("BOOK_ISSUE"); entity.HasKey(x => x.Id);
-            entity.HasOne<Book>().WithMany().HasForeignKey(x => x.BookId).OnDelete(DeleteBehavior.NoAction);
         });
         modelBuilder.Entity<BookIssueDetail>(entity =>
         {
             entity.ToTable("BOOK_ISSUE_DETAIL"); entity.HasKey(x => x.Id);
             entity.HasOne<BookIssue>().WithMany().HasForeignKey(x => x.IssueId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasOne<BookItem>().WithMany().HasForeignKey(x => x.BookItemId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<Book>().WithMany().HasForeignKey(x => x.BookId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<BookItem>().WithMany().HasForeignKey(x => new { x.BookItemId, x.BookId }).HasPrincipalKey(x => new { x.Id, x.BookId }).OnDelete(DeleteBehavior.NoAction);
+            entity.HasIndex(x => new { x.IssueId, x.BookItemId }).IsUnique();
         });
         modelBuilder.Entity<InventoryReportDetail>(entity =>
         {
