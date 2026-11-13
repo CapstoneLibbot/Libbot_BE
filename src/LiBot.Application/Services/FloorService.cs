@@ -33,6 +33,7 @@ public class FloorService(IFloorRepository repository) : IFloorService
 
     private static void Validate(FloorWriteRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Name)) throw new ArgumentException("name is required.");
+        if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Status))
+            throw new ArgumentException("name and status are required.");
     }
 }

@@ -14,7 +14,7 @@ public sealed class GuidanceWorkflowRepository(LiBotDbContext db) : IGuidanceWor
     {
         var workflows = await db.Workflows
             .AsNoTracking()
-            .Where(item => item.Type == workflowType && item.IsActive)
+            .Where(item => item.Type == workflowType && item.Status == "Active")
             .OrderBy(item => item.Id)
             .Take(2)
             .ToListAsync(cancellationToken);
@@ -74,7 +74,11 @@ public sealed class GuidanceWorkflowRepository(LiBotDbContext db) : IGuidanceWor
             .ToListAsync(cancellationToken);
         var workflowTaskIds = workflowTasks.Select(task => task.Id).ToArray();
         var primaryWorkflowTask = workflowTasks.FirstOrDefault();
-        jobTask.AssignWorkflowTask(primaryWorkflowTask?.Id, primaryWorkflowTask?.Name ?? mission.Name);
+        if (primaryWorkflowTask is null)
+            throw new InvalidOperationException($"Workflow '{workflowId}' does not contain any tasks.");
+        if (mission.WorkflowId != workflowId)
+            throw new InvalidOperationException("Mission workflow id does not match the execution workflow id.");
+        jobTask.AssignWorkflowTask(primaryWorkflowTask.Id, primaryWorkflowTask.Name);
         var steps = workflowTaskIds.Length == 0
             ? []
             : await db.TaskSteps

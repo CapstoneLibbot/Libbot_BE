@@ -42,9 +42,9 @@ public class BookController : ControllerBase
     {
         if (page < 1 || pageSize is < 1 or > 100 || (long)(page - 1) * pageSize > int.MaxValue)
             return BadRequest(Error("page must be at least 1 and pageSize must be between 1 and 100."));
-        if (!new[] { "title", "author", "isbn", "publicationyear", "created", "createdatutc" }
+        if (!new[] { "title", "author", "isbn", "publicationyear" }
                 .Contains(sortBy.ToLowerInvariant()))
-            return BadRequest(Error("sortBy must be title, author, isbn, publicationYear or created."));
+            return BadRequest(Error("sortBy must be title, author, isbn or publicationYear."));
         if (!new[] { "asc", "desc" }.Contains(sortOrder.ToLowerInvariant()))
             return BadRequest(Error("sortOrder must be asc or desc."));
         if (!HasValidExpansion(expand, "category", "items"))

@@ -20,14 +20,10 @@ public class Zone : Entity
     public double MinY { get; private set; }
     public double MaxX { get; private set; }
     public double MaxY { get; private set; }
-    public double? Width { get; private set; }
-    public double? Height { get; private set; }
-    public double RotationAngle { get; private set; }
     public bool IsActive { get; private set; } = true;
 
     public Zone(Guid mapId, string name, string zoneType, double minX, double minY, double maxX, double maxY,
-        double maxSpeed = 0, string? description = null, double? width = null, double? height = null,
-        double rotationAngle = 0)
+        double maxSpeed = 0, string? description = null)
     {
         if (mapId == Guid.Empty)
             throw new ArgumentException("Map id is required.", nameof(mapId));
@@ -47,15 +43,6 @@ public class Zone : Entity
             throw new ArgumentOutOfRangeException(nameof(maxSpeed));
         if (normalizedType == "SPEED_LIMIT" && maxSpeed <= 0)
             throw new ArgumentException("SPEED_LIMIT requires maxSpeed greater than zero.", nameof(maxSpeed));
-        if ((width is null) != (height is null))
-            throw new ArgumentException("Oriented zones must provide both width and height.");
-        if (width is not null && (!double.IsFinite(width.Value) || width.Value <= 0))
-            throw new ArgumentOutOfRangeException(nameof(width));
-        if (height is not null && (!double.IsFinite(height.Value) || height.Value <= 0))
-            throw new ArgumentOutOfRangeException(nameof(height));
-        if (!double.IsFinite(rotationAngle))
-            throw new ArgumentOutOfRangeException(nameof(rotationAngle));
-
         MapId = mapId;
         Name = name.Trim();
         Description = description?.Trim();
@@ -64,19 +51,16 @@ public class Zone : Entity
         MinY = minY;
         MaxX = maxX;
         MaxY = maxY;
-        Width = width;
-        Height = height;
-        RotationAngle = rotationAngle;
         MaxSpeed = normalizedType == "SPEED_LIMIT" ? maxSpeed : 0;
     }
 
     public void Deactivate() => IsActive = false;
 
     public void Update(Guid mapId, string name, string zoneType, double minX, double minY, double maxX, double maxY,
-        double maxSpeed, string? description, double? width, double? height, double rotationAngle, bool isActive)
+        double maxSpeed, string? description, bool isActive)
     {
         var updated = new Zone(mapId, name, zoneType, minX, minY, maxX, maxY,
-            maxSpeed, description, width, height, rotationAngle);
+            maxSpeed, description);
         MapId = updated.MapId;
         Name = updated.Name;
         Description = updated.Description;
@@ -86,9 +70,6 @@ public class Zone : Entity
         MaxX = updated.MaxX;
         MaxY = updated.MaxY;
         MaxSpeed = updated.MaxSpeed;
-        Width = updated.Width;
-        Height = updated.Height;
-        RotationAngle = updated.RotationAngle;
         IsActive = isActive;
         SetUpdated();
     }

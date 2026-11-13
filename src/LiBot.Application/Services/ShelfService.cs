@@ -60,8 +60,10 @@ public class ShelfService(IShelfRepository repository) : IShelfService
 
     private async Task ValidateShelfAsync(ShelfWriteRequest request, CancellationToken cancellationToken)
     {
-        if (request.AisleId == Guid.Empty || string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.Name))
-            throw new ArgumentException("aisleId, code and name are required.");
+        if (request.AisleId == Guid.Empty || request.StartEndpointId == Guid.Empty
+            || request.EndEndpointId == Guid.Empty || string.IsNullOrWhiteSpace(request.Name)
+            || string.IsNullOrWhiteSpace(request.Status))
+            throw new ArgumentException("aisleId, startEndpointId, endEndpointId, name and status are required.");
         if (!await repository.AisleExistsAsync(request.AisleId, cancellationToken)) throw new KeyNotFoundException("Aisle was not found.");
     }
 

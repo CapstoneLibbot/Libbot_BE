@@ -5,17 +5,27 @@ namespace LiBot.Domain.Workflow;
 public class Schedule : Entity
 {
     public Guid? CreatedBy { get; private set; }
+    public Guid WorkflowId { get; private set; }
+    public bool IsActive { get; private set; } = true;
     public string Name { get; private set; }
     public string? Data { get; private set; }
     public string ScheduleType { get; private set; }
     public TimeOnly ScheduleTime { get; private set; }
     public DateOnly StartDate { get; private set; }
     public DateOnly? EndDate { get; private set; }
+    [System.ComponentModel.DataAnnotations.Schema.Column("LastRunAt")]
     public DateTime? LastRunAtUtc { get; private set; }
+    [System.ComponentModel.DataAnnotations.Schema.Column("NextRunAt")]
     public DateTime? NextRunAtUtc { get; private set; }
 
+    private Schedule()
+    {
+        Name = string.Empty;
+        ScheduleType = string.Empty;
+    }
+
     public Schedule(string name, string? data, string scheduleType, TimeOnly scheduleTime, DateOnly startDate,
-        DateOnly? endDate = null, Guid? createdBy = null)
+        DateOnly? endDate = null, Guid? createdBy = null, Guid workflowId = default, bool isActive = true)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Schedule name is required.", nameof(name));
@@ -31,6 +41,8 @@ public class Schedule : Entity
         StartDate = startDate;
         EndDate = endDate;
         CreatedBy = createdBy;
+        WorkflowId = workflowId;
+        IsActive = isActive;
     }
 
     public void RecordRun(DateTime runAtUtc, DateTime? nextRunAtUtc)

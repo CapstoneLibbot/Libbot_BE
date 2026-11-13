@@ -1,4 +1,5 @@
 using System.Text.Json;
+using LiBot.Application.Interfaces;
 using LiBot.Application.Workflow.FacilityGuidance;
 using LiBot.Application.Robot;
 using LiBot.Contracts.Workflow;
@@ -11,6 +12,7 @@ namespace LiBot.Api.Controllers;
 [Route("api/facility-guidance")]
 public sealed class FacilityGuidanceController(
     IFacilityGuidanceService service,
+    IMissionDataService missionData,
     IRobotRuntimeService runtimes,
     IConfiguration configuration) : ControllerBase
 {
@@ -136,8 +138,10 @@ public sealed class FacilityGuidanceController(
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
-        if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.FacilityId is null)
-            return BadRequest("runtimeId and facilityId are required.");
+        if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.FacilityId is null || request.RobotId == Guid.Empty)
+            return BadRequest("runtimeId, robotId and facilityId are required.");
+        if (!await missionData.RobotExistsAsync(request.RobotId, cancellationToken))
+            return NotFound("Robot not found.");
 
         var runtimeId = request.RuntimeId.Trim().ToLowerInvariant();
         if (runtimes.Get(runtimeId) is null)

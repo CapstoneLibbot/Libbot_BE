@@ -10,6 +10,7 @@ public class Notification : Entity
     public string Message { get; private set; }
     public string Severity { get; private set; }
     public bool IsRead { get; private set; }
+    [System.ComponentModel.DataAnnotations.Schema.Column("ReadAt")]
     public DateTime? ReadAtUtc { get; private set; }
 
     public Notification(string type, string title, string message, string severity, Guid? accountId = null)

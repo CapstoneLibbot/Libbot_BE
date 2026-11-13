@@ -26,8 +26,7 @@ public sealed class ZoneController(
         var map = await maps.GetByIdAsync(dto.MapId, cancellationToken);
         if (map is null)
             return NotFound(new { message = "Map was not found." });
-        if (!MapBoundsValidator.ContainsZone(
-                map, dto.MinX, dto.MinY, dto.MaxX, dto.MaxY, dto.Width, dto.Height, dto.RotationAngle))
+        if (!MapBoundsValidator.Contains(map, dto.MinX, dto.MinY, dto.MaxX, dto.MaxY))
             return BadRequest(new { message = "Zone bounds must be inside the selected map bounds." });
 
         var result = await base.Create(dto, cancellationToken);
@@ -45,8 +44,7 @@ public sealed class ZoneController(
         var map = await maps.GetByIdAsync(dto.MapId, cancellationToken);
         if (map is null)
             return NotFound(new { message = "Map was not found." });
-        if (!MapBoundsValidator.ContainsZone(
-                map, dto.MinX, dto.MinY, dto.MaxX, dto.MaxY, dto.Width, dto.Height, dto.RotationAngle))
+        if (!MapBoundsValidator.Contains(map, dto.MinX, dto.MinY, dto.MaxX, dto.MaxY))
             return BadRequest(new { message = "Zone bounds must be inside the selected map bounds." });
 
         var previous = await ResourceService.GetByIdAsync(id, cancellationToken);
@@ -90,8 +88,7 @@ public sealed class ZoneController(
         var policies = (await ResourceService.GetAllAsync(cancellationToken))
             .Where(zone => zone.MapId == mapId && zone.IsActive)
             .Select(zone => new NavigationZonePolicy(
-                zone.ZoneType, zone.MinX, zone.MinY, zone.MaxX, zone.MaxY, zone.MaxSpeed,
-                zone.Width, zone.Height, zone.RotationAngle))
+                zone.ZoneType, zone.MinX, zone.MinY, zone.MaxX, zone.MaxY, zone.MaxSpeed))
             .ToList();
 
         foreach (var runtime in runtimes.GetAll().Where(runtime =>

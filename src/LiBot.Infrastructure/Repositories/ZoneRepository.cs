@@ -44,7 +44,7 @@ public class ZoneRepository(LiBotDbContext db) : IZoneRepository
     public async Task<ZoneResponse> CreateAsync(ZoneWriteRequest request, CancellationToken cancellationToken)
     {
         var entity = new Zone(request.MapId, request.Name, request.ZoneType, request.MinX, request.MinY, request.MaxX, request.MaxY,
-            request.MaxSpeed, request.Description, request.Width, request.Height, request.RotationAngle);
+            request.MaxSpeed, request.Description);
         if (!request.IsActive) entity.Deactivate();
         db.Zones.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
@@ -56,7 +56,7 @@ public class ZoneRepository(LiBotDbContext db) : IZoneRepository
         var entity = await db.Zones.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (entity is null) return null;
         entity.Update(request.MapId, request.Name, request.ZoneType, request.MinX, request.MinY, request.MaxX, request.MaxY,
-            request.MaxSpeed, request.Description, request.Width, request.Height, request.RotationAngle, request.IsActive);
+            request.MaxSpeed, request.Description, request.IsActive);
         await db.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(id, null, cancellationToken);
     }
@@ -79,8 +79,7 @@ public class ZoneRepository(LiBotDbContext db) : IZoneRepository
             ? await db.Maps.AsNoTracking().Where(item => ids.Contains(item.Id)).ToDictionaryAsync(item => item.Id, cancellationToken)
             : [];
         return entities.Select(item => new ZoneResponse(item.Id, item.MapId, item.Name, item.Description, item.ZoneType, item.MaxSpeed,
-            item.MinX, item.MinY, item.MaxX, item.MaxY, item.Width, item.Height, item.RotationAngle, item.IsActive,
-            item.CreatedAtUtc, item.UpdatedAtUtc,
+            item.MinX, item.MinY, item.MaxX, item.MaxY, item.IsActive, item.CreatedAtUtc,
             maps.TryGetValue(item.MapId, out var map) ? new ZoneMapResponse(map.Id, map.Name, map.Version, map.Width, map.Height) : null)).ToList();
     }
 }

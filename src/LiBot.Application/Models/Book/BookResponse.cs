@@ -9,8 +9,7 @@ public class BookResponse(
     string? Publisher,
     int? PublicationYear,
     string? Image,
-    DateTime CreatedAtUtc,
-    DateTime? UpdatedAtUtc,
+    string? Description,
     BookCategoryResponse? Category = null,
     IReadOnlyList<BookItemResponse>? Items = null)
 {
@@ -22,8 +21,7 @@ public class BookResponse(
     public string? Publisher { get; } = Publisher;
     public int? PublicationYear { get; } = PublicationYear;
     public string? Image { get; } = Image;
-    public DateTime CreatedAtUtc { get; } = CreatedAtUtc;
-    public DateTime? UpdatedAtUtc { get; } = UpdatedAtUtc;
+    public string? Description { get; } = Description;
     public BookCategoryResponse? Category { get; } = Category;
     public IReadOnlyList<BookItemResponse>? Items { get; } = Items;
 }

@@ -1,7 +1,6 @@
 using System.Reflection;
 using LiBot.Domain.Common;
 using AisleEntity = LiBot.Domain.Library.Aisle;
-using AreaEntity = LiBot.Domain.Library.Area;
 using BookEntity = LiBot.Domain.Library.Book;
 using BookCategoryEntity = LiBot.Domain.Library.BookCategory;
 using BookItemEntity = LiBot.Domain.Library.BookItem;
@@ -26,8 +25,6 @@ public interface ILibraryResourceDto<TEntity> where TEntity : class
 public abstract class LibraryResourceDto<TEntity> : ILibraryResourceDto<TEntity> where TEntity : Entity
 {
     public Guid Id { get; set; }
-    public DateTime CreatedAtUtc { get; set; }
-    public DateTime? UpdatedAtUtc { get; set; }
 
     public abstract TEntity ToEntity();
 
@@ -41,7 +38,7 @@ public abstract class LibraryResourceDto<TEntity> : ILibraryResourceDto<TEntity>
     {
         foreach (var source in GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
         {
-            if (source.Name is nameof(Id) or nameof(CreatedAtUtc) or nameof(UpdatedAtUtc)) continue;
+            if (source.Name is nameof(Id) or "CreatedAtUtc" or "UpdatedAtUtc") continue;
             var target = typeof(TEntity).GetProperty(source.Name);
             if (target?.GetSetMethod(true) is not null) target.SetValue(entity, source.GetValue(this));
         }
@@ -51,19 +48,10 @@ public abstract class LibraryResourceDto<TEntity> : ILibraryResourceDto<TEntity>
 public sealed class AisleDto : LibraryResourceDto<AisleEntity>
 {
     public Guid FloorId { get; set; }
-    public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public override AisleEntity ToEntity() => new(FloorId, Code, Name, Description);
-}
-
-public sealed class AreaDto : LibraryResourceDto<AreaEntity>
-{
-    public Guid FloorId { get; set; }
-    public Guid? EndpointId { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public string? Description { get; set; }
-    public override AreaEntity ToEntity() => new(FloorId, Name, Description, EndpointId);
+    public string Status { get; set; } = "Active";
+    public override AisleEntity ToEntity() => new(FloorId, Name, Description, Status);
 }
 
 public sealed class BookDto : LibraryResourceDto<BookEntity>
@@ -113,7 +101,8 @@ public sealed class EndpointDto : LibraryResourceDto<EndpointEntity>
 public sealed class EndpointGroupDto : LibraryResourceDto<EndpointGroupEntity>
 {
     public string Name { get; set; } = string.Empty;
-    public override EndpointGroupEntity ToEntity() => new(Name);
+    public string? Description { get; set; }
+    public override EndpointGroupEntity ToEntity() => new(Name, Description);
 }
 
 public sealed class EndpointGroupMemberDto : LibraryResourceDto<EndpointGroupMemberEntity>
@@ -128,28 +117,41 @@ public sealed class FloorDto : LibraryResourceDto<FloorEntity>
     public string Name { get; set; } = string.Empty;
     public int FloorNumber { get; set; }
     public string? Description { get; set; }
-    public override FloorEntity ToEntity() => new(Name, FloorNumber, Description);
+    public string Status { get; set; } = "Active";
+    public override FloorEntity ToEntity() => new(Name, FloorNumber, Description, Status);
 }
 
 public sealed class ShelfDto : LibraryResourceDto<ShelfEntity>
 {
     public Guid AisleId { get; set; }
-    public Guid? EndpointId { get; set; }
-    public string Code { get; set; } = string.Empty;
+    public Guid StartEndpointId { get; set; }
+    public Guid EndEndpointId { get; set; }
     public string Name { get; set; } = string.Empty;
-    public override ShelfEntity ToEntity() => new(AisleId, Code, Name, EndpointId);
+    public string? Description { get; set; }
+    public string Status { get; set; } = "Active";
+    public override ShelfEntity ToEntity() => new(AisleId, StartEndpointId, EndEndpointId, Name, Description, Status);
 }
 
 public sealed class ShelfLevelDto : LibraryResourceDto<ShelfLevelEntity>
 {
     public Guid ShelfId { get; set; }
+    public string Name { get; set; } = string.Empty;
     public int LevelNumber { get; set; }
-    public override ShelfLevelEntity ToEntity() => new(ShelfId, LevelNumber);
+    public string Status { get; set; } = "Active";
+    public override ShelfLevelEntity ToEntity() => new(ShelfId, LevelNumber, Name, Status);
+
+    public override void ApplyTo(ShelfLevelEntity entity)
+    {
+        base.ApplyTo(entity);
+        if (string.IsNullOrWhiteSpace(Name))
+            entity.Update(ShelfId, LevelNumber, $"Level {LevelNumber}", Status);
+    }
 }
 
 public sealed class ZoneDto : LibraryResourceDto<ZoneEntity>
 {
     public Guid MapId { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string ZoneType { get; set; } = string.Empty;
@@ -158,10 +160,7 @@ public sealed class ZoneDto : LibraryResourceDto<ZoneEntity>
     public double MinY { get; set; }
     public double MaxX { get; set; }
     public double MaxY { get; set; }
-    public double? Width { get; set; }
-    public double? Height { get; set; }
-    public double RotationAngle { get; set; }
     public bool IsActive { get; set; } = true;
     public override ZoneEntity ToEntity() => new(MapId, Name, ZoneType, MinX, MinY, MaxX, MaxY,
-        MaxSpeed, Description, Width, Height, RotationAngle);
+        MaxSpeed, Description);
 }

@@ -6,7 +6,10 @@ namespace LiBot.Application.Models.Shelf;
 public class ShelfDto : LibraryResourceDto<ShelfEntity>
 {
     public Guid AisleId { get; set; }
-    public string Code { get; set; } = string.Empty;
+    public Guid StartEndpointId { get; set; }
+    public Guid EndEndpointId { get; set; }
     public string Name { get; set; } = string.Empty;
-    public override ShelfEntity ToEntity() => new(AisleId, Code, Name);
+    public string? Description { get; set; }
+    public string Status { get; set; } = "Active";
+    public override ShelfEntity ToEntity() => new(AisleId, StartEndpointId, EndEndpointId, Name, Description, Status);
 }

@@ -1,7 +1,6 @@
 using LiBot.Application.Robot;
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
-using LiBot.Application.Models.Area;
 using LiBot.Application.Models.Book;
 using LiBot.Application.Models.BookCategory;
 using LiBot.Application.Models.BookItem;
@@ -48,8 +47,6 @@ public static class DependencyInjection
         services.AddScoped<IAisleRepository, AisleRepository>();
         services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.Aisle, AisleDto>, LibraryResourceService<LiBot.Domain.Library.Aisle, AisleDto>>();
         services.AddScoped<IAisleService, AisleService>();
-        services.AddScoped<IAreaRepository, AreaRepository>();
-        services.AddScoped<IAreaService, AreaService>();
         services.AddScoped<IBookRepository, BookRepository>();
         services.AddScoped<IBookService, BookService>();
         services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.BookCategory, BookCategoryResourceDto>, LibraryResourceService<LiBot.Domain.Library.BookCategory, BookCategoryResourceDto>>();

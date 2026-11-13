@@ -1,8 +1,7 @@
 namespace LiBot.Application.Models.Zone;
 
 public class ZoneWriteRequest(Guid MapId, string Name, string ZoneType, double MaxSpeed,
-    double MinX, double MinY, double MaxX, double MaxY, string? Description = null,
-    double? Width = null, double? Height = null, double RotationAngle = 0, bool IsActive = true)
+    double MinX, double MinY, double MaxX, double MaxY, string? Description = null, bool IsActive = true)
 {
     public Guid MapId { get; } = MapId;
     public string Name { get; } = Name;
@@ -13,8 +12,5 @@ public class ZoneWriteRequest(Guid MapId, string Name, string ZoneType, double M
     public double MaxX { get; } = MaxX;
     public double MaxY { get; } = MaxY;
     public string? Description { get; } = Description;
-    public double? Width { get; } = Width;
-    public double? Height { get; } = Height;
-    public double RotationAngle { get; } = RotationAngle;
     public bool IsActive { get; } = IsActive;
 }

@@ -98,7 +98,7 @@ public sealed class BookGuidanceService(
             steps.Add(definition);
         }
 
-        return new BookGuidanceLoadedWorkflow(workflow.Id, workflow.Type, workflow.Name, steps);
+        return new BookGuidanceLoadedWorkflow(workflow.Id, workflow.Tasks[0].Id, workflow.Type, workflow.Name, steps);
     }
 
     public async Task<BookGuidanceStartResult> StartAsync(
@@ -112,17 +112,13 @@ public sealed class BookGuidanceService(
             return new BookGuidanceStartResult(Guid.Empty, null, default, false);
         }
 
-        var mission = new Mission("Search & Guide to Book", $"Reader search: {request.Query.Trim()}");
-        mission.Update(
-            mission.Name,
-            mission.Description,
-            mission.Priority,
-            loadedWorkflow.Id);
+        var mission = new Mission("Search & Guide to Book", $"Reader search: {request.Query.Trim()}",
+            request.RobotId, loadedWorkflow.Id);
         mission.Start();
         var runtimeId = string.IsNullOrWhiteSpace(request.RuntimeId)
             ? "sim"
             : request.RuntimeId.Trim().ToLowerInvariant();
-        var jobTask = new JobTask(mission.Id, null, mission.Name, runtimeId);
+        var jobTask = new JobTask(mission.Id, loadedWorkflow.PrimaryTaskId, mission.Name, runtimeId);
         jobTask.Start();
         jobTask.SetExecutionId(mission.Id.ToString());
         jobTask.UpdateExecutionState(JsonSerializer.Serialize(new
