@@ -172,8 +172,8 @@ public sealed class WorkflowDataController(
     [HttpPost("inventory/scan")]
     public async Task<IActionResult> RecordInventoryScan(InventoryScanRequest request, CancellationToken cancellationToken)
     {
-        if (request.MissionId == Guid.Empty || string.IsNullOrWhiteSpace(request.Barcode))
-            return BadRequest(new { message = "missionId and barcode are required." });
+        if (request.MissionId == Guid.Empty || string.IsNullOrWhiteSpace(request.Code))
+            return BadRequest(new { message = "missionId and qrCode are required." });
         var task = await dataService.GetMissionAsync(request.MissionId, cancellationToken);
         var runtimeId = task?.RuntimeId ?? request.RuntimeId;
         if (task is null && !IsActiveSimulation(request.MissionId, runtimeId))
@@ -184,10 +184,12 @@ public sealed class WorkflowDataController(
             && !IsActiveSimulation(request.MissionId, runtimeId))
             return Conflict(new { message = "No active in-memory simulation exists for this mission." });
 
-        var barcode = request.Barcode.Trim();
+        var barcode = request.Code!.Trim();
         if (runtimeId == "real" && string.IsNullOrWhiteSpace(request.ShelfCode))
             return BadRequest(new { message = "shelfCode is required for a physical inventory scan." });
-        var shelfLevelId = runtimeId == "sim" ? null : await dataService.ResolveShelfLevelAsync(request.ShelfCode, cancellationToken);
+        if (request.LevelNumber is not null and not (1 or 2))
+            return BadRequest(new { message = "levelNumber must be 1 or 2." });
+        var shelfLevelId = runtimeId == "sim" ? null : await dataService.ResolveShelfLevelAsync(request.ShelfCode, request.LevelNumber, cancellationToken);
         if (runtimeId == "real" && shelfLevelId is null)
             return BadRequest(new { message = $"No active shelf level was found for shelf '{request.ShelfCode}'." });
         var item = runtimeId == "sim" ? null : await dataService.GetInventoryBookAsync(barcode, cancellationToken);
@@ -209,8 +211,10 @@ public sealed class WorkflowDataController(
         var scan = new
         {
             barcode,
+            qrCode = barcode,
             shelfCode = request.ShelfCode,
             shelfLevelId,
+            levelNumber = request.LevelNumber,
             known,
             misplaced,
             expectedShelfCode,
