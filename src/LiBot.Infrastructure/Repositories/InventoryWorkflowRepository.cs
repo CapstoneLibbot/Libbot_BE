@@ -21,13 +21,18 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
 
         var shelves = await (from shelf in db.Shelves.AsNoTracking()
                              join aisle in db.Aisles.AsNoTracking() on shelf.AisleId equals aisle.Id
-                             join endpoint in db.Endpoints.AsNoTracking() on shelf.EndpointId equals (Guid?)endpoint.Id
+                             join endpoint in db.Endpoints.AsNoTracking() on shelf.StartEndpointId equals endpoint.Id
+                             join endEndpoint in db.Endpoints.AsNoTracking() on shelf.EndEndpointId equals endEndpoint.Id
                              join map in db.Maps.AsNoTracking() on endpoint.MapId equals map.Id
                              where requestedIds.Contains(shelf.Id)
                                  && aisle.FloorId == floorId
+                                 && aisle.Status.ToLower() == "active"
+                                 && shelf.Status.ToLower() == "active"
                                  && endpoint.IsActive
+                                 && endEndpoint.IsActive
+                                 && endEndpoint.MapId == endpoint.MapId
                                  && (!mapId.HasValue || endpoint.MapId == mapId.Value)
-                             orderby aisle.Code, shelf.Code
+                             orderby aisle.Name, shelf.Name
                              select new { Shelf = shelf, Aisle = aisle, Endpoint = endpoint, Map = map })
             .ToListAsync(cancellationToken);
 
@@ -36,14 +41,14 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
 
         var shelfIds = shelves.Select(item => item.Shelf.Id).ToArray();
         var levels = await db.ShelfLevels.AsNoTracking()
-            .Where(item => shelfIds.Contains(item.ShelfId))
+            .Where(item => shelfIds.Contains(item.ShelfId) && item.Status.ToLower() == "active")
             .OrderBy(item => item.LevelNumber)
             .Select(item => new { item.Id, item.ShelfId, item.LevelNumber })
             .ToListAsync(cancellationToken);
 
         return shelves.Select(item => CreateScopeRecord(
             item.Shelf.Id,
-            item.Shelf.Code,
+            item.Shelf.Name,
             item.Shelf.Name,
             item.Endpoint.Id,
             item.Endpoint.Name,
@@ -58,12 +63,17 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
     public async Task<InventoryShelfScopeRecord?> GetShelfScopeAsync(Guid shelfId, CancellationToken cancellationToken)
     {
         var item = await (from shelf in db.Shelves.AsNoTracking()
-                          join endpoint in db.Endpoints.AsNoTracking() on shelf.EndpointId equals (Guid?)endpoint.Id
-                          where shelf.Id == shelfId && endpoint.IsActive
+                          join endpoint in db.Endpoints.AsNoTracking() on shelf.StartEndpointId equals endpoint.Id
+                          join endEndpoint in db.Endpoints.AsNoTracking() on shelf.EndEndpointId equals endEndpoint.Id
+                          where shelf.Id == shelfId
+                              && shelf.Status.ToLower() == "active"
+                              && endpoint.IsActive
+                              && endEndpoint.IsActive
+                              && endEndpoint.MapId == endpoint.MapId
                           select new
                           {
                               shelf.Id,
-                              shelf.Code,
+                              Code = shelf.Name,
                               shelf.Name,
                               EndpointId = endpoint.Id,
                               EndpointName = endpoint.Name,
@@ -74,7 +84,7 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
         if (item is null) return null;
 
         var levels = await db.ShelfLevels.AsNoTracking()
-            .Where(level => level.ShelfId == shelfId)
+            .Where(level => level.ShelfId == shelfId && level.Status.ToLower() == "active")
             .OrderBy(level => level.LevelNumber)
             .Select(level => new InventoryShelfLevelRecord(level.Id, level.LevelNumber))
             .ToListAsync(cancellationToken);
@@ -176,7 +186,7 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
             ? null
             : new InventoryReportRecord(report.Id, missionId, report.ScopeType, report.TotalShelves,
                 report.TotalBooksScanned, report.TotalAvailable, report.TotalMisplaced, report.TotalMissing,
-                report.Data, report.CreatedAtUtc);
+                report.Data ?? "{}", report.CreatedAtUtc);
     }
 
     private static InventoryShelfScopeRecord CreateScopeRecord(

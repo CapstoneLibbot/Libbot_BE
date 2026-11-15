@@ -51,7 +51,7 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
         return await (from level in db.ShelfLevels.AsNoTracking()
                       join shelf in db.Shelves.AsNoTracking() on level.ShelfId equals shelf.Id
                       where shelf.Name == shelfCode
-                      where shelf.Code == shelfCode && (!levelNumber.HasValue || level.LevelNumber == levelNumber.Value)
+                          && (!levelNumber.HasValue || level.LevelNumber == levelNumber.Value)
                       orderby level.LevelNumber
                       select (Guid?)level.Id).FirstOrDefaultAsync(cancellationToken);
     }

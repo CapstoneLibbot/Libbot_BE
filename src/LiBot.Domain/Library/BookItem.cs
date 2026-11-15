@@ -34,4 +34,16 @@ public class BookItem : Entity
         CurrentShelfLevelId = shelfLevelId;
         LastInventoryAtUtc = recordedAtUtc ?? DateTime.UtcNow;
     }
+
+    public void ApplyInventoryResult(Guid? shelfLevelId, string? status, DateTime? recordedAtUtc = null)
+    {
+        if (status is not null && string.IsNullOrWhiteSpace(status))
+            throw new ArgumentException("Inventory status cannot be empty.", nameof(status));
+
+        CurrentShelfLevelId = shelfLevelId;
+        LastInventoryAtUtc = recordedAtUtc ?? DateTime.UtcNow;
+        if (status is not null)
+            Status = status.Trim();
+    }
+
 }

@@ -114,6 +114,8 @@ public sealed class WorkflowDocumentService(IWorkflowDocumentRepository reposito
                     "SEARCH_BOOK", "GET_BOOK_DETAIL", "SAVE_RATING", "SEARCH_FACILITY", "GET_FACILITY_DETAIL",
                     "SAVE_FACILITY_RATING", "RECORD_INVENTORY", "ADD_INVENTORY_ISSUE", "FINALIZE_INVENTORY",
                     "RECORD_PATROL_OBSERVATION", "GENERATE_PATROL_REPORT", "FINALIZE_PATROL", "IDENTITY",
+                    "RESOLVE_INVENTORY_SCOPE", "ADVANCE_INVENTORY_SCOPE", "VERIFY_BOOK",
+                    "UPDATE_BOOK_ITEM_INVENTORY_STATUS", "GENERATE_REPORT",
                     "PATROL_SCOPE", "BUILD_PATROL_COVERAGE_PLAN", "CLASSIFY_PATROL_OBSERVATIONS", "UPDATE_PATH_COVERAGE"
                 };
                 if (string.IsNullOrWhiteSpace(action) || !supportedActions.Contains(action))

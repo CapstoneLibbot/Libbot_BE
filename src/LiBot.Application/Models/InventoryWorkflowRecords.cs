@@ -76,7 +76,7 @@ public sealed record VerifiedInventoryBookItem(
     [property: JsonPropertyName("missing")] bool Missing);
 
 public sealed record InventoryWorkflowReportResponse(
-    [property: JsonPropertyName("reportId")] 
+    [property: JsonPropertyName("reportId")]
     Guid ReportId,
     [property: JsonPropertyName("missionId")]
     Guid MissionId,
