@@ -9,4 +9,5 @@ public interface IFloorRepository
     Task<FloorResponse> CreateAsync(FloorWriteRequest request, string? expand, CancellationToken cancellationToken);
     Task<FloorResponse?> UpdateAsync(Guid id, FloorWriteRequest request, string? expand, CancellationToken cancellationToken);
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
+    Task<bool> HasDependentsAsync(Guid id, CancellationToken cancellationToken);
 }

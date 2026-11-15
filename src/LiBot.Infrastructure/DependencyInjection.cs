@@ -49,6 +49,10 @@ public static class DependencyInjection
         services.AddScoped<IAisleService, AisleService>();
         services.AddScoped<IBookRepository, BookRepository>();
         services.AddScoped<IBookService, BookService>();
+        services.AddScoped<IBookItemRepository, BookItemRepository>();
+        services.AddScoped<IBookItemService, BookItemService>();
+        services.AddScoped<IBookTransactionRepository, BookTransactionRepository>();
+        services.AddScoped<IBookTransactionService, BookTransactionService>();
         services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.BookCategory, BookCategoryResourceDto>, LibraryResourceService<LiBot.Domain.Library.BookCategory, BookCategoryResourceDto>>();
         services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.BookItem, BookItemResourceDto>, LibraryResourceService<LiBot.Domain.Library.BookItem, BookItemResourceDto>>();
         services.AddScoped<ILibraryResourceService<LiBot.Domain.Library.Endpoint, EndpointDto>, LibraryResourceService<LiBot.Domain.Library.Endpoint, EndpointDto>>();

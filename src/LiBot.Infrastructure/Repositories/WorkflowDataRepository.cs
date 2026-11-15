@@ -31,7 +31,7 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
     public async Task<PatrolMapRecord?> GetPatrolMapAsync(Guid mapId, CancellationToken cancellationToken)
     {
         var map = await db.Maps.AsNoTracking().FirstOrDefaultAsync(item => item.Id == mapId, cancellationToken);
-        return map is null ? null : new PatrolMapRecord(map.Id, map.FloorId, map.Status);
+        return map is null ? null : new PatrolMapRecord(map.Id, map.FloorId, map.Status.ToString());
     }
 
     public async Task<IReadOnlyList<PatrolEndpointRecord>> GetPatrolEndpointsAsync(

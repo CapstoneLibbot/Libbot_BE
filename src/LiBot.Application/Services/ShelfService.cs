@@ -30,7 +30,11 @@ public class ShelfService(IShelfRepository repository) : IShelfService
         return await repository.UpdateAsync(id, request, expand, cancellationToken);
     }
 
-    public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => repository.DeleteAsync(id, cancellationToken);
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (await repository.HasDependentsAsync(id, cancellationToken)) throw new InvalidOperationException("Cannot delete a shelf that still contains shelf levels or book items.");
+        return await repository.DeleteAsync(id, cancellationToken);
+    }
 
     public async Task<ShelfLevelListResponse> GetLevelsAsync(ShelfLevelQuery query, CancellationToken cancellationToken)
     {
@@ -46,17 +50,21 @@ public class ShelfService(IShelfRepository repository) : IShelfService
 
     public async Task<ShelfLevelResponse> CreateLevelAsync(ShelfLevelWriteRequest request, CancellationToken cancellationToken)
     {
-        await ValidateLevelAsync(request, cancellationToken);
+        await ValidateLevelAsync(request, null, cancellationToken);
         return await repository.CreateLevelAsync(request, cancellationToken);
     }
 
     public async Task<ShelfLevelResponse?> UpdateLevelAsync(Guid id, ShelfLevelWriteRequest request, CancellationToken cancellationToken)
     {
-        await ValidateLevelAsync(request, cancellationToken);
+        await ValidateLevelAsync(request, id, cancellationToken);
         return await repository.UpdateLevelAsync(id, request, cancellationToken);
     }
 
-    public Task<bool> DeleteLevelAsync(Guid id, CancellationToken cancellationToken) => repository.DeleteLevelAsync(id, cancellationToken);
+    public async Task<bool> DeleteLevelAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (await repository.LevelHasBookItemsAsync(id, cancellationToken)) throw new InvalidOperationException("Cannot delete a shelf level that is referenced by book items.");
+        return await repository.DeleteLevelAsync(id, cancellationToken);
+    }
 
     private async Task ValidateShelfAsync(ShelfWriteRequest request, CancellationToken cancellationToken)
     {
@@ -65,11 +73,14 @@ public class ShelfService(IShelfRepository repository) : IShelfService
             || string.IsNullOrWhiteSpace(request.Status))
             throw new ArgumentException("aisleId, startEndpointId, endEndpointId, name and status are required.");
         if (!await repository.AisleExistsAsync(request.AisleId, cancellationToken)) throw new KeyNotFoundException("Aisle was not found.");
+        if (request.StartEndpointId == request.EndEndpointId || !await repository.EndpointsMatchAisleFloorAsync(request.AisleId, request.StartEndpointId, request.EndEndpointId, cancellationToken))
+            throw new ArgumentException("Shelf endpoints must exist and belong to maps on the aisle floor.");
     }
 
-    private async Task ValidateLevelAsync(ShelfLevelWriteRequest request, CancellationToken cancellationToken)
+    private async Task ValidateLevelAsync(ShelfLevelWriteRequest request, Guid? excludingLevelId, CancellationToken cancellationToken)
     {
         if (request.ShelfId == Guid.Empty || request.LevelNumber <= 0) throw new ArgumentException("shelfId and a positive levelNumber are required.");
         if (!await repository.ShelfExistsAsync(request.ShelfId, cancellationToken)) throw new KeyNotFoundException("Shelf was not found.");
+        if (await repository.LevelNumberExistsAsync(request.ShelfId, request.LevelNumber, excludingLevelId, cancellationToken)) throw new InvalidOperationException("A shelf level with this levelNumber already exists.");
     }
 }

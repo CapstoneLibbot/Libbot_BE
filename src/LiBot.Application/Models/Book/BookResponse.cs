@@ -10,6 +10,8 @@ public class BookResponse(
     int? PublicationYear,
     string? Image,
     string? Description,
+    int TotalCopies = 0,
+    int AvailableCopies = 0,
     BookCategoryResponse? Category = null,
     IReadOnlyList<BookItemResponse>? Items = null)
 {
@@ -22,6 +24,8 @@ public class BookResponse(
     public int? PublicationYear { get; } = PublicationYear;
     public string? Image { get; } = Image;
     public string? Description { get; } = Description;
+    public int TotalCopies { get; } = TotalCopies;
+    public int AvailableCopies { get; } = AvailableCopies;
     public BookCategoryResponse? Category { get; } = Category;
     public IReadOnlyList<BookItemResponse>? Items { get; } = Items;
 }

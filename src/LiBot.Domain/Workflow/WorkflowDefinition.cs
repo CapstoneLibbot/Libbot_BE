@@ -6,9 +6,9 @@ public class WorkflowDefinition
     public string Name { get; private set; }
     public string? Description { get; private set; }
     public string Type { get; private set; } = "GENERAL";
-    public string Status { get; private set; } = "Active";
+    public WorkflowStatus Status { get; private set; } = WorkflowStatus.ACTIVE;
     public DateTime CreateAt { get; private set; } = DateTime.UtcNow;
-    public bool IsActive => string.Equals(Status, "Active", StringComparison.OrdinalIgnoreCase);
+    public bool IsActive => Status == WorkflowStatus.ACTIVE;
 
     public WorkflowDefinition(string name, string? description)
     {
@@ -17,6 +17,17 @@ public class WorkflowDefinition
 
         Name = name.Trim();
         Description = description?.Trim();
+    }
+
+    public WorkflowDefinition(string name, string? description, WorkflowStatus status)
+        : this(name, description)
+    {
+        Status = status;
+    }
+
+    public WorkflowDefinition(string name, string? description, string status)
+        : this(name, description, ParseStatus(status))
+    {
     }
 
     public void Update(string name, string? description)
@@ -29,5 +40,17 @@ public class WorkflowDefinition
 
     public void SetType(string type) => Type = string.IsNullOrWhiteSpace(type) ? "GENERAL" : type.Trim();
 
-    public void SetActive(bool isActive) => Status = isActive ? "Active" : "Inactive";
+    public void SetActive(bool isActive) => Status = isActive ? WorkflowStatus.ACTIVE : WorkflowStatus.INACTIVE;
+
+    public void SetStatus(WorkflowStatus status) => Status = status;
+
+    public void SetStatus(string status) => Status = ParseStatus(status);
+
+    private static WorkflowStatus ParseStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return WorkflowStatus.ACTIVE;
+        if (Enum.TryParse<WorkflowStatus>(status.Trim(), ignoreCase: true, out var parsed))
+            return parsed;
+        throw new ArgumentException($"Invalid workflow status '{status}'.", nameof(status));
+    }
 }

@@ -96,7 +96,7 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
         if (map is null) return null;
         map.Update(request.Name, request.Version ?? map.Version, request.Width, request.Height,
             request.Data?.GetRawText() ?? map.MapData,
-            request.FloorId == Guid.Empty ? map.FloorId : request.FloorId, request.Status ?? map.Status);
+            request.FloorId == Guid.Empty ? map.FloorId : request.FloorId, request.Status ?? map.Status.ToString());
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(map);
     }
@@ -123,7 +123,7 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
     }
 
     private static MapResponse ToResponse(LibraryMap map) =>
-        new(map.Id, map.Name, map.Width, map.Height, ParseData(map.MapData), map.Version, map.FloorId, map.Status);
+        new(map.Id, map.Name, map.Width, map.Height, ParseData(map.MapData), map.Version, map.FloorId, map.Status.ToString());
 
     private static TDto ToResourceResponse<TEntity, TDto>(TEntity entity)
         where TEntity : class

@@ -12,11 +12,12 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
     {
         var source = db.Aisles.AsNoTracking().AsQueryable();
         if (query.FloorId is Guid floorId) source = source.Where(item => item.FloorId == floorId);
+        if (!string.IsNullOrWhiteSpace(query.Status) && Enum.TryParse<LiBot.Domain.Enums.AisleStatus>(query.Status, true, out var status)) source = source.Where(item => item.Status == status);
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim();
             source = source.Where(item => EF.Functions.Like(item.Name, $"%{search}%")
-                || EF.Functions.Like(item.Status, $"%{search}%")
+                || EF.Functions.Like(EF.Property<string>(item, "Status"), $"%{search}%")
                 || (item.Description != null && EF.Functions.Like(item.Description, $"%{search}%")));
         }
 
@@ -65,6 +66,7 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
         await db.SaveChangesAsync(cancellationToken);
         return true;
     }
+    public Task<bool> HasShelvesAsync(Guid id, CancellationToken cancellationToken) => db.Shelves.AnyAsync(x => x.AisleId == id, cancellationToken);
 
     private async Task<IReadOnlyList<AisleResponse>> ProjectAsync(IReadOnlyList<Aisle> entities, string? expand, CancellationToken cancellationToken)
     {
@@ -79,7 +81,7 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
             ? await db.Shelves.AsNoTracking().Where(item => aisleIds.Contains(item.AisleId)).ToListAsync(cancellationToken)
             : [];
         return entities.Select(item => new AisleResponse(
-            item.Id, item.FloorId, item.Name, item.Description, item.Status,
+            item.Id, item.FloorId, item.Name, item.Description, item.Status.ToString(),
             floors.TryGetValue(item.FloorId, out var floor) ? new(floor.Id, floor.Name, floor.FloorNumber) : null,
             expansions.Contains("shelves") ? shelves.Where(shelf => shelf.AisleId == item.Id).Select(shelf => new AisleShelfResponse(shelf.Id, shelf.Name)).ToList() : null
         )).ToList();

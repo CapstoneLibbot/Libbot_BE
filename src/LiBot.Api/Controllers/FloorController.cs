@@ -14,22 +14,30 @@ public class FloorController : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult<BaseResponse<FloorListResponse>>> GetAll(
-        [FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null, [FromQuery] string? status = null,
         [FromQuery] string sortBy = "floorNumber", [FromQuery] string sortOrder = "asc",
         [FromQuery] string? expand = null, CancellationToken cancellationToken = default)
     {
         if (!ValidPaging(page, pageSize)) return BadRequest(Error("page must be at least 1 and pageSize must be between 1 and 100."));
         if (!new[] { "floorNumber", "name", "status" }.Contains(sortBy, StringComparer.OrdinalIgnoreCase)) return BadRequest(Error("sortBy must be floorNumber, name or status."));
         if (!ValidSort(sortOrder)) return BadRequest(Error("sortOrder must be asc or desc."));
-        if (!ValidExpand(expand, "aisles")) return BadRequest(Error("expand supports aisles."));
-        var response = await _service.GetAllAsync(new FloorQuery(page, pageSize, search, sortBy, sortOrder, expand), cancellationToken);
+        if (!ValidExpand(expand, "aisles", "maps")) return BadRequest(Error("expand supports aisles and maps."));
+        var response = await _service.GetAllAsync(new FloorQuery(page, pageSize, search, status, sortBy, sortOrder, expand), cancellationToken);
         return Ok(new BaseResponse<FloorListResponse>(response));
+    }
+
+    /// <summary>Danh sách rút gọn cho dropdown (tối đa 100 bản ghi).</summary>
+    [HttpGet("all")]
+    public async Task<IActionResult> GetAllOptions([FromQuery] string? status, CancellationToken cancellationToken)
+    {
+        var result = await _service.GetAllAsync(new FloorQuery(1, 100, null, status, "floorNumber", "asc"), cancellationToken);
+        return Ok(new BaseResponse<IReadOnlyList<object>>(result.Items.Select(x => (object)new { x.Id, x.Name, x.FloorNumber, x.Status }).ToList()));
     }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<BaseResponse<FloorResponse>>> GetById(Guid id, [FromQuery] string? expand, CancellationToken cancellationToken)
     {
-        if (!ValidExpand(expand, "aisles")) return BadRequest(Error("expand supports aisles."));
+        if (!ValidExpand(expand, "aisles", "maps")) return BadRequest(Error("expand supports aisles and maps."));
         var response = await _service.GetByIdAsync(id, expand, cancellationToken);
         return response is null ? NotFound(Error("Floor was not found.")) : Ok(new BaseResponse<FloorResponse>(response));
     }
@@ -51,8 +59,7 @@ public class FloorController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        if (!await _service.DeleteAsync(id, cancellationToken)) return NotFound(Error("Floor was not found."));
-        return Ok(BaseResponse<object>.SuccessMessage("Floor deleted successfully."));
+        try { if (!await _service.DeleteAsync(id, cancellationToken)) return NotFound(Error("Floor was not found.")); return Ok(BaseResponse<object>.SuccessMessage("Floor deleted successfully.")); } catch (InvalidOperationException ex) { return Conflict(Error(ex.Message)); }
     }
 
     private static bool ValidPaging(int page, int pageSize) => page >= 1 && pageSize is >= 1 and <= 100 && (long)(page - 1) * pageSize <= int.MaxValue;

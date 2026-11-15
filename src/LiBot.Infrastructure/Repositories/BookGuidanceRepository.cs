@@ -52,7 +52,7 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
                 item.Book.Title,
                 item.Book.Author,
                 item.CategoryName,
-                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == "Available"),
+                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == LiBot.Domain.Enums.BookItemStatus.AVAILABLE),
                 item.Book.Image))
             .ToListAsync(cancellationToken);
 
@@ -111,7 +111,7 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
 
         var bookItems = copies
             .Select(copy => new BookGuidanceBookItem(
-                copy.Id, copy.Barcode, copy.Status, locationsByCopyId.GetValueOrDefault(copy.Id)))
+                copy.Id, copy.Barcode, copy.Status.ToString(), locationsByCopyId.GetValueOrDefault(copy.Id)))
             .ToList();
 
         return new BookGuidanceDetail(

@@ -43,8 +43,12 @@ public class BookService(IBookRepository repository) : IBookService
         return await repository.UpdateAsync(id, request, cancellationToken);
     }
 
-    public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) =>
-        repository.DeleteAsync(id, cancellationToken);
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (await repository.HasBookItemsAsync(id, cancellationToken))
+            throw new InvalidOperationException("Cannot delete a book that still has physical copies.");
+        return await repository.DeleteAsync(id, cancellationToken);
+    }
 
     private static void ValidateRequiredFields(BookWriteRequest request)
     {

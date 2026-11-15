@@ -17,7 +17,7 @@ public class ShelfRepository(LiBotDbContext db) : IShelfRepository
         {
             var search = query.Search.Trim();
             source = source.Where(item => EF.Functions.Like(item.Name, $"%{search}%")
-                || EF.Functions.Like(item.Status, $"%{search}%"));
+                || EF.Functions.Like(EF.Property<string>(item, "Status"), $"%{search}%"));
         }
         var total = await source.CountAsync(cancellationToken);
         var descending = query.SortOrder.Equals("desc", StringComparison.OrdinalIgnoreCase);
@@ -38,6 +38,18 @@ public class ShelfRepository(LiBotDbContext db) : IShelfRepository
     }
 
     public Task<bool> AisleExistsAsync(Guid id, CancellationToken cancellationToken) => db.Aisles.AnyAsync(item => item.Id == id, cancellationToken);
+    public async Task<bool> EndpointsMatchAisleFloorAsync(Guid aisleId, Guid startEndpointId, Guid endEndpointId, CancellationToken cancellationToken)
+    {
+        var floorId = await db.Aisles.Where(x => x.Id == aisleId).Select(x => x.FloorId).SingleOrDefaultAsync(cancellationToken);
+        if (floorId == Guid.Empty) return false;
+        var matched = await db.Endpoints.Where(x => x.Id == startEndpointId || x.Id == endEndpointId)
+            .Join(db.Maps, endpoint => endpoint.MapId, map => map.Id, (endpoint, map) => new { endpoint.Id, map.FloorId })
+            .Where(x => x.FloorId == floorId).Select(x => x.Id).ToListAsync(cancellationToken);
+        return matched.Count == 2 && matched.Contains(startEndpointId) && matched.Contains(endEndpointId);
+    }
+    public async Task<bool> HasDependentsAsync(Guid id, CancellationToken cancellationToken) =>
+        await db.ShelfLevels.AnyAsync(x => x.ShelfId == id, cancellationToken) ||
+        await db.BookItems.Join(db.ShelfLevels, item => item.CurrentShelfLevelId, level => (Guid?)level.Id, (item, level) => level.ShelfId).AnyAsync(x => x == id, cancellationToken);
 
     public async Task<ShelfResponse> CreateAsync(ShelfWriteRequest request, string? expand, CancellationToken cancellationToken)
     {
@@ -89,6 +101,8 @@ public class ShelfRepository(LiBotDbContext db) : IShelfRepository
     }
 
     public Task<bool> ShelfExistsAsync(Guid id, CancellationToken cancellationToken) => db.Shelves.AnyAsync(item => item.Id == id, cancellationToken);
+    public Task<bool> LevelNumberExistsAsync(Guid shelfId, int levelNumber, Guid? excludingLevelId, CancellationToken cancellationToken) => db.ShelfLevels.AnyAsync(x => x.ShelfId == shelfId && x.LevelNumber == levelNumber && x.Id != excludingLevelId, cancellationToken);
+    public Task<bool> LevelHasBookItemsAsync(Guid id, CancellationToken cancellationToken) => db.BookItems.AnyAsync(x => x.ExpectedShelfLevelId == id || x.CurrentShelfLevelId == id, cancellationToken);
 
     public async Task<ShelfLevelResponse> CreateLevelAsync(ShelfLevelWriteRequest request, CancellationToken cancellationToken)
     {
@@ -129,12 +143,12 @@ public class ShelfRepository(LiBotDbContext db) : IShelfRepository
             ? await db.ShelfLevels.AsNoTracking().Where(item => shelfIds.Contains(item.ShelfId)).ToListAsync(cancellationToken)
             : [];
         return entities.Select(item => new ShelfResponse(item.Id, item.AisleId, item.StartEndpointId, item.EndEndpointId,
-            item.Name, item.Description, item.Status,
+            item.Name, item.Description, item.Status.ToString(),
             aisles.TryGetValue(item.AisleId, out var aisle) ? new ShelfAisleResponse(aisle.Id, aisle.Name, aisle.FloorId) : null,
             expansions.Contains("levels") ? levels.Where(level => level.ShelfId == item.Id).OrderBy(level => level.LevelNumber)
                 .Select(ToLevelResponse).ToList() : null)).ToList();
     }
 
     private static ShelfLevelResponse ToLevelResponse(ShelfLevel item) =>
-        new(item.Id, item.ShelfId, item.Name, item.LevelNumber, item.Status);
+        new(item.Id, item.ShelfId, item.Name, item.LevelNumber, item.Status.ToString());
 }

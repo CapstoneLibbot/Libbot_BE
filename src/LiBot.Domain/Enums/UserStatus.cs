@@ -1,4 +1,4 @@
-namespace LiBot.Domain.Identity;
+namespace LiBot.Domain.Enums;
 
 public enum UserStatus
 {

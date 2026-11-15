@@ -17,12 +17,21 @@ public class AisleController : ControllerBase
         _aisleService = service ?? throw new ArgumentNullException(nameof(service));
     }
 
+    /// <summary>Danh sách rút gọn cho dropdown kệ sách (tối đa 100 bản ghi).</summary>
+    [HttpGet("all")]
+    public async Task<IActionResult> GetAllOptions([FromQuery] Guid? floorId, [FromQuery] string? status, CancellationToken cancellationToken)
+    {
+        var result = await _aisleService.GetAllAsync(new AisleQuery(1, 100, null, floorId, status, "name", "asc"), cancellationToken);
+        return Ok(new BaseResponse<IReadOnlyList<object>>(result.Items.Select(x => (object)new { x.Id, x.FloorId, x.Name, x.Status }).ToList()));
+    }
+
     [HttpGet]
     public async Task<ActionResult<BaseResponse<AisleListResponse>>> GetAll(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] string? search = null,
         [FromQuery] Guid? floorId = null,
+        [FromQuery] string? status = null,
         [FromQuery] string sortBy = "name",
         [FromQuery] string sortOrder = "asc",
         [FromQuery] string? expand = null,
@@ -30,12 +39,12 @@ public class AisleController : ControllerBase
     {
         if (page < 1 || pageSize is < 1 or > 100 || (long)(page - 1) * pageSize > int.MaxValue)
             return BadRequest(Error("page must be at least 1 and pageSize must be between 1 and 100."));
-        if (!new[] { "name", "code", "created", "createdatutc" }.Contains(sortBy.ToLowerInvariant()))
-            return BadRequest(Error("sortBy must be name, code or created."));
+        if (!new[] { "name", "status" }.Contains(sortBy.ToLowerInvariant()))
+            return BadRequest(Error("sortBy must be name or status."));
         if (!new[] { "asc", "desc" }.Contains(sortOrder.ToLowerInvariant()))
             return BadRequest(Error("sortOrder must be asc or desc."));
         var response = await _aisleService.GetAllAsync(
-            new AisleQuery(page, pageSize, search, floorId, sortBy, sortOrder, expand),
+            new AisleQuery(page, pageSize, search, floorId, status, sortBy, sortOrder, expand),
             cancellationToken);
         return Ok(new BaseResponse<AisleListResponse>(response));
     }
@@ -77,9 +86,7 @@ public class AisleController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        if (!await _aisleService.DeleteAsync(id, cancellationToken))
-            return NotFound(Error("Aisle was not found."));
-        return Ok(BaseResponse<object>.SuccessMessage("Aisle deleted successfully."));
+        try { if (!await _aisleService.DeleteAsync(id, cancellationToken)) return NotFound(Error("Aisle was not found.")); return Ok(BaseResponse<object>.SuccessMessage("Aisle deleted successfully.")); } catch (InvalidOperationException ex) { return Conflict(Error(ex.Message)); }
     }
 
     private static BaseResponse<object> Error(string message) => BaseResponse<object>.Failure(message);

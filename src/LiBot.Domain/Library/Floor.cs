@@ -7,28 +7,52 @@ public class Floor : Entity
     public string Name { get; private set; }
     public int FloorNumber { get; private set; }
     public string? Description { get; private set; }
-    public string Status { get; private set; } = "Active";
+    public FloorStatus Status { get; private set; } = FloorStatus.ACTIVE;
 
-    public Floor(string name, int floorNumber, string? description = null, string status = "Active")
+    public Floor(string name, int floorNumber, string? description = null, FloorStatus status = FloorStatus.ACTIVE)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Floor name is required.", nameof(name));
-        if (string.IsNullOrWhiteSpace(status))
-            throw new ArgumentException("Floor status is required.", nameof(status));
 
         Name = name.Trim();
         FloorNumber = floorNumber;
         Description = description?.Trim();
-        Status = status.Trim();
+        Status = status;
     }
 
-    public void Update(string name, int floorNumber, string? description = null, string status = "Active")
+    public Floor(string name, int floorNumber, string? description, string status)
+        : this(name, floorNumber, description, ParseStatus(status))
     {
-        var updated = new Floor(name, floorNumber, description, status);
-        Name = updated.Name;
-        FloorNumber = updated.FloorNumber;
-        Description = updated.Description;
-        Status = updated.Status;
+    }
+
+    public void Update(string name, int floorNumber, string? description = null, FloorStatus status = FloorStatus.ACTIVE)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Floor name is required.", nameof(name));
+
+        Name = name.Trim();
+        FloorNumber = floorNumber;
+        Description = description?.Trim();
+        Status = status;
         SetUpdated();
+    }
+
+    public void Update(string name, int floorNumber, string? description, string status)
+    {
+        Update(name, floorNumber, description, ParseStatus(status));
+    }
+
+    public void SetStatus(FloorStatus status)
+    {
+        Status = status;
+        SetUpdated();
+    }
+
+    private static FloorStatus ParseStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return FloorStatus.ACTIVE;
+        if (Enum.TryParse<FloorStatus>(status.Trim(), ignoreCase: true, out var parsed))
+            return parsed;
+        throw new ArgumentException($"Invalid floor status '{status}'.", nameof(status));
     }
 }

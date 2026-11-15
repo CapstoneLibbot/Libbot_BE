@@ -11,6 +11,7 @@ public class FloorRepository(LiBotDbContext db) : IFloorRepository
     public async Task<(IReadOnlyList<FloorResponse> Items, int TotalCount)> SearchAsync(FloorQuery query, CancellationToken cancellationToken)
     {
         var source = db.Floors.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(query.Status) && Enum.TryParse<LiBot.Domain.Enums.FloorStatus>(query.Status, true, out var status)) source = source.Where(item => item.Status == status);
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim();
@@ -59,6 +60,7 @@ public class FloorRepository(LiBotDbContext db) : IFloorRepository
         await db.SaveChangesAsync(cancellationToken);
         return true;
     }
+    public async Task<bool> HasDependentsAsync(Guid id, CancellationToken cancellationToken) => await db.Aisles.AnyAsync(x => x.FloorId == id, cancellationToken) || await db.Maps.AnyAsync(x => x.FloorId == id, cancellationToken);
 
     private async Task<IReadOnlyList<FloorResponse>> ProjectAsync(IReadOnlyList<Floor> entities, string? expand, CancellationToken cancellationToken)
     {
@@ -68,7 +70,7 @@ public class FloorRepository(LiBotDbContext db) : IFloorRepository
         var aisles = expansions.Contains("aisles")
             ? await db.Aisles.AsNoTracking().Where(item => ids.Contains(item.FloorId)).ToListAsync(cancellationToken)
             : [];
-        return entities.Select(item => new FloorResponse(item.Id, item.Name, item.FloorNumber, item.Description, item.Status,
+        return entities.Select(item => new FloorResponse(item.Id, item.Name, item.FloorNumber, item.Description, item.Status.ToString(),
             expansions.Contains("aisles") ? aisles.Where(value => value.FloorId == item.Id)
                 .Select(value => new FloorAisleResponse(value.Id, value.Name)).ToList() : null)).ToList();
     }

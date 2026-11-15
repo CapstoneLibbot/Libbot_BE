@@ -101,8 +101,12 @@ public class BookController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteBook(Guid id, CancellationToken cancellationToken)
     {
-        if (!await _bookService.DeleteAsync(id, cancellationToken)) return NotFound(Error("Book was not found."));
-        return Ok(BaseResponse<object>.SuccessMessage("Book deleted successfully."));
+        try
+        {
+            if (!await _bookService.DeleteAsync(id, cancellationToken)) return NotFound(Error("Book was not found."));
+            return Ok(BaseResponse<object>.SuccessMessage("Book deleted successfully."));
+        }
+        catch (InvalidOperationException exception) { return Conflict(Error(exception.Message)); }
     }
 
     [HttpGet("categories")]

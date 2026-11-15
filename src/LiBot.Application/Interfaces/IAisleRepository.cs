@@ -10,4 +10,5 @@ public interface IAisleRepository
     Task<AisleResponse> CreateAsync(AisleWriteRequest request, string? expand, CancellationToken cancellationToken);
     Task<AisleResponse?> UpdateAsync(Guid id, AisleWriteRequest request, string? expand, CancellationToken cancellationToken);
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
+    Task<bool> HasShelvesAsync(Guid id, CancellationToken cancellationToken);
 }

@@ -105,6 +105,8 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.ToTable("BOOK_ITEM");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Barcode).HasMaxLength(450);
+            entity.Property(x => x.Status).HasConversion<string>();
+            entity.HasIndex(x => x.Barcode).IsUnique();
             entity.HasOne<Book>().WithMany().HasForeignKey(x => x.BookId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.ExpectedShelfLevelId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.CurrentShelfLevelId).OnDelete(DeleteBehavior.NoAction);
@@ -115,6 +117,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("MAP");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>();
             entity.HasOne<Floor>().WithMany().HasForeignKey(x => x.FloorId).OnDelete(DeleteBehavior.NoAction);
             entity.Ignore(x => x.CreatedAtUtc).Ignore(x => x.UpdatedAtUtc);
         });
@@ -122,6 +125,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("FLOOR");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>();
         });
         modelBuilder.Entity<Zone>(entity =>
         {
@@ -133,12 +137,14 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("AISLE");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>();
             entity.HasOne<Floor>().WithMany().HasForeignKey(x => x.FloorId).OnDelete(DeleteBehavior.NoAction);
         });
         modelBuilder.Entity<Shelf>(entity =>
         {
             entity.ToTable("SHELF");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>();
             entity.HasOne<Aisle>().WithMany().HasForeignKey(x => x.AisleId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.StartEndpointId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.EndEndpointId).OnDelete(DeleteBehavior.NoAction);
@@ -147,6 +153,8 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("SHELF_LEVEL");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>();
+            entity.HasIndex(x => new { x.ShelfId, x.LevelNumber }).IsUnique();
             entity.HasOne<Shelf>().WithMany().HasForeignKey(x => x.ShelfId).OnDelete(DeleteBehavior.NoAction);
         });
         modelBuilder.Entity<Endpoint>(entity =>
@@ -226,6 +234,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("WORKFLOW");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>();
             entity.Ignore(x => x.IsActive);
         });
         modelBuilder.Entity<WorkflowTask>(entity =>
@@ -251,6 +260,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         modelBuilder.Entity<BookReceipt>(entity =>
         {
             entity.ToTable("BOOK_RECEIPT"); entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>();
         });
         modelBuilder.Entity<BookReceiptDetail>(entity =>
         {
@@ -263,6 +273,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         modelBuilder.Entity<BookIssue>(entity =>
         {
             entity.ToTable("BOOK_ISSUE"); entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>();
         });
         modelBuilder.Entity<BookIssueDetail>(entity =>
         {
@@ -275,6 +286,8 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         modelBuilder.Entity<InventoryReportDetail>(entity =>
         {
             entity.ToTable("INVENTORY_REPORT_DETAIL"); entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>();
+            entity.Property(x => x.Result).HasConversion<string>();
             entity.HasOne<InventoryReport>().WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<BookItem>().WithMany().HasForeignKey(x => x.BookItemId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.ExpectedShelfLevelId).OnDelete(DeleteBehavior.NoAction);

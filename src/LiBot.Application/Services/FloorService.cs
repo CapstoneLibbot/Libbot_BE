@@ -8,7 +8,7 @@ public class FloorService(IFloorRepository repository) : IFloorService
     public async Task<FloorListResponse> GetAllAsync(FloorQuery query, CancellationToken cancellationToken)
     {
         var normalized = new FloorQuery(Math.Max(1, query.Page), Math.Clamp(query.PageSize, 1, 100),
-            query.Search, query.SortBy, query.SortOrder, query.Expand);
+            query.Search, query.Status, query.SortBy, query.SortOrder, query.Expand);
         var (items, total) = await repository.SearchAsync(normalized, cancellationToken);
         return new FloorListResponse(items, normalized.Page, normalized.PageSize, total,
             (int)Math.Ceiling(total / (double)normalized.PageSize), normalized.SortBy.ToLowerInvariant(), normalized.SortOrder.ToLowerInvariant());
@@ -29,7 +29,7 @@ public class FloorService(IFloorRepository repository) : IFloorService
         return repository.UpdateAsync(id, request, expand, cancellationToken);
     }
 
-    public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => repository.DeleteAsync(id, cancellationToken);
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) { if (await repository.HasDependentsAsync(id, cancellationToken)) throw new InvalidOperationException("Cannot delete a floor that still has aisles or maps."); return await repository.DeleteAsync(id, cancellationToken); }
 
     private static void Validate(FloorWriteRequest request)
     {

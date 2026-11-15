@@ -14,6 +14,7 @@ public class AisleService(IAisleRepository repository) : IAisleService
             pageSize,
             query.Search,
             query.FloorId,
+            query.Status,
             query.SortBy,
             query.SortOrder,
             query.Expand);
@@ -38,7 +39,7 @@ public class AisleService(IAisleRepository repository) : IAisleService
         return await repository.UpdateAsync(id, request, expand, cancellationToken);
     }
 
-    public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => repository.DeleteAsync(id, cancellationToken);
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) { if (await repository.HasShelvesAsync(id, cancellationToken)) throw new InvalidOperationException("Cannot delete an aisle that still contains shelves."); return await repository.DeleteAsync(id, cancellationToken); }
 
     private async Task ValidateReferencesAsync(AisleWriteRequest request, CancellationToken cancellationToken)
     {

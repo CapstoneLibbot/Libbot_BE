@@ -52,6 +52,7 @@ public class BookRepository(LiBotDbContext db) : IBookRepository
 
     public Task<bool> IsbnExistsAsync(string isbn, Guid? excludingBookId, CancellationToken cancellationToken) =>
         db.Books.AnyAsync(book => book.Isbn == isbn && book.Id != excludingBookId, cancellationToken);
+    public Task<bool> HasBookItemsAsync(Guid id, CancellationToken cancellationToken) => db.BookItems.AnyAsync(item => item.BookId == id, cancellationToken);
 
     public async Task<BookResponse> CreateAsync(BookWriteRequest request, CancellationToken cancellationToken)
     {
@@ -99,6 +100,9 @@ public class BookRepository(LiBotDbContext db) : IBookRepository
         var items = expansions.Contains("items")
             ? await db.BookItems.AsNoTracking().Where(item => bookIds.Contains(item.BookId)).ToListAsync(cancellationToken)
             : [];
+        var copyCounts = await db.BookItems.AsNoTracking().Where(item => bookIds.Contains(item.BookId))
+            .GroupBy(item => item.BookId).Select(group => new { BookId = group.Key, Total = group.Count(), Available = group.Count(x => x.Status == LiBot.Domain.Enums.BookItemStatus.AVAILABLE) })
+            .ToDictionaryAsync(x => x.BookId, cancellationToken);
 
         return books.Select(book => new BookResponse(
             book.Id,
@@ -110,13 +114,15 @@ public class BookRepository(LiBotDbContext db) : IBookRepository
             book.PublicationYear,
             book.Image,
             book.Description,
+            copyCounts.TryGetValue(book.Id, out var count) ? count.Total : 0,
+            copyCounts.TryGetValue(book.Id, out count) ? count.Available : 0,
             book.CategoryId is Guid id && categories.TryGetValue(id, out var category)
                 ? new BookCategoryResponse(category.Id, category.Name, category.Description)
                 : null,
             expansions.Contains("items")
                 ? items.Where(item => item.BookId == book.Id)
                     .Select(item => new BookItemResponse(item.Id, item.Barcode, item.ExpectedShelfLevelId,
-                        item.CurrentShelfLevelId, item.LastInventoryAtUtc, item.Status)).ToList()
+                        item.CurrentShelfLevelId, item.LastInventoryAtUtc, item.Status.ToString())).ToList()
                 : null)).ToList();
     }
 }

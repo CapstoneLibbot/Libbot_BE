@@ -10,10 +10,10 @@ public class LibraryMap : Entity
     public int Width { get; private set; }
     public int Height { get; private set; }
     public string MapData { get; private set; }
-    public string Status { get; private set; }
+    public MapStatus Status { get; private set; } = MapStatus.Active;
 
     public LibraryMap(string name, string version, int width, int height, string mapData,
-        Guid floorId, string status = "Active")
+        Guid floorId, MapStatus status = MapStatus.Active)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Map name is required.", nameof(name));
@@ -25,8 +25,6 @@ public class LibraryMap : Entity
             throw new ArgumentNullException(nameof(mapData));
         if (floorId == Guid.Empty)
             throw new ArgumentException("Floor id is required.", nameof(floorId));
-        if (string.IsNullOrWhiteSpace(status))
-            throw new ArgumentException("Map status is required.", nameof(status));
 
         FloorId = floorId;
         Name = name.Trim();
@@ -34,11 +32,17 @@ public class LibraryMap : Entity
         Width = width;
         Height = height;
         MapData = mapData;
-        Status = status.Trim();
+        Status = status;
+    }
+
+    public LibraryMap(string name, string version, int width, int height, string mapData,
+        Guid floorId, string status)
+        : this(name, version, width, height, mapData, floorId, ParseStatus(status))
+    {
     }
 
     public void Update(string name, string version, int width, int height, string mapData,
-        Guid floorId, string status = "Active")
+        Guid floorId, MapStatus status = MapStatus.Active)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Map name is required.", nameof(name));
@@ -50,8 +54,6 @@ public class LibraryMap : Entity
             throw new ArgumentNullException(nameof(mapData));
         if (floorId == Guid.Empty)
             throw new ArgumentException("Floor id is required.", nameof(floorId));
-        if (string.IsNullOrWhiteSpace(status))
-            throw new ArgumentException("Map status is required.", nameof(status));
 
         FloorId = floorId;
         Name = name.Trim();
@@ -59,8 +61,14 @@ public class LibraryMap : Entity
         Width = width;
         Height = height;
         MapData = mapData;
-        Status = status.Trim();
+        Status = status;
         SetUpdated();
+    }
+
+    public void Update(string name, string version, int width, int height, string mapData,
+        Guid floorId, string status)
+    {
+        Update(name, version, width, height, mapData, floorId, ParseStatus(status));
     }
 
     public void AssignFloor(Guid floorId)
@@ -68,5 +76,19 @@ public class LibraryMap : Entity
         if (floorId == Guid.Empty)
             throw new ArgumentException("Floor id is required.", nameof(floorId));
         FloorId = floorId;
+    }
+
+    public void SetStatus(MapStatus status)
+    {
+        Status = status;
+        SetUpdated();
+    }
+
+    private static MapStatus ParseStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return MapStatus.Active;
+        if (Enum.TryParse<MapStatus>(status.Trim(), ignoreCase: true, out var parsed))
+            return parsed;
+        throw new ArgumentException($"Invalid map status '{status}'.", nameof(status));
     }
 }
