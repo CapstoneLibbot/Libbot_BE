@@ -105,7 +105,7 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
                     floor.Id, floor.Name, floor.FloorNumber, aisle.Id, aisle.Name, aisle.Name,
                     shelf.Id, shelf.Name, shelf.Name, level.Id, level.LevelNumber,
                     endpoint == null ? null : new NavigationEndpoint(
-                        endpoint.Id, endpoint.Name, endpoint.PositionX, endpoint.PositionY, endpoint.Theta))
+                        endpoint.Id, endpoint.MapId, endpoint.Name, endpoint.PositionX, endpoint.PositionY, endpoint.Theta))
             })
             .ToDictionaryAsync(item => item.Id, item => item.Location, cancellationToken);
 

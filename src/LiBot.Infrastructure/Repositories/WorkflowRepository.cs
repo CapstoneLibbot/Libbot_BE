@@ -61,6 +61,26 @@ public sealed class WorkflowRepository(LiBotDbContext db) : IWorkflowRepository
         return true;
     }
 
+    public async Task<bool> ActivateAsync(Guid id, CancellationToken cancellationToken)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            System.Data.IsolationLevel.Serializable, cancellationToken);
+        var workflow = await db.Workflows.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (workflow is null) return false;
+
+        var activeWorkflows = await db.Workflows
+            .Where(item => item.Type == workflow.Type && item.Status == "Active")
+            .ToListAsync(cancellationToken);
+        foreach (var activeWorkflow in activeWorkflows)
+            if (activeWorkflow.Id != workflow.Id)
+                activeWorkflow.SetActive(false);
+
+        workflow.SetActive(true);
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         var aggregate = await GetByIdAsync(id, tracking: true, cancellationToken);

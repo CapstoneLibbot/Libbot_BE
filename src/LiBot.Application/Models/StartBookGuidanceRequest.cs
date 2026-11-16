@@ -10,4 +10,5 @@ public sealed record StartBookGuidanceRequest(
     string? RuntimeId = null,
     Guid? BookId = null,
     Guid? BookItemId = null,
-    string? ArmLeaseId = null);
+    string? ArmLeaseId = null,
+    Guid? EndpointId = null);

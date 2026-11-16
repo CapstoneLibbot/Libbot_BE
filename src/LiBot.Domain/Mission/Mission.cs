@@ -12,7 +12,9 @@ public class Mission
     public int Priority { get; private set; }
     [System.ComponentModel.DataAnnotations.Schema.Column("CreateAt")]
     public DateTime CreatedAtUtc { get; private set; } = DateTime.UtcNow;
+    [System.ComponentModel.DataAnnotations.Schema.Column("StartedAt")]
     public DateTime? StartedAtUtc { get; private set; }
+    [System.ComponentModel.DataAnnotations.Schema.Column("CompletedAt")]
     public DateTime? CompletedAtUtc { get; private set; }
 
     private Mission() => Name = string.Empty;

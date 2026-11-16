@@ -11,5 +11,6 @@ public interface IWorkflowManagementService
     Task<WorkflowOperationResult<WorkflowResponse>> CreateAsync(WorkflowWriteRequest request, CancellationToken cancellationToken);
     Task<WorkflowOperationResult<WorkflowResponse>> CreateFromTemplateAsync(string templateId, WorkflowTemplateCreateRequest? request, CancellationToken cancellationToken);
     Task<WorkflowOperationResult<WorkflowResponse>> UpdateAsync(Guid id, WorkflowWriteRequest request, CancellationToken cancellationToken);
+    Task<WorkflowOperationResult<WorkflowResponse>> ActivateAsync(Guid id, CancellationToken cancellationToken);
     Task<WorkflowOperationResult<bool>> DeleteAsync(Guid id, CancellationToken cancellationToken);
 }

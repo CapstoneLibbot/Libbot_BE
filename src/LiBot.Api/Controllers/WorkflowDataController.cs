@@ -64,6 +64,7 @@ public sealed class WorkflowDataController(
 
             var simulationEndpoint = new NavigationEndpoint(
                 endpoint.Id,
+                endpoint.MapId,
                 endpoint.Name,
                 endpoint.X,
                 endpoint.Y,

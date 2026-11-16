@@ -87,7 +87,8 @@ public static class LiBotDatabaseInitializer
         }
 
         var shelf = await db.Shelves.FirstOrDefaultAsync(
-            item => item.AisleId == aisle.Id && item.Name == "Kệ Công nghệ A3",
+            item => item.AisleId == aisle.Id
+                && (item.Name == "Kệ Công nghệ A3" || item.Name == "Kệ Công nghệ"),
             cancellationToken);
         if (shelf is null)
         {

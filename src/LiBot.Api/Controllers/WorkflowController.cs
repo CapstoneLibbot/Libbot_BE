@@ -82,6 +82,16 @@ public class WorkflowController(
         };
     }
 
+    /// <summary>Kích hoạt workflow và tắt các workflow đang hoạt động cùng loại.</summary>
+    [HttpPost("{id:guid}/activate")]
+    public async Task<ActionResult<WorkflowResponse>> Activate(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await workflows.ActivateAsync(id, cancellationToken);
+        return result.Status == WorkflowOperationStatus.NotFound
+            ? NotFound()
+            : Ok(result.Value);
+    }
+
     /// <summary>Xóa workflow nếu workflow không còn ràng buộc.</summary>
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)

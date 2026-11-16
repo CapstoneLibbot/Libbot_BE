@@ -119,10 +119,8 @@ public sealed class BookGuidanceController(
     {
         if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
         if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.BookId is null || request.BookItemId is null
-            || request.RobotId == Guid.Empty)
-            return BadRequest("runtimeId, robotId, bookId, and bookItemId are required.");
-        if (!await missionData.RobotExistsAsync(request.RobotId, cancellationToken))
-            return NotFound("Robot not found.");
+            || request.EndpointId is null)
+            return BadRequest("runtimeId, bookId, bookItemId, and endpointId are required.");
         if (string.Equals(request.RuntimeId, "sim", StringComparison.OrdinalIgnoreCase))
             return Conflict(new { message = "Start Gazebo runs from the mission Run button so execution state stays transient." });
 
@@ -135,9 +133,31 @@ public sealed class BookGuidanceController(
         var endpoint = selectedCopy.Location?.Endpoint;
         if (endpoint is null || !double.IsFinite(endpoint.X) || !double.IsFinite(endpoint.Y) || !double.IsFinite(endpoint.Theta))
             return UnprocessableEntity(new { message = "Selected book copy has no valid navigation endpoint." });
+        if (request.EndpointId.Value != endpoint.EndpointId)
+            return Conflict(new { message = "The selected endpoint does not match the book copy location." });
 
         var runtimeError = runtimes.ValidateGuidanceStart(request.RuntimeId, request.ArmLeaseId);
         if (runtimeError is not null) return Conflict(new { message = runtimeError });
+        var runtime = runtimes.Get(request.RuntimeId);
+        if (runtime is null) return BadRequest("The selected robot runtime was not found.");
+        if (!Guid.TryParse(runtime.Telemetry?.ActiveMapId, out var activeMapId))
+            return Conflict(new { message = "The robot has no active map. Start navigation on the map containing this book first." });
+        if (activeMapId != endpoint.MapId)
+            return Conflict(new { message = "The selected book is not on the robot's active map." });
+        if (!await missionData.MapExistsAsync(activeMapId, cancellationToken))
+            return NotFound("The robot's active map was not found.");
+
+        var robotId = request.RobotId;
+        if (robotId == Guid.Empty)
+        {
+            robotId = await missionData.GetOrCreateRobotIdForMapAsync(
+                activeMapId, request.RuntimeId, runtime.DisplayName, cancellationToken);
+        }
+        else if (!await missionData.RobotExistsAsync(robotId, cancellationToken))
+        {
+            return NotFound("Robot not found.");
+        }
+        request = request with { RobotId = robotId };
 
         var baseUrl = !string.IsNullOrWhiteSpace(request.BackendBaseUrl)
             ? request.BackendBaseUrl.TrimEnd('/')

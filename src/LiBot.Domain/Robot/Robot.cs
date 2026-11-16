@@ -37,4 +37,13 @@ public class Robot
         BatteryLevel = Math.Clamp(batteryLevel, 0, 100);
         UpdateAt = DateTime.UtcNow;
     }
+
+    public void AssignMap(Guid mapId)
+    {
+        if (mapId == Guid.Empty)
+            throw new ArgumentException("Map id is required.", nameof(mapId));
+
+        MapId = mapId;
+        UpdateAt = DateTime.UtcNow;
+    }
 }

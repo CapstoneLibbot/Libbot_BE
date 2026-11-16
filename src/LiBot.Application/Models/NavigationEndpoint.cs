@@ -5,6 +5,7 @@ namespace LiBot.Application.Models;
 
 public sealed record NavigationEndpoint(
     Guid EndpointId,
+    Guid MapId,
     string Name,
     double X,
     double Y,
