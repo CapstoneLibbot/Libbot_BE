@@ -39,7 +39,7 @@ public static class WorkflowTemplates
     public static readonly IReadOnlyList<WorkflowTemplateResponse> All =
     [
         CreateReturnAndChargingTemplate(),
-        new("search-guide-book", "Tìm và hướng dẫn tới sách", "Dẫn robot tới bản sách đã chọn, quét barcode xác nhận rồi thông báo vị trí.", "SEARCH_AND_GUIDE_TO_BOOK", new[]
+        new("search-guide-book", "Tìm và hướng dẫn tới sách", "Dẫn reader tới kệ của bản sách đã chọn và thông báo vị trí.", "SEARCH_AND_GUIDE_TO_BOOK", new[]
         {
             MakeStep(1, "S10", "PROCESS_DATA", new()
             {
@@ -64,22 +64,11 @@ public static class WorkflowTemplates
                 ["timeout_sec"] = 2,
                 ["transitions"] = new { on_success = "S40" }
             }),
-            MakeStep(4, "S40", "SCAN", new()
-            {
-                ["sensor"] = "camera",
-                ["device"] = "imx500-tcp://127.0.0.1:9011",
-                ["scan_type"] = "BARCODE",
-                ["target_type"] = "BOOK",
-                ["expected_value"] = "${book_detail.selectedBookItem.barcode}",
-                ["output_key"] = "scanned_code",
-                ["timeout_sec"] = 30,
-                ["transitions"] = new { on_success = "S50" }
-            }),
-            MakeStep(5, "S50", "NOTIFY", new()
+            MakeStep(4, "S40", "NOTIFY", new()
             {
                 ["channel"] = "SPEAKER_TTS",
                 ["message_type"] = "INFO",
-                ["content"] = "Đã xác nhận sách ${book_detail.title}, mã ${scanned_code}, tại kệ ${book_detail.location.shelfName}, tầng ${book_detail.location.shelfLevel}."
+                ["content"] = "Đã đến kệ ${book_detail.location.shelfName}, tầng ${book_detail.location.shelfLevel}. Reader có thể lấy sách ${book_detail.title}."
             })
         }),
         CreateFacilityGuidanceTemplate(),
