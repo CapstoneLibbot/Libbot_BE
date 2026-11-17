@@ -33,7 +33,7 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
                                  && endEndpoint.MapId == endpoint.MapId
                                  && (!mapId.HasValue || endpoint.MapId == mapId.Value)
                              orderby aisle.Name, shelf.Name
-                             select new { Shelf = shelf, Aisle = aisle, Endpoint = endpoint, Map = map })
+                             select new { Shelf = shelf, Aisle = aisle, Endpoint = endpoint, EndEndpoint = endEndpoint, Map = map })
             .ToListAsync(cancellationToken);
 
         if (shelves.Count != requestedIds.Length)
@@ -50,11 +50,8 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
             item.Shelf.Id,
             item.Shelf.Name,
             item.Shelf.Name,
-            item.Endpoint.Id,
-            item.Endpoint.Name,
-            item.Endpoint.PositionX,
-            item.Endpoint.PositionY,
-            item.Endpoint.Theta,
+            item.Endpoint,
+            item.EndEndpoint,
             levels.Where(level => level.ShelfId == item.Shelf.Id)
                 .Select(level => new InventoryShelfLevelRecord(level.Id, level.LevelNumber))
                 .ToArray())).ToArray();
@@ -75,11 +72,8 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
                               shelf.Id,
                               Code = shelf.Name,
                               shelf.Name,
-                              EndpointId = endpoint.Id,
-                              EndpointName = endpoint.Name,
-                              endpoint.PositionX,
-                              endpoint.PositionY,
-                              endpoint.Theta
+                              Endpoint = endpoint,
+                              EndEndpoint = endEndpoint
                           }).FirstOrDefaultAsync(cancellationToken);
         if (item is null) return null;
 
@@ -88,8 +82,7 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
             .OrderBy(level => level.LevelNumber)
             .Select(level => new InventoryShelfLevelRecord(level.Id, level.LevelNumber))
             .ToListAsync(cancellationToken);
-        return CreateScopeRecord(item.Id, item.Code, item.Name, item.EndpointId, item.EndpointName,
-            item.PositionX, item.PositionY, item.Theta, levels);
+        return CreateScopeRecord(item.Id, item.Code, item.Name, item.Endpoint, item.EndEndpoint, levels);
     }
 
     public async Task<IReadOnlyList<InventoryBookItemRecord>> GetBookItemsAsync(
@@ -193,18 +186,19 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
         Guid shelfId,
         string code,
         string name,
-        Guid endpointId,
-        string endpointName,
-        double x,
-        double y,
-        double theta,
+        Endpoint startEndpoint,
+        Endpoint endEndpoint,
         IReadOnlyList<InventoryShelfLevelRecord> levels)
     {
         if (levels.Count != 2 || !levels.Any(item => item.LevelNumber == 1) || !levels.Any(item => item.LevelNumber == 2))
             throw new InvalidOperationException($"Shelf '{code}' must have exactly level 1 and level 2 configured for the two-tier scanner.");
 
-        return new InventoryShelfScopeRecord(shelfId, code, name,
-            new InventoryNavigationTargetRecord(endpointId, endpointName, x, y, theta),
-            levels.OrderBy(item => item.LevelNumber).ToArray());
+        var start = new InventoryNavigationTargetRecord(startEndpoint.Id, startEndpoint.Name,
+            startEndpoint.PositionX, startEndpoint.PositionY, startEndpoint.Theta, startEndpoint.MapId);
+        var end = new InventoryNavigationTargetRecord(endEndpoint.Id, endEndpoint.Name,
+            endEndpoint.PositionX, endEndpoint.PositionY, endEndpoint.Theta, endEndpoint.MapId);
+        InventoryEndpointValidator.Validate(start, end);
+        return new InventoryShelfScopeRecord(shelfId, code, name, start,
+            levels.OrderBy(item => item.LevelNumber).ToArray(), start, end);
     }
 }
