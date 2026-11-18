@@ -93,6 +93,28 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
     public string? ValidateBookGuidanceStart(string runtimeId, string? armLeaseId) =>
         ValidateGuidanceStart(runtimeId, armLeaseId);
 
+    /// <summary>
+    /// Validates a start from the trusted kiosk voice service. The robot still
+    /// has to be armed, localized, connected, and navigation-ready.
+    /// </summary>
+    public string? ValidateVoiceGuidanceStart(string runtimeId)
+    {
+        if (!_runtimes.TryGetValue(runtimeId, out var runtime))
+            return "Robot runtime was not found.";
+
+        var response = ToResponse(runtime);
+        if (!response.Connected || response.Stale)
+            return "Robot runtime is offline or its telemetry is stale.";
+        if (!string.Equals(runtime.Telemetry?.LocalizationState, "LOCALIZED", StringComparison.OrdinalIgnoreCase))
+            return "Robot must be localized before starting guidance.";
+        if (runtime.Telemetry?.NavigationReady != true)
+            return "Nav2 is not ready. Set the initial pose and wait for activation.";
+        if (string.Equals(runtime.Endpoint.Kind, "REAL", StringComparison.OrdinalIgnoreCase) && !response.Armed)
+            return "Arm the physical robot before starting guidance.";
+
+        return null;
+    }
+
     public ArmRuntimeResponse? Arm(string runtimeId)
     {
         if (!_runtimes.TryGetValue(runtimeId, out var runtime)) return null;

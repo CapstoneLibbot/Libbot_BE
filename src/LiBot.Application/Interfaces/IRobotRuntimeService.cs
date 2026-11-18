@@ -7,6 +7,7 @@ public interface IRobotRuntimeService
     IReadOnlyList<RobotRuntimeResponse> GetAll();
     RobotRuntimeResponse? Get(string runtimeId);
     string? ValidateGuidanceStart(string runtimeId, string? armLeaseId);
+    string? ValidateVoiceGuidanceStart(string runtimeId);
     ArmRuntimeResponse? Arm(string runtimeId);
     bool Disarm(string runtimeId);
     Task<bool> UpdateTelemetryAsync(string runtimeId, RobotTelemetryRequest telemetry, CancellationToken cancellationToken);

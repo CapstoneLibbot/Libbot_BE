@@ -8,6 +8,35 @@ namespace LiBot.Infrastructure.Repositories;
 
 public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRepository
 {
+    public async Task<BookSearchResponse> SearchTitlesAsync(
+        string query,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        var term = query.Trim();
+        var booksQuery =
+            from book in db.Books.AsNoTracking()
+            join bookCategory in db.BookCategories.AsNoTracking() on book.CategoryId equals bookCategory.Id into categories
+            from bookCategory in categories.DefaultIfEmpty()
+            where EF.Functions.Like(book.Title, $"%{term}%")
+            select new { Book = book, CategoryName = bookCategory == null ? null : bookCategory.Name };
+
+        var totalCount = await booksQuery.CountAsync(cancellationToken);
+        var books = await booksQuery
+            .OrderBy(item => item.Book.Title)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(item => new BookSearchItem(
+                item.Book.Id, item.Book.Isbn, item.Book.Title, item.Book.Author, item.CategoryName,
+                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == "Available"),
+                item.Book.Image))
+            .ToListAsync(cancellationToken);
+
+        return new BookSearchResponse(books, page, pageSize, totalCount,
+            (int)Math.Ceiling(totalCount / (double)pageSize));
+    }
+
     public async Task<BookSearchResponse> SearchAsync(
         string? query,
         string? category,
