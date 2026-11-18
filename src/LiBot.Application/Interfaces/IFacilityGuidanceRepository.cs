@@ -12,7 +12,6 @@ public interface IFacilityGuidanceRepository
         CancellationToken cancellationToken);
 
     Task<IReadOnlyList<FacilityGuidanceDetail>> GetAllFacilitiesAsync(CancellationToken cancellationToken);
-    Task<FacilityGuidanceDetail?> GetReadingRoomAsync(CancellationToken cancellationToken);
     Task<FacilityGuidanceDetail?> GetFacilityAsync(Guid facilityId, CancellationToken cancellationToken);
     Task<FacilityFeedbackResponse?> SaveFeedbackAsync(FacilityFeedbackRequest request, CancellationToken cancellationToken);
     Task<IReadOnlyList<FacilityFeedbackResponse>> GetFeedbackAsync(Guid? taskId, CancellationToken cancellationToken);

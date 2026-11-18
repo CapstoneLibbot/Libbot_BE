@@ -31,6 +31,13 @@ public sealed class BookGuidanceService(
         return await books.SearchAsync(query, category, exact, page, pageSize, cancellationToken);
     }
 
+    public Task<BookSearchResponse> SearchTitlesAsync(
+        string query,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken) =>
+        books.SearchTitlesAsync(query, page, pageSize, cancellationToken);
+
     public Task<BookGuidanceDetail?> GetBookAsync(
         Guid bookId,
         CancellationToken cancellationToken)

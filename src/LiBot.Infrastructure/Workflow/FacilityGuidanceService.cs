@@ -33,9 +33,6 @@ public sealed class FacilityGuidanceService(
     public Task<IReadOnlyList<FacilityGuidanceDetail>> GetAllFacilitiesAsync(CancellationToken cancellationToken) =>
         facilities.GetAllFacilitiesAsync(cancellationToken);
 
-    public Task<FacilityGuidanceDetail?> GetReadingRoomAsync(CancellationToken cancellationToken) =>
-        facilities.GetReadingRoomAsync(cancellationToken);
-
     public Task<FacilityGuidanceDetail?> GetFacilityAsync(
         Guid facilityId,
         CancellationToken cancellationToken)
