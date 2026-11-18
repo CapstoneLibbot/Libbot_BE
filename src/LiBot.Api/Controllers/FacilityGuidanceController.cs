@@ -58,9 +58,9 @@ public sealed class FacilityGuidanceController(
         CancellationToken cancellationToken)
     {
         if (request.Rating is < 1 or > 5) return BadRequest("Rating must be between 1 and 5.");
-        var isSimulationTask = await service.IsSimulationTaskAsync(request.TaskId, cancellationToken);
+        var isSimulationTask = await service.IsSimulationTaskAsync(request.JobId, cancellationToken);
         if (isSimulationTask)
-            return Ok(new FacilityFeedbackResponse(Guid.Empty, request.TaskId, request.Rating));
+            return Ok(new FacilityFeedbackResponse(Guid.Empty, request.JobId, request.Rating));
         var feedback = await service.SaveFeedbackAsync(request, cancellationToken);
         if (feedback is null)
             return NotFound("Task was not found.");
@@ -70,8 +70,8 @@ public sealed class FacilityGuidanceController(
 
     [HttpGet("feedback")]
     public async Task<ActionResult<IReadOnlyList<FacilityFeedbackResponse>>> GetFeedback(
-        [FromQuery] Guid? taskId, CancellationToken cancellationToken) =>
-        Ok(await service.GetFeedbackAsync(taskId, cancellationToken));
+        [FromQuery] Guid? jobId, CancellationToken cancellationToken) =>
+        Ok(await service.GetFeedbackAsync(jobId, cancellationToken));
 
     [HttpGet("feedback/{feedbackId:guid}")]
     public async Task<ActionResult<FacilityFeedbackResponse>> GetFeedbackById(Guid feedbackId, CancellationToken cancellationToken)
@@ -169,12 +169,12 @@ public sealed class FacilityGuidanceController(
             {
                 var message = GetString(result.Robot, "message") ?? GetString(result.Robot, "error")
                     ?? "Robot runtime did not accept the facility guidance workflow.";
-                return UnprocessableEntity(new { message, missionId = result.MissionId, robot = result.Robot });
+                return UnprocessableEntity(new { message, jobId = result.MissionId, robot = result.Robot });
             }
 
             return Accepted(new
             {
-                missionId = result.MissionId,
+                jobId = result.MissionId,
                 executionId = result.MissionId,
                 workflowId = result.Workflow.Id,
                 runtimeId,
@@ -258,14 +258,14 @@ public sealed class FacilityGuidanceController(
         }
     }
 
-    /// <summary>Đánh dấu task hướng dẫn địa điểm hoàn thành hoặc thất bại.</summary>
-    [HttpPost("tasks/{taskId:guid}/complete")]
-    public async Task<IActionResult> CompleteTask(
-        Guid taskId,
+    /// <summary>Đánh dấu Job hướng dẫn địa điểm hoàn thành hoặc thất bại.</summary>
+    [HttpPost("jobs/{jobId:guid}/complete")]
+    public async Task<IActionResult> CompleteJob(
+        Guid jobId,
         CompleteFacilityGuidanceRequest request,
         CancellationToken cancellationToken)
     {
-        return await service.CompleteTaskAsync(taskId, request, cancellationToken)
+        return await service.CompleteTaskAsync(jobId, request, cancellationToken)
             ? NoContent()
             : NotFound();
     }
