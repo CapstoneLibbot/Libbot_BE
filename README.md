@@ -22,6 +22,6 @@ Traditional library management faces significant challenges in keeping inventory
 
 ## Xiaozhi voice tools
 
-The backend exposes a protected MCP Streamable HTTP endpoint at `/mcp/voice-tools` for the self-hosted Xiaozhi server. It provides only `search_books` and `search_areas`; neither tool can create a mission or control a robot.
+The backend exposes a protected MCP Streamable HTTP endpoint at `/mcp/voice-tools` for the self-hosted Xiaozhi server. It provides title-only `search_books`, `start_book_guidance`, Endpoint-name `search_locations`, and `start_location_guidance`. Guidance may create a robot mission only after the user confirms, and only for the configured kiosk robot when it is armed, localized, and navigation-ready.
 
-Set `VoiceTools__ApiToken` in the backend secret environment. Set the same value as `LIBBOT_VOICE_TOOLS_TOKEN` and configure the reachable backend URL as `LIBBOT_BE_MCP_URL` in `Libbot_Mobile/docker/xiaozhi/.env`, then run that folder's `render-config.sh` before restarting Xiaozhi.
+Set `VoiceTools__ApiToken`, `VoiceTools__GuidanceRobotId`, and `VoiceTools__GuidanceRuntimeId` in the backend secret environment. Set the same token as `LIBBOT_VOICE_TOOLS_TOKEN` and configure the reachable backend URL as `LIBBOT_BE_MCP_URL` in `Libbot_Mobile/docker/xiaozhi/.env`, then run that folder's `render-config.sh` before restarting Xiaozhi. Treat this token as robot-control capable.

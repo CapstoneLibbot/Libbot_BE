@@ -8,8 +8,6 @@ namespace LiBot.Infrastructure.Repositories;
 
 public sealed class FacilityGuidanceRepository(LiBotDbContext db) : IFacilityGuidanceRepository
 {
-    private const string ReadingRoomName = "Phòng đọc sách";
-
 
     public async Task<FacilitySearchResponse> SearchAsync(
         string? query,
@@ -29,13 +27,8 @@ public sealed class FacilityGuidanceRepository(LiBotDbContext db) : IFacilityGui
         if (!string.IsNullOrEmpty(term))
         {
             facilitiesQuery = exact
-                ? facilitiesQuery.Where(item => item.Endpoint.Name == term
-                    || item.Endpoint.Description == term
-                    || item.Floor.Name == term)
-                : facilitiesQuery.Where(item =>
-                    EF.Functions.Like(item.Endpoint.Name, $"%{term}%") ||
-                    (item.Endpoint.Description != null && EF.Functions.Like(item.Endpoint.Description, $"%{term}%")) ||
-                    EF.Functions.Like(item.Floor.Name, $"%{term}%"));
+                ? facilitiesQuery.Where(item => item.Endpoint.Name == term)
+                : facilitiesQuery.Where(item => EF.Functions.Like(item.Endpoint.Name, $"%{term}%"));
         }
 
         var totalCount = await facilitiesQuery.CountAsync(cancellationToken);
@@ -47,7 +40,7 @@ public sealed class FacilityGuidanceRepository(LiBotDbContext db) : IFacilityGui
             .Select(item => new FacilitySearchItem(
                 item.Endpoint.Id,
                 item.Endpoint.Name,
-                item.Endpoint.Name == ReadingRoomName ? "READING_ROOM" : "ENDPOINT",
+                "ENDPOINT",
                 item.Map.Id,
                 item.Map.Name))
             .ToListAsync(cancellationToken);
@@ -69,16 +62,6 @@ public sealed class FacilityGuidanceRepository(LiBotDbContext db) : IFacilityGui
             orderby endpoint.Name
             select ToFacilityDetail(floor, endpoint, map))
             .ToListAsync(cancellationToken);
-
-    public Task<FacilityGuidanceDetail?> GetReadingRoomAsync(CancellationToken cancellationToken) =>
-        (
-            from endpoint in db.Endpoints.AsNoTracking()
-            join map in db.Maps.AsNoTracking() on endpoint.MapId equals map.Id
-            join floor in db.Floors.AsNoTracking() on map.FloorId equals floor.Id
-            where endpoint.IsActive && endpoint.EndpointType == "WAYPOINT" && endpoint.Name == ReadingRoomName
-            orderby endpoint.Id
-            select ToFacilityDetail(floor, endpoint, map))
-            .FirstOrDefaultAsync(cancellationToken);
 
     public Task<FacilityGuidanceDetail?> GetFacilityAsync(Guid facilityId, CancellationToken cancellationToken) =>
         (
@@ -144,7 +127,7 @@ public sealed class FacilityGuidanceRepository(LiBotDbContext db) : IFacilityGui
         new(
             endpoint.Id,
             endpoint.Name,
-            endpoint.Name == ReadingRoomName ? "READING_ROOM" : "ENDPOINT",
+            "ENDPOINT",
             endpoint.Description ?? floor.Name,
             new FacilityLocation(
                 map.Id,

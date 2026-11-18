@@ -66,7 +66,6 @@ public static class DependencyInjection
         services.AddScoped<IZoneService, ZoneService>();
         services.AddScoped<IBookGuidanceRepository, BookGuidanceRepository>();
         services.AddScoped<IFacilityGuidanceRepository, FacilityGuidanceRepository>();
-        services.AddScoped<IVoiceAreaSearchService, VoiceAreaSearchService>();
         services.AddScoped<IGuidanceWorkflowRepository, GuidanceWorkflowRepository>();
         services.AddScoped<ILibraryMapRepository, LibraryMapRepository>();
         services.AddScoped<ILibraryMapService, LibraryMapService>();

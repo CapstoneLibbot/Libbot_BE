@@ -41,14 +41,6 @@ public sealed class FacilityGuidanceController(
         CancellationToken cancellationToken) =>
         Ok(await service.GetAllFacilitiesAsync(cancellationToken));
 
-    /// <summary>Lấy thông tin và vị trí điều hướng của phòng đọc sách.</summary>
-    [HttpGet("facilities/reading-room")]
-    public async Task<ActionResult<FacilityGuidanceDetail>> GetReadingRoom(CancellationToken cancellationToken)
-    {
-        var readingRoom = await service.GetReadingRoomAsync(cancellationToken);
-        return readingRoom is null ? NotFound("Reading room facility not found.") : Ok(readingRoom);
-    }
-
     /// <summary>Lấy vị trí và thông tin điều hướng của một địa điểm.</summary>
     [HttpGet("facilities/{facilityId:guid}")]
     public async Task<ActionResult<FacilityGuidanceDetail>> GetFacility(
