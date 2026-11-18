@@ -116,8 +116,8 @@ public sealed class LiBotVoiceTools(
                 BookItemId: selectedCopy.Id), backendBaseUrl, timeout.Token);
 
             return result.IsAccepted
-                ? VoiceBookGuidanceResult.Started(book.Title)
-                : VoiceBookGuidanceResult.Unavailable();
+                ? VoiceBookGuidanceResult.Started(book.Title, result.MissionId, runtimeId)
+                : VoiceBookGuidanceResult.Failed(book.Title, result.MissionId, runtimeId);
         }
         catch (OperationCanceledException)
         {
@@ -163,8 +163,8 @@ public sealed class LiBotVoiceTools(
                 RuntimeId: runtimeId,
                 FacilityId: endpointId), backendBaseUrl, timeout.Token);
             return result.IsAccepted
-                ? VoiceLocationGuidanceResult.Started(location.Name)
-                : VoiceLocationGuidanceResult.Unavailable();
+                ? VoiceLocationGuidanceResult.Started(location.Name, result.MissionId, runtimeId)
+                : VoiceLocationGuidanceResult.Failed(location.Name, result.MissionId, runtimeId);
         }
         catch (OperationCanceledException)
         {
@@ -223,17 +223,33 @@ public sealed record VoiceLocationSearchResult(
 
 public sealed record VoiceLocationSearchItem(Guid EndpointId, string Name, bool CanGuide);
 
-public sealed record VoiceBookGuidanceResult(string ErrorCode, string Title)
+public sealed record VoiceBookGuidanceResult(
+    string ErrorCode,
+    string Title,
+    Guid? JobId,
+    string? ExecutionId,
+    string? RuntimeId)
 {
-    public static VoiceBookGuidanceResult Started(string title) => new(string.Empty, title);
-    public static VoiceBookGuidanceResult NotFound() => new("BOOK_NOT_FOUND", string.Empty);
-    public static VoiceBookGuidanceResult NotAvailable() => new("BOOK_NOT_AVAILABLE", string.Empty);
-    public static VoiceBookGuidanceResult Unavailable() => new("GUIDANCE_UNAVAILABLE", string.Empty);
+    public static VoiceBookGuidanceResult Started(string title, Guid jobId, string runtimeId) =>
+        new(string.Empty, title, jobId, jobId.ToString(), runtimeId);
+    public static VoiceBookGuidanceResult Failed(string title, Guid jobId, string runtimeId) =>
+        new("GUIDANCE_FAILED", title, jobId, jobId.ToString(), runtimeId);
+    public static VoiceBookGuidanceResult NotFound() => new("BOOK_NOT_FOUND", string.Empty, null, null, null);
+    public static VoiceBookGuidanceResult NotAvailable() => new("BOOK_NOT_AVAILABLE", string.Empty, null, null, null);
+    public static VoiceBookGuidanceResult Unavailable() => new("GUIDANCE_UNAVAILABLE", string.Empty, null, null, null);
 }
 
-public sealed record VoiceLocationGuidanceResult(string ErrorCode, string Name)
+public sealed record VoiceLocationGuidanceResult(
+    string ErrorCode,
+    string Name,
+    Guid? JobId,
+    string? ExecutionId,
+    string? RuntimeId)
 {
-    public static VoiceLocationGuidanceResult Started(string name) => new(string.Empty, name);
-    public static VoiceLocationGuidanceResult NotFound() => new("LOCATION_NOT_FOUND", string.Empty);
-    public static VoiceLocationGuidanceResult Unavailable() => new("GUIDANCE_UNAVAILABLE", string.Empty);
+    public static VoiceLocationGuidanceResult Started(string name, Guid jobId, string runtimeId) =>
+        new(string.Empty, name, jobId, jobId.ToString(), runtimeId);
+    public static VoiceLocationGuidanceResult Failed(string name, Guid jobId, string runtimeId) =>
+        new("GUIDANCE_FAILED", name, jobId, jobId.ToString(), runtimeId);
+    public static VoiceLocationGuidanceResult NotFound() => new("LOCATION_NOT_FOUND", string.Empty, null, null, null);
+    public static VoiceLocationGuidanceResult Unavailable() => new("GUIDANCE_UNAVAILABLE", string.Empty, null, null, null);
 }

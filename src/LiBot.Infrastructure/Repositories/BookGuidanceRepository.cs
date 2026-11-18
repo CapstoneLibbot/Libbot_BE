@@ -155,18 +155,18 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
         FeedbackRequest request,
         CancellationToken cancellationToken)
     {
-        if (!await db.Jobs.AnyAsync(job => job.Id == request.TaskId, cancellationToken)) return null;
+        if (!await db.Jobs.AnyAsync(job => job.Id == request.JobId, cancellationToken)) return null;
 
-        var feedback = new Feedback(request.TaskId, request.Rating, request.Comment);
+        var feedback = new Feedback(request.JobId, request.Rating, request.Comment);
         db.Feedback.Add(feedback);
         await db.SaveChangesAsync(cancellationToken);
         return ToFeedbackResponse(feedback);
     }
 
-    public async Task<IReadOnlyList<FeedbackResponse>> GetFeedbackAsync(Guid? taskId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<FeedbackResponse>> GetFeedbackAsync(Guid? jobId, CancellationToken cancellationToken)
     {
         var query = db.Feedback.AsNoTracking();
-        if (taskId.HasValue) query = query.Where(item => item.JobId == taskId.Value);
+        if (jobId.HasValue) query = query.Where(item => item.JobId == jobId.Value);
         return await query.OrderByDescending(item => item.Id)
             .Select(item => new FeedbackResponse(item.Id, item.JobId, item.Rating, item.Comment))
             .ToListAsync(cancellationToken);
