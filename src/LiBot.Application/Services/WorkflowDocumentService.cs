@@ -242,6 +242,21 @@ public sealed class WorkflowDocumentService(IWorkflowDocumentRepository reposito
                 }
             }
 
+            if (string.Equals(workflow.Type, "BOOKSHELF_INVENTORY", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(task.Name, "MOVE_TO_INVENTORY_SHELF", StringComparison.Ordinal)
+                && string.Equals(taskStep.StepType, "MOVE", StringComparison.OrdinalIgnoreCase))
+            {
+                if (nestedParameters)
+                {
+                    var parameters = definition["params"].EnumerateObject()
+                        .ToDictionary(property => property.Name, property => property.Value.Clone(), StringComparer.OrdinalIgnoreCase);
+                    if (!parameters.ContainsKey("_inventory_shelf_scan"))
+                        parameters["_inventory_shelf_scan"] = JsonSerializer.SerializeToElement(true);
+                    definition["params"] = JsonSerializer.SerializeToElement(parameters);
+                }
+                else if (!definition.ContainsKey("_inventory_shelf_scan"))
+                    definition["_inventory_shelf_scan"] = JsonSerializer.SerializeToElement(true);
+            }
             exportedSteps.Add(JsonSerializer.SerializeToElement(definition));
         }
 

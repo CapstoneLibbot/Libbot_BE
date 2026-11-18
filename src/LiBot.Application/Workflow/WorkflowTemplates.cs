@@ -86,7 +86,7 @@ public static class WorkflowTemplates
                 new() { ["left"] = "${has_next}", ["operator"] = "EQUAL", ["right"] = true }, null,
                 new { on_true = "I40", on_false = "I110", on_error = "I900" }),
             MakeEnvelopeStep(4, "I40", "MOVE", "MOVE_TO_INVENTORY_SHELF",
-                new() { ["target"] = "${current_shelf.endpoint}", ["speed_mode"] = "NORMAL", ["obstacle_policy"] = "WAIT_RESUME", ["timeout_sec"] = 180 },
+                new() { ["target"] = "${current_shelf.endpoint}", ["speed_mode"] = "NORMAL", ["obstacle_policy"] = "WAIT_RESUME", ["timeout_sec"] = 180, ["_inventory_shelf_scan"] = true },
                 new Dictionary<string, string> { ["move_status"] = "move_status", ["final_pose"] = "current_pose" },
                 new { on_success = "I50", on_error = "I900", on_timeout = "I900" },
                 new { max_attempts = 1, timeout_sec = 180 }),
