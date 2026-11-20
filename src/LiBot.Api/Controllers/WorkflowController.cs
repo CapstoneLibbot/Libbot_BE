@@ -82,6 +82,19 @@ public class WorkflowController(
         };
     }
 
+    [HttpPatch("{id:guid}/status")]
+    public async Task<ActionResult<WorkflowResponse>> UpdateStatus(
+        Guid id, StatusUpdateRequest request, CancellationToken cancellationToken)
+    {
+        var result = await workflows.UpdateStatusAsync(id, request.Status, cancellationToken);
+        return result.Status switch
+        {
+            WorkflowOperationStatus.NotFound => NotFound(),
+            WorkflowOperationStatus.Invalid => BadRequest(new { message = result.Message }),
+            _ => Ok(result.Value)
+        };
+    }
+
     /// <summary>Xóa workflow nếu workflow không còn ràng buộc.</summary>
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)

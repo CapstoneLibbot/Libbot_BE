@@ -7,5 +7,9 @@ public class FloorDto : LibraryResourceDto<FloorEntity>
 {
     public string Name { get; set; } = string.Empty;
     public int FloorNumber { get; set; }
-    public override FloorEntity ToEntity() => new(Name, FloorNumber);
+    public string? Description { get; set; }
+    public string Status { get; set; } = "Active";
+    public override FloorEntity ToEntity() => new(Name, FloorNumber, Description,
+        Enum.TryParse<LiBot.Domain.Enums.FloorStatus>(Status, true, out var status)
+            ? status : LiBot.Domain.Enums.FloorStatus.Active);
 }

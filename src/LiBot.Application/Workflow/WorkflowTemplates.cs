@@ -13,8 +13,32 @@ public static class WorkflowTemplates
         return new WorkflowTemplateStep(sequence, type, id, Config(config));
     }
 
+    private static WorkflowTemplateStep MakeEnvelopeStep(
+        int sequence,
+        string id,
+        string type,
+        string name,
+        Dictionary<string, object?> parameters,
+        object? outputMapping,
+        object transitions,
+        object? policy = null)
+    {
+        var envelope = new Dictionary<string, object?>
+        {
+            ["id"] = id,
+            ["type"] = type,
+            ["name"] = name,
+            ["params"] = parameters,
+            ["output_mapping"] = outputMapping ?? new Dictionary<string, string>(),
+            ["transitions"] = transitions,
+            ["policy"] = policy ?? new { max_attempts = 1 }
+        };
+        return new WorkflowTemplateStep(sequence, type, name, Config(envelope));
+    }
+
     public static readonly IReadOnlyList<WorkflowTemplateResponse> All =
     [
+        CreateReturnAndChargingTemplate(),
         new("search-guide-book", "Tìm và hướng dẫn tới sách", "Tìm sách, nhận lựa chọn và dẫn người đọc đến kệ.", "SEARCH_AND_GUIDE_TO_BOOK", new[]
         {
             MakeStep(1, "S10", "PROCESS_DATA", new() { ["action"] = "SEARCH_BOOK", ["payload"] = new { query = "${query}", match_mode = "FUZZY", runtime_id = "${runtime_id}" }, ["output_mapping"] = new Dictionary<string, string> { ["data.books"] = "search_results" }, ["transitions"] = new { on_success = "S20", on_error = "S210" } }),
@@ -53,17 +77,49 @@ public static class WorkflowTemplates
             MakeStep(8, "I70", "END", new() { ["status"] = "SUCCEEDED" }),
             MakeStep(9, "I80", "END", new() { ["status"] = "FAILED" })
         }),
-        new("library-patrol", "Tuần tra thư viện", "Đi tới điểm tuần tra, ghi nhận quan sát và tạo báo cáo.", "LIBRARY_PATROL", new[]
+        new("library-patrol", "Library Patrol", "Patrol an ordered set of active map endpoints, classify observations, record route coverage and notify librarians.", "LIBRARY_PATROL", new[]
         {
-            MakeStep(1, "P10", "MOVE", new() { ["endpoint_name"] = "Kệ A3", ["transitions"] = new { on_success = "P20", on_error = "P70" } }),
-            MakeStep(2, "P20", "SCAN", new() { ["sensor"] = "patrol_observation", ["context_key"] = "patrol_observation", ["output_key"] = "patrol_observation", ["timeout_sec"] = 10, ["transitions"] = new { on_success = "P30", on_timeout = "P25", on_error = "P70" } }),
-            MakeStep(3, "P25", "WAIT", new() { ["wait_for"] = "USER_TOUCH", ["event_type"] = "PATROL_OBSERVATION", ["allowed_values"] = new[] { "FALLEN_BOOK", "OBSTACLE", "WARNING" }, ["result_variable"] = "patrol_observation", ["prompt"] = "Select the observed library issue", ["timeout_sec"] = 120, ["transitions"] = new { on_event = "P30", on_timeout = "P70" } }),
-            MakeStep(4, "P30", "PROCESS_DATA", new() { ["action"] = "RECORD_PATROL_OBSERVATION", ["payload"] = new { observation = "${patrol_observation}", mission_id = "${mission_id}", runtime_id = "${runtime_id}" }, ["transitions"] = new { on_success = "P40", on_error = "P70" } }),
-            MakeStep(5, "P40", "DISPLAY", new() { ["ui_screen"] = "PATROL_OBSERVATION", ["data"] = "${patrol_observation}", ["transitions"] = new { on_success = "P50" } }),
-            MakeStep(6, "P50", "PROCESS_DATA", new() { ["action"] = "GENERATE_PATROL_REPORT", ["payload"] = new { mission_id = "${mission_id}", runtime_id = "${runtime_id}" }, ["transitions"] = new { on_success = "P60", on_error = "P70" } }),
-            MakeStep(7, "P60", "NOTIFY", new() { ["channel"] = "LIBRARIAN_WS", ["event_type"] = "PATROL_COMPLETED", ["content"] = "Library patrol completed.", ["transitions"] = new { on_success = "P80", on_error = "P70" } }),
-            MakeStep(8, "P70", "END", new() { ["status"] = "FAILED" }),
-            MakeStep(9, "P80", "END", new() { ["status"] = "SUCCEEDED" })
+            MakeEnvelopeStep(1, "P10", "PROCESS_DATA", "PATROL_SCOPE",
+                new() { ["action"] = "PATROL_SCOPE", ["payload"] = new { mission_id = "${mission_id}", runtime_id = "${runtime_id}", execution_id = "${execution_id}", map_id = "${map_id}", floor_id = "${floor_id}", scope_type = "${scope_type}", target_endpoints = "${target_endpoints}" } },
+                new Dictionary<string, string> { ["data.map_id"] = "map_id", ["data.floor_id"] = "floor_id", ["data.scope_type"] = "scope_type", ["data.target_endpoints"] = "target_endpoints" },
+                new { on_success = "P20", on_error = "P85" }),
+            MakeEnvelopeStep(2, "P20", "PROCESS_DATA", "BUILD_PATROL_COVERAGE_PLAN",
+                new() { ["action"] = "BUILD_PATROL_COVERAGE_PLAN", ["payload"] = new { mission_id = "${mission_id}", runtime_id = "${runtime_id}", execution_id = "${execution_id}", map_id = "${map_id}", target_endpoints = "${target_endpoints}", remaining_paths = "${remaining_paths}", current_pose = "${current_pose}" } },
+                new Dictionary<string, string> { ["data.current_endpoint"] = "current_endpoint", ["data.next_endpoint"] = "next_endpoint", ["data.current_path"] = "current_path", ["data.remaining_paths"] = "remaining_paths", ["data.remaining_paths_count"] = "remaining_paths_count", ["data.total_paths"] = "total_paths" },
+                new { on_success = "P30", on_error = "P85" }),
+            MakeEnvelopeStep(3, "P30", "MOVE", "MOVE_TO_PATROL_ENDPOINT",
+                new() { ["target"] = "${current_path.target}", ["path_id"] = "${current_path.path_id}", ["speed_mode"] = "PATROL", ["scan_while_moving"] = true, ["obstacle_policy"] = "DETECT_AND_WAIT", ["timeout_sec"] = 180 },
+                new Dictionary<string, string> { ["observations"] = "observations", ["actual_distance_m"] = "actual_distance_m", ["move_status"] = "move_status" },
+                new { on_success = "P40", on_error = "P85", on_timeout = "P85" },
+                new { max_attempts = 1, timeout_sec = 180 }),
+            MakeEnvelopeStep(4, "P40", "PROCESS_DATA", "CLASSIFY_PATROL_OBSERVATIONS",
+                new() { ["action"] = "CLASSIFY_PATROL_OBSERVATIONS", ["payload"] = new { mission_id = "${mission_id}", runtime_id = "${runtime_id}", execution_id = "${execution_id}", path_id = "${current_path.path_id}", observations = "${observations}" } },
+                new Dictionary<string, string> { ["data.events"] = "classified_events", ["data.job_event_id"] = "job_event_id" },
+                new { on_success = "P50", on_error = "P85" }),
+            MakeEnvelopeStep(5, "P50", "PROCESS_DATA", "UPDATE_PATH_COVERAGE",
+                new() { ["action"] = "UPDATE_PATH_COVERAGE", ["payload"] = new { mission_id = "${mission_id}", runtime_id = "${runtime_id}", execution_id = "${execution_id}", job_event_id = "${job_event_id}", planned_path_count = "${total_paths}", path_id = "${current_path.path_id}", status = "COVERED", actual_distance_m = "${actual_distance_m}", remaining_paths = "${remaining_paths}" } },
+                new Dictionary<string, string> { ["data.coverage"] = "patrol_coverage", ["data.remaining_paths"] = "remaining_paths", ["data.remaining_paths_count"] = "remaining_paths_count" },
+                new { on_success = "P60", on_error = "P85" }),
+            MakeEnvelopeStep(6, "P60", "EVALUATE", "CHECK_REMAINING_PATROL_PATHS",
+                new() { ["left"] = "${remaining_paths_count}", ["operator"] = "GREATER_THAN", ["right"] = 0 },
+                null,
+                new { on_true = "P20", on_false = "P70", on_error = "P85" }),
+            MakeEnvelopeStep(7, "P70", "PROCESS_DATA", "GENERATE_PATROL_REPORT",
+                new() { ["action"] = "GENERATE_PATROL_REPORT", ["payload"] = new { mission_id = "${mission_id}", runtime_id = "${runtime_id}", execution_id = "${execution_id}", map_id = "${map_id}", floor_id = "${floor_id}" } },
+                new Dictionary<string, string> { ["data"] = "patrol_report" },
+                new { on_success = "P80", on_error = "P85" }),
+            MakeEnvelopeStep(8, "P80", "NOTIFY", "NOTIFY_PATROL_COMPLETED",
+                new() { ["channel"] = "LIBRARIAN_WS", ["event_type"] = "PATROL_COMPLETED", ["content"] = "Library patrol completed.", ["payload"] = "${patrol_report}" },
+                null,
+                new { on_success = "P90", on_error = "P85" }),
+            MakeEnvelopeStep(9, "P90", "END", "PATROL_SUCCEEDED",
+                new() { ["result_status"] = "SUCCEEDED", ["output"] = new { report = "${patrol_report}", coverage = "${patrol_coverage}" } }, null, new { }),
+            MakeEnvelopeStep(10, "P85", "NOTIFY", "NOTIFY_PATROL_FAILED",
+                new() { ["channel"] = "LIBRARIAN_WS", ["event_type"] = "PATROL_FAILED", ["content"] = "Library patrol failed. Check the mission error and incomplete route." },
+                null,
+                new { on_success = "P99", on_error = "P99" }),
+            MakeEnvelopeStep(11, "P99", "END", "PATROL_FAILED",
+                new() { ["result_status"] = "FAILED", ["message"] = "Library patrol did not complete." }, null, new { })
         }),
         new("misplaced-book-detection", "Phát hiện sách sai vị trí", "Quét barcode tại kệ và ghi nhận các bản sao sai kệ.", "MISPLACED_BOOK_DETECTION", new[]
         {
@@ -80,6 +136,65 @@ public static class WorkflowTemplates
             MakeStep(11, "M80", "END", new() { ["status"] = "FAILED" })
         })
     ];
+
+    private static WorkflowTemplateResponse CreateReturnAndChargingTemplate() =>
+        new("robot-return-charging", "Robot Return & Charging",
+            "Return the physical robot to the active map charger when the battery is low and wait for librarian confirmation.",
+            "ROBOT_RETURN_AND_CHARGING", new[]
+            {
+                MakeStep(1, "C10", "EVALUATE", new()
+                {
+                    ["left"] = "${battery_pct}", ["operator"] = "LESS_THAN_OR_EQUAL", ["right"] = 15,
+                    ["transitions"] = new { on_true = "C20", on_false = "C90" }
+                }),
+                MakeStep(2, "C20", "MOVE", new()
+                {
+                    ["target"] = "${charging_endpoint}", ["speed_mode"] = "SLOW_GUIDE",
+                    ["obstacle_policy"] = "WAIT_RESUME", ["timeout_sec"] = 300,
+                    ["transitions"] = new { on_success = "C30", on_error = "C95", on_timeout = "C95" }
+                }),
+                MakeStep(3, "C30", "DISPLAY", new()
+                {
+                    ["ui_screen"] = "CHARGER_CONNECTION_REQUIRED",
+                    ["message"] = "Robot is at the charger. Please connect the charging cable.",
+                    ["data"] = new { message = "Robot is at the charger. Please connect the charging cable.", battery_pct = "${battery_pct}", confirmation_required = true },
+                    ["transitions"] = new { on_success = "C40", on_error = "C95" }
+                }),
+                MakeStep(4, "C40", "NOTIFY", new()
+                {
+                    ["channel"] = "LIBRARIAN_WS", ["event_type"] = "CHARGER_CONNECTION_REQUIRED",
+                    ["content"] = "Robot arrived at the charging station. Please connect the charger and confirm in the dashboard.",
+                    ["transitions"] = new { on_success = "C50", on_error = "C95" }
+                }),
+                MakeStep(5, "C50", "WAIT", new()
+                {
+                    ["wait_for"] = "USER_TOUCH", ["event_type"] = "CHARGER_CONNECTED",
+                    ["allowed_values"] = new[] { "CONFIRMED" }, ["result_variable"] = "charger_connection",
+                    ["timeout_sec"] = (object?)null, ["show_ui"] = false,
+                    ["prompt"] = "Librarian: confirm that the charging cable is connected.",
+                    ["transitions"] = new { on_event = "C60", on_cancel = "C95" }
+                }),
+                MakeStep(6, "C60", "DISPLAY", new()
+                {
+                    ["ui_screen"] = "CHARGER_CONFIRMED",
+                    ["message"] = "Charging connection confirmed by the librarian. Robot will remain at the dock.",
+                    ["data"] = new { message = "Charging connection confirmed by the librarian. Robot will remain at the dock.", confirmation_source = "LIBRARIAN" },
+                    ["transitions"] = new { on_success = "C70", on_error = "C95" }
+                }),
+                MakeStep(7, "C70", "NOTIFY", new()
+                {
+                    ["channel"] = "LIBRARIAN_WS", ["event_type"] = "CHARGER_CONNECTION_CONFIRMED",
+                    ["content"] = "Librarian confirmed the charging cable is connected. Robot is waiting at the dock.",
+                    ["transitions"] = new { on_success = "C80", on_error = "C95" }
+                }),
+                MakeStep(8, "C80", "END", new()
+                {
+                    ["result_status"] = "SUCCEEDED",
+                    ["output"] = new { confirmation_source = "LIBRARIAN", charger_connection = "${charger_connection}" }
+                }),
+                MakeStep(9, "C90", "END", new() { ["result_status"] = "SUCCEEDED", ["message"] = "Battery recovered above the charging threshold." }),
+                MakeStep(10, "C95", "END", new() { ["result_status"] = "FAILED" })
+            });
 
     private static WorkflowTemplateResponse CreateFacilityGuidanceTemplate()
     {

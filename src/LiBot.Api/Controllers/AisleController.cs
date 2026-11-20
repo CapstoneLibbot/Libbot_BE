@@ -23,7 +23,6 @@ public class AisleController : ControllerBase
         [FromQuery] int pageSize = 20,
         [FromQuery] string? search = null,
         [FromQuery] Guid? floorId = null,
-        [FromQuery] Guid? endpointId = null,
         [FromQuery] string sortBy = "name",
         [FromQuery] string sortOrder = "asc",
         [FromQuery] string? expand = null,
@@ -36,7 +35,7 @@ public class AisleController : ControllerBase
         if (!new[] { "asc", "desc" }.Contains(sortOrder.ToLowerInvariant()))
             return BadRequest(Error("sortOrder must be asc or desc."));
         var response = await _aisleService.GetAllAsync(
-            new AisleQuery(page, pageSize, search, floorId, endpointId, sortBy, sortOrder, expand),
+            new AisleQuery(page, pageSize, search, floorId, sortBy, sortOrder, expand),
             cancellationToken);
         return Ok(new BaseResponse<AisleListResponse>(response));
     }
@@ -73,6 +72,22 @@ public class AisleController : ControllerBase
         }
         catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
         catch (KeyNotFoundException exception) { return NotFound(Error(exception.Message)); }
+    }
+
+    [HttpPatch("{id:guid}/status")]
+    public async Task<ActionResult<BaseResponse<AisleResponse>>> UpdateStatus(
+        Guid id, StatusUpdateRequest request, CancellationToken cancellationToken)
+    {
+        var current = await _aisleService.GetByIdAsync(id, null, cancellationToken);
+        if (current is null) return NotFound(Error("Aisle was not found."));
+        try
+        {
+            var updated = await _aisleService.UpdateAsync(id,
+                new AisleWriteRequest(current.FloorId, current.Name, current.Description, request.Status),
+                null, cancellationToken);
+            return Ok(new BaseResponse<AisleResponse>(updated!));
+        }
+        catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
     }
 
     [HttpDelete("{id:guid}")]

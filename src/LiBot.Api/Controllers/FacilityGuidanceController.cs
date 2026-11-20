@@ -1,3 +1,5 @@
+using System.Text.Json;
+using LiBot.Application.Interfaces;
 using LiBot.Application.Workflow.FacilityGuidance;
 using LiBot.Application.Robot;
 using LiBot.Contracts.Workflow;
@@ -10,6 +12,7 @@ namespace LiBot.Api.Controllers;
 [Route("api/facility-guidance")]
 public sealed class FacilityGuidanceController(
     IFacilityGuidanceService service,
+    IMissionDataService missionData,
     IRobotRuntimeService runtimes,
     IConfiguration configuration) : ControllerBase
 {
@@ -37,14 +40,6 @@ public sealed class FacilityGuidanceController(
     public async Task<ActionResult<IReadOnlyList<FacilityGuidanceDetail>>> GetAllFacilities(
         CancellationToken cancellationToken) =>
         Ok(await service.GetAllFacilitiesAsync(cancellationToken));
-
-    /// <summary>Lấy thông tin và vị trí điều hướng của phòng đọc sách.</summary>
-    [HttpGet("facilities/reading-room")]
-    public async Task<ActionResult<FacilityGuidanceDetail>> GetReadingRoom(CancellationToken cancellationToken)
-    {
-        var readingRoom = await service.GetReadingRoomAsync(cancellationToken);
-        return readingRoom is null ? NotFound("Reading room facility not found.") : Ok(readingRoom);
-    }
 
     /// <summary>Lấy vị trí và thông tin điều hướng của một địa điểm.</summary>
     [HttpGet("facilities/{facilityId:guid}")]
@@ -135,8 +130,10 @@ public sealed class FacilityGuidanceController(
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
-        if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.FacilityId is null)
-            return BadRequest("runtimeId and facilityId are required.");
+        if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.FacilityId is null || request.RobotId == Guid.Empty)
+            return BadRequest("runtimeId, robotId and facilityId are required.");
+        if (!await missionData.RobotExistsAsync(request.RobotId, cancellationToken))
+            return NotFound("Robot not found.");
 
         var runtimeId = request.RuntimeId.Trim().ToLowerInvariant();
         if (runtimes.Get(runtimeId) is null)
@@ -160,7 +157,8 @@ public sealed class FacilityGuidanceController(
 
         try
         {
-            var result = await service.StartAsync(request, baseUrl, cancellationToken);
+            var normalizedRequest = request with { RuntimeId = runtimeId };
+            var result = await service.StartAsync(normalizedRequest, baseUrl, cancellationToken);
             if (result.Workflow is null)
             {
                 return WorkflowConfigurationProblem(
@@ -277,10 +275,10 @@ public sealed class FacilityGuidanceController(
         title: "Facility guidance workflow is not configured correctly",
         detail: detail);
 
-    private static string? GetString(System.Text.Json.JsonElement value, string propertyName) =>
-        value.ValueKind == System.Text.Json.JsonValueKind.Object &&
+    private static string? GetString(JsonElement value, string propertyName) =>
+        value.ValueKind == JsonValueKind.Object &&
         value.TryGetProperty(propertyName, out var property) &&
-        property.ValueKind == System.Text.Json.JsonValueKind.String
+        property.ValueKind == JsonValueKind.String
             ? property.GetString()
             : null;
 }

@@ -1,23 +1,42 @@
 using System.Text.Json;
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
+using LiBot.Domain.Enums;
 using LiBot.Domain.Library;
 
 namespace LiBot.Infrastructure.Services;
 
 public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibraryMapService
 {
+    public async Task<IReadOnlyList<MapResponse>> GetAllAsync(CancellationToken cancellationToken)
+    {
+        var maps = await repository.GetAllAsync(occupancyMaps: false, cancellationToken);
+        return maps.OrderBy(map => map.Name).Select(ToResponse).ToList();
+    }
+
+    public async Task<IReadOnlyList<EndpointDto>> GetEndpointsByMapIdAsync(Guid mapId, CancellationToken cancellationToken)
+    {
+        var endpoints = await repository.GetEndpointsByMapIdAsync(mapId, cancellationToken);
+        return endpoints.Select(endpoint => ToResourceResponse<Endpoint, EndpointDto>(endpoint)).ToList();
+    }
+
+    public async Task<IReadOnlyList<ZoneDto>> GetZonesByMapIdAsync(Guid mapId, CancellationToken cancellationToken)
+    {
+        var zones = await repository.GetZonesByMapIdAsync(mapId, cancellationToken);
+        return zones.Select(zone => ToResourceResponse<Zone, ZoneDto>(zone)).ToList();
+    }
+
     public async Task<IReadOnlyList<SavedRobotMapResponse>> GetRobotMapsAsync(CancellationToken cancellationToken)
     {
         var maps = await repository.GetAllAsync(occupancyMaps: true, cancellationToken);
-        return maps.OrderByDescending(map => map.CreatedAtUtc).Where(IsRobotMap)
+        return maps.OrderByDescending(map => map.Version).Where(IsRobotMap)
             .Select(map => new SavedRobotMapResponse(map.Id, map.Name, map.Width, map.Height, map.Version)).ToList();
     }
 
     public async Task<SavedRobotMapResponse?> GetLatestRobotMapAsync(CancellationToken cancellationToken)
     {
         var maps = await repository.GetAllAsync(occupancyMaps: true, cancellationToken);
-        var map = maps.OrderByDescending(item => item.CreatedAtUtc).FirstOrDefault(IsRobotMap);
+        var map = maps.OrderByDescending(item => item.Version).FirstOrDefault(IsRobotMap);
         return map is null ? null : new SavedRobotMapResponse(map.Id, map.Name, map.Width, map.Height, map.Version);
     }
 
@@ -25,6 +44,17 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
     {
         var map = await repository.GetByIdAsync(id, tracking: false, cancellationToken);
         return map is null ? null : ToResponse(map);
+    }
+
+    public async Task<MapResponse> CreateAsync(MapWriteRequest request, CancellationToken cancellationToken)
+    {
+        if (request.FloorId == Guid.Empty)
+            throw new ArgumentException("floorId is required.", nameof(request));
+        var status = ParseStatus(request.Status);
+        var map = new LibraryMap(request.Name, request.Version ?? string.Empty, request.Width, request.Height,
+            request.Data?.GetRawText() ?? "{}", request.FloorId, status);
+        await repository.AddAsync(map, cancellationToken);
+        return ToResponse(map);
     }
 
     public async Task<MapResponse> SaveRobotSnapshotAsync(string name, OccupancyGridDto grid, string robotPath,
@@ -41,7 +71,9 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
             cells = grid.Data,
             robotPath
         });
-        var map = new LibraryMap(mapName, version, checked((int)grid.Width), checked((int)grid.Height), data);
+        var floorId = await repository.GetFirstFloorIdAsync(cancellationToken)
+            ?? throw new InvalidOperationException("Create a floor before saving a robot map.");
+        var map = new LibraryMap(mapName, version, checked((int)grid.Width), checked((int)grid.Height), data, floorId);
         await repository.AddAsync(map, cancellationToken);
         return ToResponse(map);
     }
@@ -65,7 +97,9 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
         var map = await repository.GetByIdAsync(id, tracking: true, cancellationToken);
         if (map is null) return null;
         map.Update(request.Name, request.Version ?? map.Version, request.Width, request.Height,
-            request.Data?.GetRawText() ?? map.MapData);
+            request.Data?.GetRawText() ?? map.MapData,
+            request.FloorId == Guid.Empty ? map.FloorId : request.FloorId,
+            request.Status is null ? map.Status : ParseStatus(request.Status));
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(map);
     }
@@ -92,11 +126,28 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
     }
 
     private static MapResponse ToResponse(LibraryMap map) =>
-        new(map.Id, map.Name, map.Width, map.Height, ParseData(map.MapData), map.Version);
+        new(map.Id, map.Name, map.Width, map.Height, ParseData(map.MapData), map.Version, map.FloorId,
+            map.Status.ToString());
+
+    private static TDto ToResourceResponse<TEntity, TDto>(TEntity entity)
+        where TEntity : class
+        where TDto : class, ILibraryResourceDto<TEntity>, new()
+    {
+        var dto = new TDto();
+        dto.LoadFrom(entity);
+        return dto;
+    }
 
     private static JsonElement? ParseData(string value)
     {
         try { return JsonDocument.Parse(value).RootElement.Clone(); }
         catch (JsonException) { return null; }
+    }
+
+    private static MapStatus ParseStatus(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return MapStatus.Active;
+        if (Enum.TryParse<MapStatus>(value, true, out var status) && Enum.IsDefined(status)) return status;
+        throw new ArgumentException("status must be Active or Archived.", nameof(value));
     }
 }

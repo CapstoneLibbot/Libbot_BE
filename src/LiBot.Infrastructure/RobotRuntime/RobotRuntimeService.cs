@@ -93,6 +93,28 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
     public string? ValidateBookGuidanceStart(string runtimeId, string? armLeaseId) =>
         ValidateGuidanceStart(runtimeId, armLeaseId);
 
+    /// <summary>
+    /// Validates a start from the trusted kiosk voice service. The robot still
+    /// has to be armed, localized, connected, and navigation-ready.
+    /// </summary>
+    public string? ValidateVoiceGuidanceStart(string runtimeId)
+    {
+        if (!_runtimes.TryGetValue(runtimeId, out var runtime))
+            return "Robot runtime was not found.";
+
+        var response = ToResponse(runtime);
+        if (!response.Connected || response.Stale)
+            return "Robot runtime is offline or its telemetry is stale.";
+        if (!string.Equals(runtime.Telemetry?.LocalizationState, "LOCALIZED", StringComparison.OrdinalIgnoreCase))
+            return "Robot must be localized before starting guidance.";
+        if (runtime.Telemetry?.NavigationReady != true)
+            return "Nav2 is not ready. Set the initial pose and wait for activation.";
+        if (string.Equals(runtime.Endpoint.Kind, "REAL", StringComparison.OrdinalIgnoreCase) && !response.Armed)
+            return "Arm the physical robot before starting guidance.";
+
+        return null;
+    }
+
     public ArmRuntimeResponse? Arm(string runtimeId)
     {
         if (!_runtimes.TryGetValue(runtimeId, out var runtime)) return null;
@@ -280,6 +302,9 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
                     min_y = zone.MinY,
                     max_x = zone.MaxX,
                     max_y = zone.MaxY,
+                    width = zone.MaxX - zone.MinX,
+                    height = zone.MaxY - zone.MinY,
+                    rotation_angle = 0,
                     max_speed = zone.MaxSpeed,
                 }),
             },
@@ -290,20 +315,6 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
             lock (runtime.SyncRoot)
             {
                 runtime.NavigationActive = true;
-            }
-        }
-        return result;
-    }
-
-    public async Task<CommandResult> StopNavigationModeAsync(string runtimeId, CancellationToken cancellationToken)
-    {
-        if (!_runtimes.TryGetValue(runtimeId, out var runtime)) return CommandResult.Fail("Robot runtime was not found.");
-        var result = await SendCommandAsync(runtime, new { command = "stop_navigation_mode" }, cancellationToken);
-        if (result.Success)
-        {
-            lock (runtime.SyncRoot)
-            {
-                runtime.NavigationActive = false;
             }
         }
         return result;
@@ -339,11 +350,28 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
                     min_y = zone.MinY,
                     max_x = zone.MaxX,
                     max_y = zone.MaxY,
+                    width = zone.MaxX - zone.MinX,
+                    height = zone.MaxY - zone.MinY,
+                    rotation_angle = 0,
                     max_speed = zone.MaxSpeed,
                 }),
             },
             cancellationToken,
             TimeSpan.FromSeconds(20));
+    }
+
+    public async Task<CommandResult> StopNavigationModeAsync(string runtimeId, CancellationToken cancellationToken)
+    {
+        if (!_runtimes.TryGetValue(runtimeId, out var runtime)) return CommandResult.Fail("Robot runtime was not found.");
+        var result = await SendCommandAsync(runtime, new { command = "stop_navigation_mode" }, cancellationToken);
+        if (result.Success)
+        {
+            lock (runtime.SyncRoot)
+            {
+                runtime.NavigationActive = false;
+            }
+        }
+        return result;
     }
 
     public async Task<CommandResult> SetInitialPoseAsync(

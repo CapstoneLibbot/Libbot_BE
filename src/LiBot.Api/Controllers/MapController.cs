@@ -14,7 +14,6 @@ namespace LiBot.Api.Controllers;
 [Route("api/maps")]
 public class MapController(
     ILibraryMapService maps,
-    ILibraryResourceService<LibraryEndpoint, EndpointDto> endpoints,
     ILibraryResourceService<Zone, ZoneDto> zones,
     IRobotRuntimeService runtimes,
     ILogger<MapController> logger) : ControllerBase
@@ -37,24 +36,30 @@ public class MapController(
         return map is null ? NotFound() : Ok(map);
     }
 
-    [HttpGet("{mapId:guid}/endpoints")]
-    public async Task<IActionResult> GetEndpoints(Guid mapId, CancellationToken cancellationToken)
+    /// <summary>Gets the endpoints assigned to a library map.</summary>
+    [HttpGet("{id:guid}/endpoints")]
+    public async Task<IActionResult> GetEndpoints(Guid id, CancellationToken cancellationToken)
     {
-        if (await maps.GetByIdAsync(mapId, cancellationToken) is null)
+        if (await maps.GetByIdAsync(id, cancellationToken) is null)
             return NotFound(new { message = "Map was not found." });
-
-        var resources = await endpoints.GetAllAsync(cancellationToken);
-        return Ok(resources.Where(endpoint => endpoint.MapId == mapId));
+        return Ok(await maps.GetEndpointsByMapIdAsync(id, cancellationToken));
     }
 
-    [HttpGet("{mapId:guid}/zones")]
-    public async Task<IActionResult> GetZones(Guid mapId, CancellationToken cancellationToken)
+    /// <summary>Gets the zones assigned to a library map.</summary>
+    [HttpGet("{id:guid}/zones")]
+    public async Task<IActionResult> GetZones(Guid id, CancellationToken cancellationToken)
     {
-        if (await maps.GetByIdAsync(mapId, cancellationToken) is null)
+        if (await maps.GetByIdAsync(id, cancellationToken) is null)
             return NotFound(new { message = "Map was not found." });
+        return Ok(await maps.GetZonesByMapIdAsync(id, cancellationToken));
+    }
 
-        var resources = await zones.GetAllAsync(cancellationToken);
-        return Ok(resources.Where(zone => zone.MapId == mapId));
+    /// <summary>Tạo bản đồ thư viện mới.</summary>
+    [HttpPost]
+    public async Task<IActionResult> Create(MapWriteRequest request, CancellationToken cancellationToken)
+    {
+        var map = await maps.CreateAsync(request, cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = map.Id }, map);
     }
 
     /// <summary>Lưu snapshot occupancy và đường dẫn file map trên robot.</summary>
@@ -114,19 +119,20 @@ public class MapController(
         if (string.IsNullOrWhiteSpace(path))
             return Conflict(new { message = "Map has no robot-side PGM/YAML files or is not a saved occupancy map." });
 
-        var mapZones = await zones.GetAllAsync(cancellationToken);
-        var policyZones = mapZones
+        var activeZones = (await zones.GetAllAsync(cancellationToken))
             .Where(zone => zone.MapId == id && zone.IsActive)
             .Select(zone => new NavigationZonePolicy(
                 zone.ZoneType, zone.MinX, zone.MinY, zone.MaxX, zone.MaxY, zone.MaxSpeed))
             .ToList();
-        var expectedZoneCounts = policyZones
+        var expectedZoneCounts = activeZones
             .GroupBy(zone => zone.ZoneType.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 group => group.Key.ToUpperInvariant(),
                 group => group.Count(),
                 StringComparer.OrdinalIgnoreCase);
-        var result = await runtimes.StartNavigationModeAsync(runtimeId, id, path, policyZones, armLeaseId, cancellationToken);
+
+        var result = await runtimes.StartNavigationModeAsync(
+            runtimeId, id, path, activeZones, armLeaseId, cancellationToken);
         if (!result.Success)
             return Conflict(new { message = result.Error });
 
@@ -151,21 +157,37 @@ public class MapController(
         return map is null ? NotFound() : Ok(map);
     }
 
+    [HttpPatch("{id:guid}/status")]
+    public async Task<IActionResult> UpdateStatus(
+        Guid id, StatusUpdateRequest request, CancellationToken cancellationToken)
+    {
+        var current = await maps.GetByIdAsync(id, cancellationToken);
+        if (current is null) return NotFound(new { message = "Map was not found." });
+        try
+        {
+            var updated = await maps.UpdateAsync(id,
+                new MapWriteRequest(current.Name, current.Width, current.Height, current.Data,
+                    current.Version, current.FloorId, request.Status), cancellationToken);
+            return Ok(updated);
+        }
+        catch (ArgumentException exception) { return BadRequest(new { message = exception.Message }); }
+    }
+
     /// <summary>Xóa bản đồ theo ID.</summary>
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken) =>
         await maps.DeleteAsync(id, cancellationToken) ? NoContent() : NotFound();
 
     private static bool RuntimeConfirmedZonePolicies(
-        JsonElement? payload,
+        System.Text.Json.JsonElement? payload,
         IReadOnlyDictionary<string, int> expectedZoneCounts)
     {
-        if (payload is not { ValueKind: JsonValueKind.Object } response
+        if (payload is not { ValueKind: System.Text.Json.JsonValueKind.Object } response
             || !response.TryGetProperty("zone_count", out var totalElement)
             || !totalElement.TryGetInt32(out var reportedTotal)
             || reportedTotal != expectedZoneCounts.Values.Sum()
             || !response.TryGetProperty("zone_counts_by_type", out var typeCountsElement)
-            || typeCountsElement.ValueKind != JsonValueKind.Object)
+            || typeCountsElement.ValueKind != System.Text.Json.JsonValueKind.Object)
             return false;
 
         var reportedCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);

@@ -13,14 +13,16 @@ public interface IMissionDataRepository
     Task<bool> MissionExistsAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> WorkflowExistsAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> RobotExistsAsync(Guid id, CancellationToken cancellationToken);
+    Task<Guid?> GetRobotIdByMapAsync(Guid mapId, CancellationToken cancellationToken);
     Task<string?> GetRobotNameAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> MapExistsAsync(Guid id, CancellationToken cancellationToken);
-    Task CreateMissionAsync(Mission mission, Guid workflowId, Guid? robotId, string runtimeId,
+    Task CreateMissionAsync(Mission mission, Guid workflowId, string runtimeId,
         string? initialContext, CancellationToken cancellationToken);
     Task<IReadOnlyList<WorkflowStepResponse>> GetWorkflowStepsAsync(Guid workflowId, CancellationToken cancellationToken);
     Task<string?> GetInitialContextAsync(Guid missionId, CancellationToken cancellationToken);
     Task<JobTask> CreateMissingJobTaskAsync(Guid missionId, Guid workflowId, string runtimeId,
         CancellationToken cancellationToken);
+    Task<Guid?> GetPrimaryWorkflowTaskIdAsync(Guid workflowId, CancellationToken cancellationToken);
     Task<IReadOnlyList<string?>> GetWorkflowStepEventDataAsync(Guid missionId, CancellationToken cancellationToken);
     Task AddWorkflowStepEventAsync(Guid missionId, string data, CancellationToken cancellationToken);
     Task AddJobTaskAsync(JobTask task, CancellationToken cancellationToken);

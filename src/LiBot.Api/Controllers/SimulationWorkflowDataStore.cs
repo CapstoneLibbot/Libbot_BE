@@ -9,12 +9,20 @@ internal static class SimulationWorkflowDataStore
     private static readonly ConcurrentDictionary<Guid, ConcurrentQueue<string>> InventoryScans = new();
     private static readonly ConcurrentDictionary<Guid, ConcurrentQueue<string>> InventoryIssues = new();
     private static readonly ConcurrentDictionary<Guid, ConcurrentQueue<string>> PatrolCategories = new();
+    private static readonly ConcurrentDictionary<Guid, ConcurrentQueue<string>> PatrolObservations = new();
+    private static readonly ConcurrentDictionary<Guid, ConcurrentQueue<string>> PatrolCoverage = new();
+    private static readonly ConcurrentDictionary<Guid, string> PatrolReports = new();
+    private static readonly ConcurrentDictionary<(Guid MissionId, string Key), (string Fingerprint, string Response)> PatrolActions = new();
 
     public static void Reset(Guid missionId)
     {
         InventoryScans.TryRemove(missionId, out _);
         InventoryIssues.TryRemove(missionId, out _);
         PatrolCategories.TryRemove(missionId, out _);
+        PatrolObservations.TryRemove(missionId, out _);
+        PatrolCoverage.TryRemove(missionId, out _);
+        PatrolReports.TryRemove(missionId, out _);
+        foreach (var key in PatrolActions.Keys.Where(key => key.MissionId == missionId)) PatrolActions.TryRemove(key, out _);
     }
 
     public static void AddInventoryScan(Guid missionId, object scan) =>
@@ -42,6 +50,44 @@ internal static class SimulationWorkflowDataStore
         PatrolCategories.TryGetValue(missionId, out var categories)
             ? categories.ToArray()
             : Array.Empty<string>();
+
+    public static void AddPatrolObservation(Guid missionId, object observation) =>
+        PatrolObservations.GetOrAdd(missionId, _ => new ConcurrentQueue<string>()).Enqueue(JsonSerializer.Serialize(observation));
+
+    public static IReadOnlyList<JsonElement> GetPatrolObservations(Guid missionId) =>
+        PatrolObservations.TryGetValue(missionId, out var observations)
+            ? observations.Select(Parse).ToArray()
+            : Array.Empty<JsonElement>();
+
+    public static void AddPatrolCoverage(Guid missionId, object coverage) =>
+        PatrolCoverage.GetOrAdd(missionId, _ => new ConcurrentQueue<string>()).Enqueue(JsonSerializer.Serialize(coverage));
+
+    public static IReadOnlyList<JsonElement> GetPatrolCoverage(Guid missionId) =>
+        PatrolCoverage.TryGetValue(missionId, out var coverage)
+            ? coverage.Select(Parse).ToArray()
+            : Array.Empty<JsonElement>();
+
+    public static void SetPatrolReport(Guid missionId, object report) =>
+        PatrolReports[missionId] = JsonSerializer.Serialize(report);
+
+    public static JsonElement? GetPatrolReport(Guid missionId) =>
+        PatrolReports.TryGetValue(missionId, out var report) ? Parse(report) : null;
+
+    public static bool TryGetPatrolAction(Guid missionId, string key, out string fingerprint, out JsonElement response)
+    {
+        if (PatrolActions.TryGetValue((missionId, key), out var cached))
+        {
+            fingerprint = cached.Fingerprint;
+            response = Parse(cached.Response);
+            return true;
+        }
+        fingerprint = string.Empty;
+        response = default;
+        return false;
+    }
+
+    public static void AddPatrolAction(Guid missionId, string key, string fingerprint, object response) =>
+        PatrolActions[(missionId, key)] = (fingerprint, JsonSerializer.Serialize(response));
 
     private static JsonElement Parse(string json)
     {

@@ -5,6 +5,7 @@ namespace LiBot.Application.Models;
 
 public sealed record StartBookGuidanceRequest(
     string Query,
+    Guid RobotId,
     string? BackendBaseUrl = null,
     string? RuntimeId = null,
     Guid? BookId = null,

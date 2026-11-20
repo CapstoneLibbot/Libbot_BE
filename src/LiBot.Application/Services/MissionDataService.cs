@@ -16,8 +16,8 @@ public sealed class MissionDataService(IMissionDataRepository repository) : IMis
     public Task<bool> RobotExistsAsync(Guid id, CancellationToken cancellationToken) => repository.RobotExistsAsync(id, cancellationToken);
     public Task<string?> GetRobotNameAsync(Guid id, CancellationToken cancellationToken) => repository.GetRobotNameAsync(id, cancellationToken);
     public Task<bool> MapExistsAsync(Guid id, CancellationToken cancellationToken) => repository.MapExistsAsync(id, cancellationToken);
-    public Task CreateMissionAsync(Mission mission, Guid workflowId, Guid? robotId, string runtimeId, string? initialContext,
-        CancellationToken cancellationToken) => repository.CreateMissionAsync(mission, workflowId, robotId, runtimeId, initialContext, cancellationToken);
+    public Task CreateMissionAsync(Mission mission, Guid workflowId, string runtimeId, string? initialContext,
+        CancellationToken cancellationToken) => repository.CreateMissionAsync(mission, workflowId, runtimeId, initialContext, cancellationToken);
     public Task<IReadOnlyList<WorkflowStepResponse>> GetWorkflowStepsAsync(Guid workflowId, CancellationToken cancellationToken) => repository.GetWorkflowStepsAsync(workflowId, cancellationToken);
     public Task<string?> GetInitialContextAsync(Guid missionId, CancellationToken cancellationToken) => repository.GetInitialContextAsync(missionId, cancellationToken);
     public Task<JobTask> CreateMissingJobTaskAsync(Guid missionId, Guid workflowId, string runtimeId, CancellationToken cancellationToken) =>

@@ -4,6 +4,7 @@ namespace LiBot.Application.Workflow.BookGuidance;
 
 public sealed record BookGuidanceLoadedWorkflow(
     Guid Id,
+    Guid PrimaryTaskId,
     string Type,
     string Name,
     IReadOnlyList<IReadOnlyDictionary<string, object?>> Steps);

@@ -6,6 +6,7 @@ public class JobEvent : Entity
 {
     public Guid JobId { get; private set; }
     public string EventType { get; private set; }
+    [System.ComponentModel.DataAnnotations.Schema.Column("EventTime")]
     public DateTime EventTimeUtc { get; private set; }
     public string? Data { get; private set; }
 

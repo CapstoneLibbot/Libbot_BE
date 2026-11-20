@@ -1,3 +1,4 @@
+using LiBot.Application.Interfaces;
 using LiBot.Application.Workflow.BookGuidance;
 using LiBot.Contracts.Workflow;
 using LiBot.Infrastructure.Workflow;
@@ -10,6 +11,7 @@ namespace LiBot.Api.Controllers;
 [Route("api/book-guidance")]
 public sealed class BookGuidanceController(
     IBookGuidanceService service,
+    IMissionDataService missionData,
     IRobotRuntimeService runtimes,
     IConfiguration configuration) : ControllerBase
 {
@@ -116,8 +118,11 @@ public sealed class BookGuidanceController(
     public async Task<IActionResult> Start(StartBookGuidanceRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
-        if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.BookId is null || request.BookItemId is null)
-            return BadRequest("runtimeId, bookId, and bookItemId are required.");
+        if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.BookId is null || request.BookItemId is null
+            || request.RobotId == Guid.Empty)
+            return BadRequest("runtimeId, robotId, bookId, and bookItemId are required.");
+        if (!await missionData.RobotExistsAsync(request.RobotId, cancellationToken))
+            return NotFound("Robot not found.");
         if (string.Equals(request.RuntimeId, "sim", StringComparison.OrdinalIgnoreCase))
             return Conflict(new { message = "Start Gazebo runs from the mission Run button so execution state stays transient." });
 

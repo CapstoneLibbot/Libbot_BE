@@ -6,6 +6,10 @@ namespace LiBot.Application.Models.ShelfLevel;
 public class ShelfLevelDto : LibraryResourceDto<ShelfLevelEntity>
 {
     public Guid ShelfId { get; set; }
+    public string Name { get; set; } = string.Empty;
     public int LevelNumber { get; set; }
-    public override ShelfLevelEntity ToEntity() => new(ShelfId, LevelNumber);
+    public string Status { get; set; } = "Active";
+    public override ShelfLevelEntity ToEntity() => new(ShelfId, LevelNumber, Name,
+        Enum.TryParse<LiBot.Domain.Enums.ShelfStatus>(Status, true, out var status)
+            ? status : LiBot.Domain.Enums.ShelfStatus.Active);
 }

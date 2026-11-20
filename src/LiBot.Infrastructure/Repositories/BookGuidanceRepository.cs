@@ -1,5 +1,6 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
+using LiBot.Domain.Enums;
 using LiBot.Domain.Mission;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +9,35 @@ namespace LiBot.Infrastructure.Repositories;
 
 public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRepository
 {
+    public async Task<BookSearchResponse> SearchTitlesAsync(
+        string query,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        var term = query.Trim();
+        var booksQuery =
+            from book in db.Books.AsNoTracking()
+            join bookCategory in db.BookCategories.AsNoTracking() on book.CategoryId equals bookCategory.Id into categories
+            from bookCategory in categories.DefaultIfEmpty()
+            where EF.Functions.Like(book.Title, $"%{term}%")
+            select new { Book = book, CategoryName = bookCategory == null ? null : bookCategory.Name };
+
+        var totalCount = await booksQuery.CountAsync(cancellationToken);
+        var books = await booksQuery
+            .OrderBy(item => item.Book.Title)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(item => new BookSearchItem(
+                item.Book.Id, item.Book.Isbn, item.Book.Title, item.Book.Author, item.CategoryName,
+                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == BookItemStatus.Available),
+                item.Book.Image))
+            .ToListAsync(cancellationToken);
+
+        return new BookSearchResponse(books, page, pageSize, totalCount,
+            (int)Math.Ceiling(totalCount / (double)pageSize));
+    }
+
     public async Task<BookSearchResponse> SearchAsync(
         string? query,
         string? category,
@@ -52,7 +82,7 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
                 item.Book.Title,
                 item.Book.Author,
                 item.CategoryName,
-                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == "Available"),
+                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == BookItemStatus.Available),
                 item.Book.Image))
             .ToListAsync(cancellationToken);
 
@@ -95,15 +125,15 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
             join aisle in db.Aisles.AsNoTracking() on shelf.AisleId equals aisle.Id
             join floor in db.Floors.AsNoTracking() on aisle.FloorId equals floor.Id
             join endpoint in db.Endpoints.AsNoTracking().Where(item => item.IsActive)
-                on shelf.EndpointId equals endpoint.Id into endpoints
+                on shelf.StartEndpointId equals endpoint.Id into endpoints
             from endpoint in endpoints.DefaultIfEmpty()
             where copy.BookId == bookId
             select new
             {
                 copy.Id,
                 Location = new BookLocation(
-                    floor.Id, floor.Name, floor.FloorNumber, aisle.Id, aisle.Code, aisle.Name,
-                    shelf.Id, shelf.Code, shelf.Name, level.Id, level.LevelNumber,
+                    floor.Id, floor.Name, floor.FloorNumber, aisle.Id, aisle.Name, aisle.Name,
+                    shelf.Id, shelf.Name, shelf.Name, level.Id, level.LevelNumber,
                     endpoint == null ? null : new NavigationEndpoint(
                         endpoint.Id, endpoint.Name, endpoint.PositionX, endpoint.PositionY, endpoint.Theta))
             })
@@ -111,7 +141,7 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
 
         var bookItems = copies
             .Select(copy => new BookGuidanceBookItem(
-                copy.Id, copy.Barcode, copy.Status, locationsByCopyId.GetValueOrDefault(copy.Id)))
+                copy.Id, copy.Barcode, copy.Status.ToString(), locationsByCopyId.GetValueOrDefault(copy.Id)))
             .ToList();
 
         return new BookGuidanceDetail(
@@ -138,7 +168,7 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
     {
         var query = db.Feedback.AsNoTracking();
         if (taskId.HasValue) query = query.Where(item => item.JobId == taskId.Value);
-        return await query.OrderByDescending(item => item.CreatedAtUtc)
+        return await query.OrderByDescending(item => item.Id)
             .Select(item => new FeedbackResponse(item.Id, item.JobId, item.Rating, item.Comment))
             .ToListAsync(cancellationToken);
     }

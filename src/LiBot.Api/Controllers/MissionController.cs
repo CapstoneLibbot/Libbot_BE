@@ -30,10 +30,8 @@ public class MissionController(
         foreach (var mission in missions)
         {
             var task = await missionData.GetTaskAsync(mission.Id, tracking: false, cancellationToken);
-            var robotName = task?.RobotId is Guid robotId
-                ? await missionData.GetRobotNameAsync(robotId, cancellationToken)
-                : null;
-            responses.Add(ToResponse(mission, robotName, task?.RobotId, task?.RuntimeId,
+            var robotName = await missionData.GetRobotNameAsync(mission.RobotId, cancellationToken);
+            responses.Add(ToResponse(mission, robotName, mission.RobotId, task?.RuntimeId,
                 GetTransientSimulationStatus(mission.Id, task?.RuntimeId)));
         }
         return Ok(responses);
@@ -46,10 +44,8 @@ public class MissionController(
         var mission = await missionData.GetMissionAsync(id, tracking: false, cancellationToken);
         if (mission is null) return NotFound();
         var task = await missionData.GetTaskAsync(id, tracking: false, cancellationToken);
-        var robot = task?.RobotId is Guid robotId
-            ? await missionData.GetRobotNameAsync(robotId, cancellationToken)
-            : null;
-        return Ok(ToResponse(mission, robot, task?.RobotId, task?.RuntimeId,
+        var robot = await missionData.GetRobotNameAsync(mission.RobotId, cancellationToken);
+        return Ok(ToResponse(mission, robot, mission.RobotId, task?.RuntimeId,
             GetTransientSimulationStatus(mission.Id, task?.RuntimeId)));
     }
 
@@ -67,21 +63,19 @@ public class MissionController(
         var runtimeId = (request.RuntimeId ?? "real").Trim().ToLowerInvariant();
         if (runtimeId is not ("sim" or "real") || runtimes.Get(runtimeId) is null)
             return BadRequest(new { message = "runtimeId must identify a configured 'sim' or 'real' runtime." });
-        Guid? robotId = Guid.TryParse(request.RobotId, out var parsedRobotId) &&
-            await missionData.RobotExistsAsync(parsedRobotId, cancellationToken) ? parsedRobotId : null;
+        if (!Guid.TryParse(request.RobotId, out var robotId))
+            return BadRequest("A valid robotId is required.");
+        if (!await missionData.RobotExistsAsync(robotId, cancellationToken))
+            return NotFound("Robot not found.");
         var mission = new Mission(request.Name ?? workflow.Name, request.Description ?? workflow.Description,
-            sourceEndpointId: request.SourceEndpointId, destinationEndpointId: request.DestinationEndpointId,
-            priority: ParsePriority(request.Priority));
-        mission.Update(mission.Name, mission.Description, mission.Priority, workflowId,
-            request.SourceEndpointId, request.DestinationEndpointId);
+            robotId, workflowId, priority: ParsePriority(request.Priority));
+        mission.Update(mission.Name, mission.Description, mission.Priority, workflowId);
         var initialContextJson = request.InitialContext is { ValueKind: JsonValueKind.Object } initialContext
             ? initialContext.GetRawText()
             : null;
-        await missionData.CreateMissionAsync(mission, workflowId, robotId, runtimeId, initialContextJson, cancellationToken);
+        await missionData.CreateMissionAsync(mission, workflowId, runtimeId, initialContextJson, cancellationToken);
 
-        var robotName = robotId is Guid id
-            ? await missionData.GetRobotNameAsync(id, cancellationToken)
-            : null;
+        var robotName = await missionData.GetRobotNameAsync(robotId, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = mission.Id }, ToResponse(mission, robotName, robotId, runtimeId));
     }
 
@@ -116,9 +110,8 @@ public class MissionController(
         }
         if (workflowId.HasValue && workflowId != mission.WorkflowId)
             return Conflict("A mission's workflow cannot be changed after creation.");
-        mission.Update(request.Name ?? mission.Name, request.Description ?? mission.Description, ParsePriority(request.Priority),
-            mission.WorkflowId, request.SourceEndpointId ?? mission.SourceEndpointId,
-            request.DestinationEndpointId ?? mission.DestinationEndpointId);
+        mission.Update(request.Name ?? mission.Name, request.Description ?? mission.Description,
+            ParsePriority(request.Priority), mission.WorkflowId);
         await missionData.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(mission, null, null));
     }
@@ -207,7 +200,8 @@ public class MissionController(
     {
         var mission = await missionData.GetMissionAsync(id, tracking: true, cancellationToken);
         if (mission is null) return NotFound();
-        if (mission.WorkflowId is not Guid workflowId) return Conflict("Mission has no workflow.");
+        if (mission.WorkflowId == Guid.Empty) return Conflict("Mission has no workflow.");
+        var workflowId = mission.WorkflowId;
         var jobTask = await missionData.GetTaskAsync(id, tracking: true, cancellationToken);
         var isRetry = mission.Status is "Failed" or "Cancelled";
         var requestedRuntimeId = string.IsNullOrWhiteSpace(request?.RuntimeId)
@@ -228,7 +222,7 @@ public class MissionController(
         if (runtimes.Get(runtimeId) is null)
             return BadRequest(new { message = $"Robot runtime '{runtimeId}' is not configured." });
 
-        var preflightError = runtimes.ValidateBookGuidanceStart(runtimeId, request?.ArmLeaseId);
+        var preflightError = runtimes.ValidateGuidanceStart(runtimeId, request?.ArmLeaseId);
         if (preflightError is not null) return Conflict(new { message = preflightError });
 
         RobotWorkflowDocument document;
@@ -249,8 +243,12 @@ public class MissionController(
         var initialContext = await ReadInitialContextAsync(id, cancellationToken);
         RestoreLegacyGuidanceQuery(mission, initialContext);
         initialContext["mission_id"] = id.ToString();
+        initialContext["job_id"] = id.ToString();
         initialContext["task_id"] = id.ToString();
         initialContext["runtime_id"] = runtimeId;
+        initialContext["execution_id"] = executionId;
+        if (runtimes.Get(runtimeId)?.Telemetry?.Pose is { } currentPose)
+            initialContext["current_pose"] = new { x = currentPose.X, y = currentPose.Y, theta = currentPose.Yaw };
         initialContext["backend_base_url"] = $"{Request.Scheme}://{Request.Host.Value}";
 
         JsonElement preflightResponse;
@@ -260,7 +258,8 @@ public class MissionController(
             {
                 command = "preflight_workflow",
                 runtime_id = runtimeId,
-                require_hardware = !isSimulation
+                require_hardware = !isSimulation,
+                require_robot_ui = RequiresRobotUi(document.Steps)
             }, cancellationToken);
             preflightResponse = response.RootElement.Clone();
         }
@@ -472,7 +471,7 @@ public class MissionController(
     {
         var supportedStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "ACCEPTED", "RUNNING", "WAITING", "STEP_COMPLETED", "STEP_FAILED", "SUCCEEDED", "COMPLETED", "FAILED", "CANCELLED"
+            "QUEUED", "ACCEPTED", "RUNNING", "WAITING", "STEP_COMPLETED", "STEP_FAILED", "SUCCEEDED", "COMPLETED", "FAILED", "CANCELLED"
         };
         if (string.IsNullOrWhiteSpace(request.Status) || !supportedStatuses.Contains(request.Status))
             return BadRequest(new { message = "Unsupported workflow execution status." });
@@ -513,10 +512,11 @@ public class MissionController(
             var legacyMission = await missionData.GetMissionAsync(id, tracking: true, cancellationToken);
             if (legacyMission is null) return NotFound();
             if (legacyMission.Status == "Pending") legacyMission.Start();
-            task = new JobTask(id, null, request.RuntimeId ?? "real");
+            task = await missionData.CreateMissingJobTaskAsync(
+                id, legacyMission.WorkflowId, request.RuntimeId ?? "real", cancellationToken);
             task.Start();
             if (!string.IsNullOrWhiteSpace(request.ExecutionId)) task.SetExecutionId(request.ExecutionId);
-            await missionData.AddJobTaskAsync(task, cancellationToken);
+            await missionData.SaveChangesAsync(cancellationToken);
         }
         var mission = await missionData.GetMissionAsync(id, tracking: true, cancellationToken);
         if (mission is null) return NotFound();
@@ -528,6 +528,12 @@ public class MissionController(
         if (!string.IsNullOrWhiteSpace(request.RuntimeId)
             && !string.Equals(task.RuntimeId, request.RuntimeId, StringComparison.OrdinalIgnoreCase))
             return Conflict(new { message = "Runtime id does not match the assigned mission runtime." });
+
+        if (string.Equals(request.Status, "ACCEPTED", StringComparison.OrdinalIgnoreCase))
+        {
+            if (mission.Status == "Pending") mission.Start();
+            if (!task.StartedAtUtc.HasValue) task.Start();
+        }
 
         var state = new
         {
@@ -547,6 +553,7 @@ public class MissionController(
         };
         task.UpdateExecutionState(JsonSerializer.Serialize(state));
         await missionData.AddWorkflowStepEventAsync(id, JsonSerializer.Serialize(state), cancellationToken);
+        await PublishLibrarianWorkflowNotificationAsync(id, task.RuntimeId, request, cancellationToken);
         await hub.Clients.All.SendAsync("MissionStepChanged", state, cancellationToken);
         return Accepted(state);
     }
@@ -659,6 +666,102 @@ public class MissionController(
             statusOverride ?? (mission.Status == "Pending" ? "QUEUED" : mission.Status.ToUpperInvariant()), FormatPriority(mission.Priority),
             mission.CreatedAtUtc, mission.StartedAtUtc, mission.CompletedAtUtc, robotId, robotName, runtimeId);
 
+    private async Task PublishLibrarianWorkflowNotificationAsync(
+        Guid missionId,
+        string runtimeId,
+        MissionExecutionStateRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(request.Status, "STEP_COMPLETED", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(request.StepType, "NOTIFY", StringComparison.OrdinalIgnoreCase)
+            || request.Result is not JsonElement result
+            || result.ValueKind != JsonValueKind.Object
+            || !result.TryGetProperty("channel", out var channel)
+            || channel.ValueKind != JsonValueKind.String
+            || !string.Equals(channel.GetString(), "LIBRARIAN_WS", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var message = result.TryGetProperty("message", out var content) && content.ValueKind == JsonValueKind.String
+            ? content.GetString()
+            : null;
+        if (string.IsNullOrWhiteSpace(message)) return;
+        var eventType = result.TryGetProperty("event_type", out var eventTypeValue)
+            && eventTypeValue.ValueKind == JsonValueKind.String
+                ? eventTypeValue.GetString()
+                : null;
+
+        var payload = result.TryGetProperty("payload", out var notificationPayload)
+            && notificationPayload.ValueKind == JsonValueKind.Object
+                ? notificationPayload
+                : default;
+        if (string.Equals(eventType, "PATROL_COMPLETED", StringComparison.OrdinalIgnoreCase))
+        {
+            var reportId = payload.ValueKind == JsonValueKind.Object && TryReadGuid(payload, "report_id", out var parsedReportId)
+                ? parsedReportId
+                : Guid.Empty;
+            await hub.Clients.Group(RobotHub.LibrarianGroup).SendAsync("PATROL_COMPLETED", new
+            {
+                missionId,
+                reportId,
+                reportType = ReadString(payload, "report_type") ?? "PATROL",
+                runtimeId,
+                observationCount = ReadInt(payload, "observation_count"),
+                fallenBookCount = ReadInt(payload, "fallen_book_count"),
+                unknownObstacleCount = ReadInt(payload, "obstacle_count"),
+                otherWarningCount = ReadInt(payload, "warning_count"),
+                completedAtUtc = DateTime.UtcNow
+            }, cancellationToken);
+        }
+        await hub.Clients.Group(RobotHub.LibrarianGroup).SendAsync("LibrarianNotification", new
+        {
+            type = eventType ?? "WORKFLOW_NOTIFICATION",
+            runtimeId,
+            missionId,
+            executionId = request.ExecutionId,
+            message,
+            createdAt = DateTime.UtcNow
+        }, cancellationToken);
+    }
+
+    private static string? ReadString(JsonElement element, string propertyName) =>
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(propertyName, out var value)
+        && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static bool RequiresRobotUi(IReadOnlyList<JsonElement> steps)
+    {
+        foreach (var step in steps)
+        {
+            var stepType = ReadString(step, "type")?.Trim().ToUpperInvariant();
+            var parameters = step.ValueKind == JsonValueKind.Object
+                && step.TryGetProperty("params", out var nestedParameters)
+                && nestedParameters.ValueKind == JsonValueKind.Object
+                    ? nestedParameters
+                    : step;
+
+            if (stepType == "DISPLAY") return true;
+            if (stepType != "WAIT"
+                || !string.Equals(ReadString(parameters, "wait_for"), "USER_TOUCH", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!parameters.TryGetProperty("show_ui", out var showUi)
+                || showUi.ValueKind != JsonValueKind.False)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static int ReadInt(JsonElement element, string propertyName) =>
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(propertyName, out var value)
+        && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number) ? number : 0;
+
+    private static bool TryReadGuid(JsonElement element, string propertyName, out Guid value)
+    {
+        value = Guid.Empty;
+        return element.ValueKind == JsonValueKind.Object && element.TryGetProperty(propertyName, out var item)
+            && item.ValueKind == JsonValueKind.String && Guid.TryParse(item.GetString(), out value);
+    }
+
     private static string? GetTransientSimulationStatus(Guid missionId, string? runtimeId)
     {
         if (runtimeId is not null && !string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)) return null;
@@ -701,9 +804,10 @@ public class MissionController(
             "Search & Guide to Facility" => "Reader facility search: ",
             _ => null
         };
-        if (prefix is null || !mission.Description.StartsWith(prefix, StringComparison.Ordinal)) return;
+        if (prefix is null || mission.Description is not { } description
+            || !description.StartsWith(prefix, StringComparison.Ordinal)) return;
 
-        var query = mission.Description[prefix.Length..].Trim();
+        var query = description[prefix.Length..].Trim();
         if (query.Length > 0) initialContext["query"] = query;
     }
 

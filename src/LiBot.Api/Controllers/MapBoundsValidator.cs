@@ -9,6 +9,7 @@ internal static class MapBoundsValidator
     {
         if (!TryGetGrid(map, out var resolution, out var originX, out var originY, out var originYaw))
             return x >= 0 && y >= 0 && x <= map.Width && y <= map.Height;
+
         var cosine = Math.Cos(originYaw);
         var sine = Math.Sin(originYaw);
         var dx = x - originX;
@@ -24,6 +25,7 @@ internal static class MapBoundsValidator
     {
         if (!TryGetGrid(map, out var resolution, out var originX, out var originY, out var originYaw))
             return minX >= 0 && minY >= 0 && maxX <= map.Width && maxY <= map.Height;
+
         var cosine = Math.Cos(originYaw);
         var sine = Math.Sin(originYaw);
         var corners = new[]
@@ -33,11 +35,48 @@ internal static class MapBoundsValidator
         }.Select(point => (
             X: originX + cosine * point.Item1 - sine * point.Item2,
             Y: originY + sine * point.Item1 + cosine * point.Item2)).ToArray();
+
         return minX >= corners.Min(point => point.X) && maxX <= corners.Max(point => point.X)
             && minY >= corners.Min(point => point.Y) && maxY <= corners.Max(point => point.Y);
     }
 
-    private static bool TryGetGrid(MapResponse map, out double resolution, out double originX, out double originY, out double originYaw)
+    public static bool ContainsZone(
+        MapResponse map,
+        double minX,
+        double minY,
+        double maxX,
+        double maxY,
+        double? width,
+        double? height,
+        double rotationAngle)
+    {
+        if (width is null || height is null)
+            return Contains(map, minX, minY, maxX, maxY);
+
+        var centerX = (minX + maxX) / 2;
+        var centerY = (minY + maxY) / 2;
+        var halfWidth = width.Value / 2;
+        var halfHeight = height.Value / 2;
+        var cosine = Math.Cos(rotationAngle);
+        var sine = Math.Sin(rotationAngle);
+        var corners = new[]
+        {
+            (-halfWidth, -halfHeight), (-halfWidth, halfHeight),
+            (halfWidth, -halfHeight), (halfWidth, halfHeight),
+        };
+
+        return corners.All(point => Contains(
+            map,
+            centerX + cosine * point.Item1 - sine * point.Item2,
+            centerY + sine * point.Item1 + cosine * point.Item2));
+    }
+
+    private static bool TryGetGrid(
+        MapResponse map,
+        out double resolution,
+        out double originX,
+        out double originY,
+        out double originYaw)
     {
         resolution = 0;
         originX = originY = originYaw = 0;

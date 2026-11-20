@@ -1,5 +1,6 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
+using LiBot.Domain.Enums;
 using LiBot.Domain.Mission;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +15,7 @@ public sealed class GuidanceWorkflowRepository(LiBotDbContext db) : IGuidanceWor
     {
         var workflows = await db.Workflows
             .AsNoTracking()
-            .Where(item => item.Type == workflowType && item.IsActive)
+            .Where(item => item.Type == workflowType && item.Status == WorkflowStatus.Active)
             .OrderBy(item => item.Id)
             .Take(2)
             .ToListAsync(cancellationToken);
@@ -67,13 +68,19 @@ public sealed class GuidanceWorkflowRepository(LiBotDbContext db) : IGuidanceWor
         db.Jobs.Add(mission);
         db.JobTasks.Add(jobTask);
 
-        var workflowTaskIds = await db.WorkflowTasks
+        var workflowTasks = await db.WorkflowTasks
             .AsNoTracking()
             .Where(task => task.WorkflowId == workflowId)
             .OrderBy(task => task.SequenceNumber)
-            .Select(task => task.Id)
             .ToListAsync(cancellationToken);
-        var steps = workflowTaskIds.Count == 0
+        var workflowTaskIds = workflowTasks.Select(task => task.Id).ToArray();
+        var primaryWorkflowTask = workflowTasks.FirstOrDefault();
+        if (primaryWorkflowTask is null)
+            throw new InvalidOperationException($"Workflow '{workflowId}' does not contain any tasks.");
+        if (mission.WorkflowId != workflowId)
+            throw new InvalidOperationException("Mission workflow id does not match the execution workflow id.");
+        jobTask.AssignWorkflowTask(primaryWorkflowTask.Id, primaryWorkflowTask.Name);
+        var steps = workflowTaskIds.Length == 0
             ? []
             : await db.TaskSteps
                 .AsNoTracking()
@@ -88,7 +95,7 @@ public sealed class GuidanceWorkflowRepository(LiBotDbContext db) : IGuidanceWor
         {
             if (!stepsByTask.TryGetValue(workflowTaskId, out var taskSteps)) continue;
             foreach (var step in taskSteps)
-                db.JobSteps.Add(new JobStep(jobTask.Id, step.Id, sequence++));
+                db.JobSteps.Add(new JobStep(jobTask.Id, step.Id, sequence++, step.StepType));
         }
 
         db.JobEvents.Add(new JobEvent(mission.Id, "WORKFLOW_INITIAL_CONTEXT", initialContext));

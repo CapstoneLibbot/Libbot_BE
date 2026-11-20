@@ -11,6 +11,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\..\docs\database\create-logical-erd-schema.sql"
+                      LogicalName="LiBot.Infrastructure.Persistence.Migrations.create-logical-erd-schema.sql" />
+    <EmbeddedResource Include="..\..\docs\database\migrations\align-legacy-schema-to-logical-erd.sql"
+                      LogicalName="LiBot.Infrastructure.Persistence.Migrations.align-legacy-schema-to-logical-erd.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.31" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.0.0" />
   </ItemGroup>

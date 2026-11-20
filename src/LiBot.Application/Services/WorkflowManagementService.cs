@@ -1,6 +1,7 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
 using LiBot.Application.Services.Workflow;
+using LiBot.Domain.Enums;
 using LiBot.Domain.Workflow;
 
 namespace LiBot.Application.Services;
@@ -79,6 +80,19 @@ public sealed class WorkflowManagementService(
         return Success(ToResponse(updated!));
     }
 
+    public async Task<WorkflowOperationResult<WorkflowResponse>> UpdateStatusAsync(
+        Guid id, string status, CancellationToken cancellationToken)
+    {
+        if (!Enum.TryParse<WorkflowStatus>(status, true, out var parsedStatus)
+            || !Enum.IsDefined(parsedStatus))
+            return Invalid<WorkflowResponse>("status must be Draft, Active or Inactive.");
+        if (await repository.GetByIdAsync(id, tracking: false, cancellationToken) is null)
+            return NotFound<WorkflowResponse>();
+
+        await repository.UpdateStatusAsync(id, parsedStatus, cancellationToken);
+        return Success(ToResponse((await repository.GetByIdAsync(id, tracking: false, cancellationToken))!));
+    }
+
     public async Task<WorkflowOperationResult<bool>> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         if (await repository.GetByIdAsync(id, tracking: false, cancellationToken) is null)
@@ -96,7 +110,7 @@ public sealed class WorkflowManagementService(
             {
                 var step = aggregate.Steps[task.Id];
                 return new WorkflowStepResponse(step.Id, task.SequenceNumber, step.StepType, task.Name,
-                    ParseConfiguration(step.Configuration));
+                    ParseConfiguration(step.Configuration), task.Description);
             }).ToList();
         var workflow = aggregate.Workflow;
         return new WorkflowResponse(workflow.Id, workflow.Name, workflow.Description, workflow.Type,
