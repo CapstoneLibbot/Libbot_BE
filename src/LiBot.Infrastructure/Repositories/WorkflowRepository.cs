@@ -61,6 +61,16 @@ public sealed class WorkflowRepository(LiBotDbContext db) : IWorkflowRepository
         return true;
     }
 
+    public async Task<bool> UpdateStatusAsync(Guid id, LiBot.Domain.Enums.WorkflowStatus status,
+        CancellationToken cancellationToken)
+    {
+        var workflow = await db.Workflows.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (workflow is null) return false;
+        workflow.SetStatus(status);
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         var aggregate = await GetByIdAsync(id, tracking: true, cancellationToken);

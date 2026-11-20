@@ -177,6 +177,21 @@ public class BookController : ControllerBase
         catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
     }
 
+    [HttpPatch("items/{id:guid}/status")]
+    public async Task<IActionResult> UpdateBookItemStatus(
+        Guid id, StatusUpdateRequest request, CancellationToken cancellationToken)
+    {
+        var current = await _bookItemService.GetByIdAsync(id, cancellationToken);
+        if (current is null) return NotFound(Error("Book item was not found."));
+        current.Status = request.Status;
+        try
+        {
+            var updated = await _bookItemService.UpdateAsync(id, current, cancellationToken);
+            return Ok(new BaseResponse<BookItemResourceDto>(updated!));
+        }
+        catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
+    }
+
     [HttpDelete("items/{id:guid}")]
     public async Task<IActionResult> DeleteBookItem(Guid id, CancellationToken cancellationToken) =>
         await _bookItemService.DeleteAsync(id, cancellationToken) ? Ok(BaseResponse<object>.SuccessMessage("Book item deleted successfully.")) : NotFound(Error("Book item was not found."));

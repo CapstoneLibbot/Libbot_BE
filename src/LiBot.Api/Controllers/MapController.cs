@@ -157,6 +157,22 @@ public class MapController(
         return map is null ? NotFound() : Ok(map);
     }
 
+    [HttpPatch("{id:guid}/status")]
+    public async Task<IActionResult> UpdateStatus(
+        Guid id, StatusUpdateRequest request, CancellationToken cancellationToken)
+    {
+        var current = await maps.GetByIdAsync(id, cancellationToken);
+        if (current is null) return NotFound(new { message = "Map was not found." });
+        try
+        {
+            var updated = await maps.UpdateAsync(id,
+                new MapWriteRequest(current.Name, current.Width, current.Height, current.Data,
+                    current.Version, current.FloorId, request.Status), cancellationToken);
+            return Ok(updated);
+        }
+        catch (ArgumentException exception) { return BadRequest(new { message = exception.Message }); }
+    }
+
     /// <summary>Xóa bản đồ theo ID.</summary>
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken) =>

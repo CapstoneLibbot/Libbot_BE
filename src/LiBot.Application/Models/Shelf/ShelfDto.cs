@@ -11,5 +11,7 @@ public class ShelfDto : LibraryResourceDto<ShelfEntity>
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string Status { get; set; } = "Active";
-    public override ShelfEntity ToEntity() => new(AisleId, StartEndpointId, EndEndpointId, Name, Description, Status);
+    public override ShelfEntity ToEntity() => new(AisleId, StartEndpointId, EndEndpointId, Name, Description,
+        Enum.TryParse<LiBot.Domain.Enums.ShelfStatus>(Status, true, out var status)
+            ? status : LiBot.Domain.Enums.ShelfStatus.Active);
 }

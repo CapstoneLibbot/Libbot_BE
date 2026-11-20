@@ -74,6 +74,22 @@ public class AisleController : ControllerBase
         catch (KeyNotFoundException exception) { return NotFound(Error(exception.Message)); }
     }
 
+    [HttpPatch("{id:guid}/status")]
+    public async Task<ActionResult<BaseResponse<AisleResponse>>> UpdateStatus(
+        Guid id, StatusUpdateRequest request, CancellationToken cancellationToken)
+    {
+        var current = await _aisleService.GetByIdAsync(id, null, cancellationToken);
+        if (current is null) return NotFound(Error("Aisle was not found."));
+        try
+        {
+            var updated = await _aisleService.UpdateAsync(id,
+                new AisleWriteRequest(current.FloorId, current.Name, current.Description, request.Status),
+                null, cancellationToken);
+            return Ok(new BaseResponse<AisleResponse>(updated!));
+        }
+        catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
+    }
+
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {

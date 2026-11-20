@@ -23,4 +23,12 @@ public sealed class BookIssue : Entity
         IssueDate = issueDate;
         Note = note?.Trim();
     }
+
+    public void UpdateStatus(string status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+            throw new ArgumentException("Issue status is required.", nameof(status));
+        Status = status.Trim();
+        SetUpdated();
+    }
 }

@@ -1,6 +1,7 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
 using LiBot.Application.Services.Workflow;
+using LiBot.Domain.Enums;
 using LiBot.Domain.Workflow;
 
 namespace LiBot.Application.Services;
@@ -77,6 +78,19 @@ public sealed class WorkflowManagementService(
             return Conflict<WorkflowResponse>("This workflow has mission history and its steps cannot be replaced.");
         var updated = await repository.GetByIdAsync(id, tracking: false, cancellationToken);
         return Success(ToResponse(updated!));
+    }
+
+    public async Task<WorkflowOperationResult<WorkflowResponse>> UpdateStatusAsync(
+        Guid id, string status, CancellationToken cancellationToken)
+    {
+        if (!Enum.TryParse<WorkflowStatus>(status, true, out var parsedStatus)
+            || !Enum.IsDefined(parsedStatus))
+            return Invalid<WorkflowResponse>("status must be Draft, Active or Inactive.");
+        if (await repository.GetByIdAsync(id, tracking: false, cancellationToken) is null)
+            return NotFound<WorkflowResponse>();
+
+        await repository.UpdateStatusAsync(id, parsedStatus, cancellationToken);
+        return Success(ToResponse((await repository.GetByIdAsync(id, tracking: false, cancellationToken))!));
     }
 
     public async Task<WorkflowOperationResult<bool>> DeleteAsync(Guid id, CancellationToken cancellationToken)

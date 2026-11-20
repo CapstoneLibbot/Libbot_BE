@@ -1,5 +1,6 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models.Aisle;
+using LiBot.Domain.Enums;
 using LiBot.Domain.Library;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -15,9 +16,13 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim();
-            source = source.Where(item => EF.Functions.Like(item.Name, $"%{search}%")
-                || EF.Functions.Like(item.Status, $"%{search}%")
-                || (item.Description != null && EF.Functions.Like(item.Description, $"%{search}%")));
+            if (Enum.TryParse<AisleStatus>(search, true, out var searchStatus))
+                source = source.Where(item => EF.Functions.Like(item.Name, $"%{search}%")
+                    || (item.Description != null && EF.Functions.Like(item.Description, $"%{search}%"))
+                    || item.Status == searchStatus);
+            else
+                source = source.Where(item => EF.Functions.Like(item.Name, $"%{search}%")
+                    || (item.Description != null && EF.Functions.Like(item.Description, $"%{search}%")));
         }
 
         var total = await source.CountAsync(cancellationToken);
@@ -42,7 +47,8 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
 
     public async Task<AisleResponse> CreateAsync(AisleWriteRequest request, string? expand, CancellationToken cancellationToken)
     {
-        var entity = new Aisle(request.FloorId, request.Name, request.Description, request.Status);
+        var entity = new Aisle(request.FloorId, request.Name, request.Description,
+            Enum.TryParse<AisleStatus>(request.Status, true, out var status) ? status : AisleStatus.Active);
         db.Aisles.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
         return (await GetByIdAsync(entity.Id, expand, cancellationToken))!;
@@ -52,7 +58,8 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
     {
         var entity = await db.Aisles.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (entity is null) return null;
-        entity.Update(request.FloorId, request.Name, request.Description, request.Status);
+        entity.Update(request.FloorId, request.Name, request.Description,
+            Enum.TryParse<AisleStatus>(request.Status, true, out var status) ? status : AisleStatus.Active);
         await db.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(id, expand, cancellationToken);
     }
@@ -79,7 +86,7 @@ public class AisleRepository(LiBotDbContext db) : IAisleRepository
             ? await db.Shelves.AsNoTracking().Where(item => aisleIds.Contains(item.AisleId)).ToListAsync(cancellationToken)
             : [];
         return entities.Select(item => new AisleResponse(
-            item.Id, item.FloorId, item.Name, item.Description, item.Status,
+            item.Id, item.FloorId, item.Name, item.Description, item.Status.ToString(),
             floors.TryGetValue(item.FloorId, out var floor) ? new(floor.Id, floor.Name, floor.FloorNumber) : null,
             expansions.Contains("shelves") ? shelves.Where(shelf => shelf.AisleId == item.Id).Select(shelf => new AisleShelfResponse(shelf.Id, shelf.Name)).ToList() : null
         )).ToList();
