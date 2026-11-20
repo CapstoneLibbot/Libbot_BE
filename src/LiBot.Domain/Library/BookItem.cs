@@ -41,7 +41,16 @@ public class BookItem : Entity
         CurrentShelfLevelId = shelfLevelId;
         LastInventoryAtUtc = recordedAtUtc ?? DateTime.UtcNow;
         if (status is not null)
-            Status = status.Trim();
+            Status = status.ToLowerInvariant() switch
+            {
+                "available" => BookItemStatus.Available,
+                "misplaced" => BookItemStatus.Misplaced,
+                "missing" => BookItemStatus.Missing,
+                "lost" => BookItemStatus.Lost,
+                "damaged" => BookItemStatus.Damaged,
+                "borrowed" => BookItemStatus.Borrowed,
+                _ => throw new ArgumentException($"Invalid inventory status '{status}'.", nameof(status))
+            };
     }
 
     public void Borrow()

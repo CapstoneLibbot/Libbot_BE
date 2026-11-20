@@ -90,6 +90,8 @@ public class WorkflowController(
         return result.Status == WorkflowOperationStatus.NotFound
             ? NotFound()
             : Ok(result.Value);
+    }
+
     [HttpPatch("{id:guid}/status")]
     public async Task<ActionResult<WorkflowResponse>> UpdateStatus(
         Guid id, StatusUpdateRequest request, CancellationToken cancellationToken)

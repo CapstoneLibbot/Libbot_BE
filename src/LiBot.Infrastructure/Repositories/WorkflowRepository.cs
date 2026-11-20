@@ -69,7 +69,7 @@ public sealed class WorkflowRepository(LiBotDbContext db) : IWorkflowRepository
         if (workflow is null) return false;
 
         var activeWorkflows = await db.Workflows
-            .Where(item => item.Type == workflow.Type && item.Status == "Active")
+            .Where(item => item.Type == workflow.Type && item.Status == Domain.Enums.WorkflowStatus.Active)
             .ToListAsync(cancellationToken);
         foreach (var activeWorkflow in activeWorkflows)
             if (activeWorkflow.Id != workflow.Id)
@@ -78,6 +78,9 @@ public sealed class WorkflowRepository(LiBotDbContext db) : IWorkflowRepository
         workflow.SetActive(true);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<bool> UpdateStatusAsync(Guid id, LiBot.Domain.Enums.WorkflowStatus status,
         CancellationToken cancellationToken)
     {

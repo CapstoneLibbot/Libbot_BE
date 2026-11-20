@@ -1,5 +1,6 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
+using LiBot.Domain.Enums;
 using LiBot.Domain.Library;
 using LiBot.Domain.Mission;
 using LiBot.Infrastructure.Persistence;
@@ -26,8 +27,8 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
                              join map in db.Maps.AsNoTracking() on endpoint.MapId equals map.Id
                              where requestedIds.Contains(shelf.Id)
                                  && aisle.FloorId == floorId
-                                 && aisle.Status.ToLower() == "active"
-                                 && shelf.Status.ToLower() == "active"
+                                 && aisle.Status == AisleStatus.Active
+                                 && shelf.Status == ShelfStatus.Active
                                  && endpoint.IsActive
                                  && endEndpoint.IsActive
                                  && endEndpoint.MapId == endpoint.MapId
@@ -41,7 +42,7 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
 
         var shelfIds = shelves.Select(item => item.Shelf.Id).ToArray();
         var levels = await db.ShelfLevels.AsNoTracking()
-            .Where(item => shelfIds.Contains(item.ShelfId) && item.Status.ToLower() == "active")
+            .Where(item => shelfIds.Contains(item.ShelfId) && item.Status == ShelfStatus.Active)
             .OrderBy(item => item.LevelNumber)
             .Select(item => new { item.Id, item.ShelfId, item.LevelNumber })
             .ToListAsync(cancellationToken);
@@ -63,7 +64,7 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
                           join endpoint in db.Endpoints.AsNoTracking() on shelf.StartEndpointId equals endpoint.Id
                           join endEndpoint in db.Endpoints.AsNoTracking() on shelf.EndEndpointId equals endEndpoint.Id
                           where shelf.Id == shelfId
-                              && shelf.Status.ToLower() == "active"
+                              && shelf.Status == ShelfStatus.Active
                               && endpoint.IsActive
                               && endEndpoint.IsActive
                               && endEndpoint.MapId == endpoint.MapId
@@ -78,7 +79,7 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
         if (item is null) return null;
 
         var levels = await db.ShelfLevels.AsNoTracking()
-            .Where(level => level.ShelfId == shelfId && level.Status.ToLower() == "active")
+            .Where(level => level.ShelfId == shelfId && level.Status == ShelfStatus.Active)
             .OrderBy(level => level.LevelNumber)
             .Select(level => new InventoryShelfLevelRecord(level.Id, level.LevelNumber))
             .ToListAsync(cancellationToken);
@@ -102,7 +103,7 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
                 item.Barcode,
                 item.ExpectedShelfLevelId,
                 item.CurrentShelfLevelId,
-                item.Status))
+                item.Status.ToString()))
             .ToListAsync(cancellationToken);
     }
 
