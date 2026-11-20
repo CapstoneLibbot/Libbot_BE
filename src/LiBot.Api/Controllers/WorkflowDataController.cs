@@ -2,6 +2,7 @@ using System.Text.Json;
 using LiBot.Application.Models;
 using LiBot.Application.Interfaces;
 using LiBot.Application.Workflow.BookGuidance;
+using LiBot.Infrastructure.Workflow;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LiBot.Api.Controllers;
@@ -64,6 +65,7 @@ public sealed class WorkflowDataController(
 
             var simulationEndpoint = new NavigationEndpoint(
                 endpoint.Id,
+                endpoint.MapId,
                 endpoint.Name,
                 endpoint.X,
                 endpoint.Y,
@@ -172,8 +174,8 @@ public sealed class WorkflowDataController(
     [HttpPost("inventory/scan")]
     public async Task<IActionResult> RecordInventoryScan(InventoryScanRequest request, CancellationToken cancellationToken)
     {
-        if (request.MissionId == Guid.Empty || string.IsNullOrWhiteSpace(request.Barcode))
-            return BadRequest(new { message = "missionId and barcode are required." });
+        if (request.MissionId == Guid.Empty || string.IsNullOrWhiteSpace(request.Code))
+            return BadRequest(new { message = "missionId and qrCode are required." });
         var task = await dataService.GetMissionAsync(request.MissionId, cancellationToken);
         var runtimeId = task?.RuntimeId ?? request.RuntimeId;
         if (task is null && !IsActiveSimulation(request.MissionId, runtimeId))
@@ -184,10 +186,12 @@ public sealed class WorkflowDataController(
             && !IsActiveSimulation(request.MissionId, runtimeId))
             return Conflict(new { message = "No active in-memory simulation exists for this mission." });
 
-        var barcode = request.Barcode.Trim();
+        var barcode = request.Code!.Trim();
         if (runtimeId == "real" && string.IsNullOrWhiteSpace(request.ShelfCode))
             return BadRequest(new { message = "shelfCode is required for a physical inventory scan." });
-        var shelfLevelId = runtimeId == "sim" ? null : await dataService.ResolveShelfLevelAsync(request.ShelfCode, cancellationToken);
+        if (request.LevelNumber is not null and not (1 or 2))
+            return BadRequest(new { message = "levelNumber must be 1 or 2." });
+        var shelfLevelId = runtimeId == "sim" ? null : await dataService.ResolveShelfLevelAsync(request.ShelfCode, request.LevelNumber, cancellationToken);
         if (runtimeId == "real" && shelfLevelId is null)
             return BadRequest(new { message = $"No active shelf level was found for shelf '{request.ShelfCode}'." });
         var item = runtimeId == "sim" ? null : await dataService.GetInventoryBookAsync(barcode, cancellationToken);
@@ -209,8 +213,10 @@ public sealed class WorkflowDataController(
         var scan = new
         {
             barcode,
+            qrCode = barcode,
             shelfCode = request.ShelfCode,
             shelfLevelId,
+            levelNumber = request.LevelNumber,
             known,
             misplaced,
             expectedShelfCode,
@@ -224,6 +230,138 @@ public sealed class WorkflowDataController(
         }
         await dataService.AddJobEventAsync(request.MissionId, "INVENTORY_SCAN", JsonSerializer.Serialize(scan), cancellationToken);
         return Ok(scan);
+    }
+
+    /// <summary>Lấy các barcode đã quét trong nhiệm vụ kiểm kê đang chạy hoặc đã hoàn tất.</summary>
+    [HttpGet("inventory/scans/{missionId:guid}")]
+    public async Task<IActionResult> GetInventoryScans(
+        Guid missionId,
+        [FromQuery] string? runtimeId,
+        CancellationToken cancellationToken)
+    {
+        var task = await dataService.GetMissionAsync(missionId, cancellationToken);
+        runtimeId = task?.RuntimeId ?? (string.IsNullOrWhiteSpace(runtimeId) ? "sim" : runtimeId.Trim());
+        if (task is null && !IsActiveSimulation(missionId, runtimeId))
+            return NotFound(new { message = "Mission task not found." });
+        if (task is not null && !MatchesRuntime(task.RuntimeId, runtimeId))
+            return Conflict(new { message = "Runtime does not match the mission." });
+
+        var isSimulation = string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase);
+        var scanData = isSimulation
+            ? SimulationWorkflowDataStore.GetInventoryScans(missionId)
+                .Select(scan => scan.GetRawText())
+                .Concat(InventoryWorkflowRuntimeStore.GetScans(missionId))
+                .ToArray()
+            : await dataService.GetJobEventDataAsync(missionId, "INVENTORY_SCAN", cancellationToken);
+        var scans = new List<JsonElement>();
+        foreach (var value in scanData)
+        {
+            if (string.IsNullOrWhiteSpace(value)) continue;
+            try
+            {
+                using var document = JsonDocument.Parse(value);
+                var root = document.RootElement;
+                if (root.ValueKind != JsonValueKind.Object) continue;
+
+                if (TryGetProperty(root, "barcode", out _))
+                {
+                    scans.Add(root.Clone());
+                    continue;
+                }
+
+                if (!TryGetProperty(root, "scanned_items", out var items)
+                    || items.ValueKind != JsonValueKind.Array)
+                    continue;
+
+                var shelfCode = TryGetProperty(root, "shelf_code", out var shelfCodeValue)
+                    && shelfCodeValue.ValueKind == JsonValueKind.String
+                    ? shelfCodeValue.GetString()
+                    : null;
+                var scannedAt = TryGetProperty(root, "scanned_at", out var scannedAtValue)
+                    && scannedAtValue.ValueKind == JsonValueKind.String
+                    ? scannedAtValue.GetString()
+                    : DateTime.UtcNow.ToString("O");
+                var verificationByBarcode = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+                if (TryGetProperty(root, "verified_book_items", out var verifiedItems)
+                    && verifiedItems.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var verifiedItem in verifiedItems.EnumerateArray())
+                    {
+                        if (TryGetProperty(verifiedItem, "qr_code", out var verifiedBarcode)
+                            && verifiedBarcode.ValueKind == JsonValueKind.String
+                            && !string.IsNullOrWhiteSpace(verifiedBarcode.GetString()))
+                            verificationByBarcode[verifiedBarcode.GetString()!] = verifiedItem;
+                    }
+                }
+
+                foreach (var item in items.EnumerateArray())
+                {
+                    if (!TryGetProperty(item, "qr_code", out var barcodeValue)
+                        || barcodeValue.ValueKind != JsonValueKind.String
+                        || string.IsNullOrWhiteSpace(barcodeValue.GetString()))
+                        continue;
+
+                    var barcode = barcodeValue.GetString()!;
+                    verificationByBarcode.TryGetValue(barcode, out var verification);
+                    var hasVerification = verification.ValueKind == JsonValueKind.Object;
+                    var status = hasVerification && TryGetProperty(verification, "status", out var statusValue)
+                        && statusValue.ValueKind == JsonValueKind.String
+                        ? statusValue.GetString()
+                        : "SCANNED";
+                    var known = hasVerification && TryGetProperty(verification, "known", out var knownValue)
+                        && knownValue.ValueKind == JsonValueKind.True;
+                    var misplaced = hasVerification && TryGetProperty(verification, "misplaced", out var misplacedValue)
+                        && misplacedValue.ValueKind == JsonValueKind.True;
+                    var levelNumber = TryGetProperty(item, "level_number", out var levelValue)
+                        && levelValue.TryGetInt32(out var level)
+                        ? level
+                        : (int?)null;
+                    var shelfLevelId = hasVerification && TryGetProperty(verification, "actual_shelf_level_id", out var actualLevelValue)
+                        && actualLevelValue.ValueKind == JsonValueKind.String
+                        ? actualLevelValue.GetString()
+                        : null;
+
+                    scans.Add(JsonSerializer.SerializeToElement(new
+                    {
+                        barcode,
+                        qrCode = barcode,
+                        shelfCode,
+                        shelfLevelId,
+                        levelNumber,
+                        known,
+                        misplaced,
+                        expectedShelfCode = (string?)null,
+                        runtimeId,
+                        scannedAt,
+                        status
+                    }));
+                }
+            }
+            catch (JsonException)
+            {
+                // Ignore malformed historical scan events.
+            }
+        }
+
+        return Ok(scans);
+    }
+
+    private static bool TryGetProperty(JsonElement element, string propertyName, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+        }
+
+        value = default;
+        return false;
     }
 
     /// <summary>Creates a misplaced-book issue for a previously recorded inventory scan.</summary>

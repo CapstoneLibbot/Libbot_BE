@@ -80,6 +80,14 @@ public sealed class WorkflowManagementService(
         return Success(ToResponse(updated!));
     }
 
+    public async Task<WorkflowOperationResult<WorkflowResponse>> ActivateAsync(
+        Guid id, CancellationToken cancellationToken)
+    {
+        if (!await repository.ActivateAsync(id, cancellationToken))
+            return NotFound<WorkflowResponse>();
+
+        var aggregate = await repository.GetByIdAsync(id, tracking: false, cancellationToken);
+        return aggregate is null ? NotFound<WorkflowResponse>() : Success(ToResponse(aggregate));
     public async Task<WorkflowOperationResult<WorkflowResponse>> UpdateStatusAsync(
         Guid id, string status, CancellationToken cancellationToken)
     {

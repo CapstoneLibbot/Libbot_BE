@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using LiBot.Infrastructure.Workflow;
 
 namespace LiBot.Api.Controllers;
 
@@ -23,6 +24,7 @@ internal static class SimulationWorkflowDataStore
         PatrolCoverage.TryRemove(missionId, out _);
         PatrolReports.TryRemove(missionId, out _);
         foreach (var key in PatrolActions.Keys.Where(key => key.MissionId == missionId)) PatrolActions.TryRemove(key, out _);
+        InventoryWorkflowRuntimeStore.ResetSimulation(missionId);
     }
 
     public static void AddInventoryScan(Guid missionId, object scan) =>

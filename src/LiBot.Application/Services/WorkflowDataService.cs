@@ -22,8 +22,8 @@ public sealed class WorkflowDataService(IWorkflowDataRepository repository) : IW
         IReadOnlyCollection<Guid> endpointIds, CancellationToken cancellationToken) =>
         repository.GetPatrolEndpointsAsync(endpointIds, cancellationToken);
 
-    public Task<Guid?> ResolveShelfLevelAsync(string? shelfCode, CancellationToken cancellationToken) =>
-        repository.ResolveShelfLevelAsync(shelfCode, cancellationToken);
+    public Task<Guid?> ResolveShelfLevelAsync(string? shelfCode, int? levelNumber, CancellationToken cancellationToken) =>
+        repository.ResolveShelfLevelAsync(shelfCode, levelNumber, cancellationToken);
 
     public Task<InventoryBookRecord?> GetInventoryBookAsync(string barcode, CancellationToken cancellationToken) =>
         repository.GetInventoryBookAsync(barcode, cancellationToken);

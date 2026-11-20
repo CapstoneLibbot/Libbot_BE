@@ -87,7 +87,8 @@ public static class LiBotDatabaseInitializer
         }
 
         var shelf = await db.Shelves.FirstOrDefaultAsync(
-            item => item.AisleId == aisle.Id && item.Name == "Kệ Công nghệ A3",
+            item => item.AisleId == aisle.Id
+                && (item.Name == "Kệ Công nghệ A3" || item.Name == "Kệ Công nghệ"),
             cancellationToken);
         if (shelf is null)
         {
@@ -103,6 +104,12 @@ public static class LiBotDatabaseInitializer
             shelfLevel = new ShelfLevel(shelf.Id, 2);
             db.ShelfLevels.Add(shelfLevel);
         }
+
+        var lowerShelfLevel = await db.ShelfLevels.FirstOrDefaultAsync(
+            item => item.ShelfId == shelf.Id && item.LevelNumber == 1,
+            cancellationToken);
+        if (lowerShelfLevel is null)
+            db.ShelfLevels.Add(new ShelfLevel(shelf.Id, 1));
 
         var category = await db.BookCategories.FirstOrDefaultAsync(
             item => item.Name == "Công nghệ thông tin",

@@ -5,6 +5,7 @@ using LiBot.Domain.Mission;
 using LiBot.Domain.Workflow;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using RobotEntity = LiBot.Domain.Robot.Robot;
 
 namespace LiBot.Infrastructure.Repositories;
 
@@ -43,6 +44,31 @@ public sealed class MissionDataRepository(LiBotDbContext db) : IMissionDataRepos
     public Task<Guid?> GetRobotIdByMapAsync(Guid mapId, CancellationToken cancellationToken) =>
         db.Robots.AsNoTracking().Where(item => item.MapId == mapId)
             .OrderBy(item => item.Id).Select(item => (Guid?)item.Id).FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<Guid> GetOrCreateRobotIdForMapAsync(Guid mapId, string runtimeId, string robotName,
+        CancellationToken cancellationToken)
+    {
+        var existingId = await GetRobotIdByMapAsync(mapId, cancellationToken);
+        if (existingId.HasValue)
+            return existingId.Value;
+
+        var serialNumber = $"RUNTIME-{runtimeId.Trim().ToUpperInvariant()}";
+        var robot = await db.Robots.FirstOrDefaultAsync(
+            item => item.SerialNumber == serialNumber,
+            cancellationToken);
+        if (robot is not null)
+        {
+            robot.AssignMap(mapId);
+        }
+        else
+        {
+            robot = new RobotEntity(robotName, serialNumber, mapId);
+            db.Robots.Add(robot);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return robot.Id;
+    }
 
     public Task<string?> GetRobotNameAsync(Guid id, CancellationToken cancellationToken) =>
         db.Robots.AsNoTracking().Where(item => item.Id == id).Select(item => item.Name).FirstOrDefaultAsync(cancellationToken);

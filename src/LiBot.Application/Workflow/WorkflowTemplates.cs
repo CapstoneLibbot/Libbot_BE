@@ -39,43 +39,96 @@ public static class WorkflowTemplates
     public static readonly IReadOnlyList<WorkflowTemplateResponse> All =
     [
         CreateReturnAndChargingTemplate(),
-        new("search-guide-book", "Tìm và hướng dẫn tới sách", "Tìm sách, nhận lựa chọn và dẫn người đọc đến kệ.", "SEARCH_AND_GUIDE_TO_BOOK", new[]
+        new("search-guide-book", "Tìm và hướng dẫn tới sách", "Dẫn reader tới kệ của bản sách đã chọn và thông báo vị trí.", "SEARCH_AND_GUIDE_TO_BOOK", new[]
         {
-            MakeStep(1, "S10", "PROCESS_DATA", new() { ["action"] = "SEARCH_BOOK", ["payload"] = new { query = "${query}", match_mode = "FUZZY", runtime_id = "${runtime_id}" }, ["output_mapping"] = new Dictionary<string, string> { ["data.books"] = "search_results" }, ["transitions"] = new { on_success = "S20", on_error = "S210" } }),
-            MakeStep(2, "S20", "DISPLAY", new() { ["ui_screen"] = "BOOK_SEARCH_RESULTS", ["data"] = new { books = "${search_results}" }, ["transitions"] = new { on_success = "S30", on_error = "S210" } }),
-            MakeStep(3, "S30", "WAIT", new() { ["wait_for"] = "USER_TOUCH", ["event_type"] = "BOOK_SELECTED", ["result_variable"] = "selected_book_id", ["timeout_sec"] = 120, ["transitions"] = new { on_event = "S40", on_timeout = "S210", on_cancel = "S210" } }),
-            MakeStep(4, "S40", "PROCESS_DATA", new() { ["action"] = "GET_BOOK_DETAIL", ["payload"] = new { book_id = "${selected_book_id}", runtime_id = "${runtime_id}" }, ["output_mapping"] = new { data = "book_detail" }, ["transitions"] = new { on_success = "S50", on_error = "S210" } }),
-            MakeStep(5, "S50", "DISPLAY", new() { ["ui_screen"] = "BOOK_INFO", ["data"] = "${book_detail}", ["transitions"] = new { on_success = "S60", on_error = "S210" } }),
-            MakeStep(6, "S60", "WAIT", new() { ["wait_for"] = "USER_TOUCH", ["event_type"] = "BOOK_ACTION", ["allowed_values"] = new[] { "VIEW_LOCATION", "START_GUIDANCE", "RATE" }, ["result_variable"] = "book_action", ["timeout_sec"] = 120, ["transitions"] = new { on_event = "S70", on_timeout = "S160", on_cancel = "S160" } }),
-            MakeStep(7, "S70", "EVALUATE", new() { ["condition_type"] = "DATA_MATCH", ["left"] = "${book_action}", ["operator"] = "EQUAL", ["right"] = "RATE", ["transitions"] = new { on_true = "S160", on_false = "S75" } }),
-            MakeStep(8, "S75", "EVALUATE", new() { ["condition_type"] = "DATA_MATCH", ["left"] = "${book_action}", ["operator"] = "EQUAL", ["right"] = "START_GUIDANCE", ["transitions"] = new { on_true = "S110", on_false = "S80" } }),
-            MakeStep(9, "S80", "DISPLAY", new() { ["ui_screen"] = "MAP_LOCATION", ["data"] = "${book_detail.location}", ["transitions"] = new { on_success = "S90", on_error = "S210" } }),
-            MakeStep(10, "S90", "WAIT", new() { ["wait_for"] = "USER_TOUCH", ["event_type"] = "MAP_ACTION", ["allowed_values"] = new[] { "START_GUIDANCE", "RATE" }, ["result_variable"] = "map_action", ["timeout_sec"] = 120, ["transitions"] = new { on_event = "S100", on_timeout = "S160", on_cancel = "S160" } }),
-            MakeStep(11, "S100", "EVALUATE", new() { ["condition_type"] = "DATA_MATCH", ["left"] = "${map_action}", ["operator"] = "EQUAL", ["right"] = "RATE", ["transitions"] = new { on_true = "S160", on_false = "S110" } }),
-            MakeStep(12, "S110", "DISPLAY", new() { ["ui_screen"] = "NAV_GUIDE", ["data"] = new { destination = "${book_detail.location}", show_route = true }, ["transitions"] = new { on_success = "S120", on_error = "S210" } }),
-            MakeStep(13, "S120", "MOVE", new() { ["target"] = "${book_detail.location.endpoint}", ["speed_mode"] = "SLOW_GUIDE", ["obstacle_policy"] = "WAIT_RESUME", ["timeout_sec"] = 180, ["output_mapping"] = new { move_status = "move_status", final_pose = "current_pose" }, ["transitions"] = new { on_success = "S130", on_error = "S210", on_timeout = "S210" } }),
-            MakeStep(14, "S130", "DISPLAY", new() { ["ui_screen"] = "ARRIVED", ["data"] = "${book_detail.location}", ["transitions"] = new { on_success = "S140", on_error = "S210" } }),
-            MakeStep(15, "S140", "NOTIFY", new() { ["channel"] = "SPEAKER_TTS", ["message_type"] = "INFO", ["content"] = "Đã đến vị trí sách. Vui lòng xem kệ và tầng kệ hiển thị trên màn hình.", ["transitions"] = new { on_success = "S150", on_error = "S210" } }),
-            MakeStep(16, "S150", "WAIT", new() { ["wait_for"] = "TIMEOUT", ["timeout_sec"] = 15, ["transitions"] = new { on_timeout = "S160", on_success = "S160" } }),
-            MakeStep(17, "S160", "DISPLAY", new() { ["ui_screen"] = "RATING", ["data"] = new { prompt = "Đánh giá trải nghiệm của bạn" }, ["transitions"] = new { on_success = "S170", on_error = "S210" } }),
-            MakeStep(18, "S170", "WAIT", new() { ["wait_for"] = "USER_TOUCH", ["event_type"] = "RATING_SUBMIT", ["result_variable"] = "rating", ["timeout_sec"] = 10, ["transitions"] = new { on_event = "S180", on_timeout = "S190", on_cancel = "S190" } }),
-            MakeStep(19, "S180", "PROCESS_DATA", new() { ["action"] = "SAVE_RATING", ["payload"] = new { rating = "${rating}", task_id = "${task_id}", runtime_id = "${runtime_id}" }, ["transitions"] = new { on_success = "S190", on_error = "S210" } }),
-            MakeStep(20, "S190", "DISPLAY", new() { ["ui_screen"] = "HOME", ["data"] = new { }, ["transitions"] = new { on_success = "S200", on_error = "S210" } }),
-            MakeStep(21, "S200", "END", new() { ["result_status"] = "SUCCEEDED" }),
-            MakeStep(22, "S210", "END", new() { ["result_status"] = "FAILED" })
+            MakeStep(1, "S10", "PROCESS_DATA", new()
+            {
+                ["action"] = "GET_BOOK_DETAIL",
+                ["payload"] = new { book_id = "${book_id}", book_item_id = "${book_item_id}", runtime_id = "${runtime_id}" },
+                ["output_mapping"] = new { data = "book_detail" },
+                ["transitions"] = new { on_success = "S20" }
+            }),
+            MakeStep(2, "S20", "MOVE", new()
+            {
+                ["target"] = "${book_detail.location.endpoint}",
+                ["speed_mode"] = "SLOW_GUIDE",
+                ["obstacle_policy"] = "WAIT_RESUME",
+                ["timeout_sec"] = 180,
+                ["output_mapping"] = new { move_status = "move_status", final_pose = "current_pose" },
+                ["transitions"] = new { on_success = "S30" }
+            }),
+            MakeStep(3, "S30", "WAIT", new()
+            {
+                ["wait_for"] = "DURATION",
+                ["seconds"] = 2,
+                ["timeout_sec"] = 2,
+                ["transitions"] = new { on_success = "S40" }
+            }),
+            MakeStep(4, "S40", "NOTIFY", new()
+            {
+                ["channel"] = "SPEAKER_TTS",
+                ["message_type"] = "INFO",
+                ["content"] = "Đã đến kệ ${book_detail.location.shelfName}, tầng ${book_detail.location.shelfLevel}. Reader có thể lấy sách ${book_detail.title}."
+            })
         }),
         CreateFacilityGuidanceTemplate(),
-        new("bookshelf-inventory", "Kiểm kê kệ sách", "Quét nhiều barcode tại kệ và lập báo cáo kiểm kê.", "BOOKSHELF_INVENTORY", new[]
+        new("bookshelf-inventory", "Kiểm kê kệ sách", "Robot quét QR hai tầng mỗi kệ, đối soát trạng thái sách và lập báo cáo.", "BOOKSHELF_INVENTORY", new[]
         {
-            MakeStep(1, "I10", "MOVE", new() { ["endpoint_name"] = "Kệ A3", ["transitions"] = new { on_success = "I20", on_error = "I80" } }),
-            MakeStep(2, "I20", "SCAN", new() { ["sensor"] = "camera", ["device"] = "imx500", ["output_key"] = "scanned_code", ["timeout_sec"] = 15, ["transitions"] = new { on_success = "I30", on_timeout = "I50", on_error = "I80" } }),
-            MakeStep(3, "I30", "PROCESS_DATA", new() { ["action"] = "RECORD_INVENTORY", ["payload"] = new { barcode = "${scanned_code}", shelf_code = "A3", mission_id = "${mission_id}", runtime_id = "${runtime_id}" }, ["output_mapping"] = new { data = "last_inventory_scan" }, ["transitions"] = new { on_success = "I40", on_error = "I80" } }),
-            MakeStep(4, "I40", "WAIT", new() { ["wait_for"] = "USER_TOUCH", ["event_type"] = "INVENTORY_ACTION", ["allowed_values"] = new[] { "CONTINUE", "DONE" }, ["result_variable"] = "inventory_action", ["timeout_sec"] = 300, ["transitions"] = new { on_event = "I45", on_timeout = "I80" } }),
-            MakeStep(5, "I45", "EVALUATE", new() { ["left"] = "${inventory_action}", ["operator"] = "EQUAL", ["right"] = "DONE", ["transitions"] = new { on_true = "I50", on_false = "I20" } }),
-            MakeStep(6, "I50", "PROCESS_DATA", new() { ["action"] = "FINALIZE_INVENTORY", ["payload"] = new { mission_id = "${mission_id}", runtime_id = "${runtime_id}", shelf_code = "A3" }, ["transitions"] = new { on_success = "I60", on_error = "I80" } }),
-            MakeStep(7, "I60", "NOTIFY", new() { ["channel"] = "SPEAKER_TTS", ["content"] = "Inventory scan completed.", ["transitions"] = new { on_success = "I70", on_error = "I80" } }),
-            MakeStep(8, "I70", "END", new() { ["status"] = "SUCCEEDED" }),
-            MakeStep(9, "I80", "END", new() { ["status"] = "FAILED" })
+            MakeEnvelopeStep(1, "I10", "PROCESS_DATA", "RESOLVE_INVENTORY_SCOPE",
+                new() { ["action"] = "RESOLVE_INVENTORY_SCOPE", ["payload"] = new { floor_id = "${floor_id}", map_id = "${map_id}", scope_type = "SHELVES", target_shelves = "${target_shelves}" } },
+                new Dictionary<string, string> { ["data.shelves"] = "inventory_shelves" },
+                new { on_success = "I20", on_error = "I900" }),
+            MakeEnvelopeStep(2, "I20", "PROCESS_DATA", "SELECT_FIRST_INVENTORY_SHELF",
+                new() { ["action"] = "ADVANCE_INVENTORY_SCOPE", ["payload"] = new { shelves = "${inventory_shelves}", current_shelf_index = -1 } },
+                new Dictionary<string, string> { ["data.current_shelf"] = "current_shelf", ["data.current_shelf_index"] = "current_shelf_index", ["data.has_next"] = "has_next" },
+                new { on_success = "I30", on_error = "I900" }),
+            MakeEnvelopeStep(3, "I30", "EVALUATE", "CHECK_INITIAL_INVENTORY_SHELF",
+                new() { ["left"] = "${has_next}", ["operator"] = "EQUAL", ["right"] = true }, null,
+                new { on_true = "I40", on_false = "I110", on_error = "I900" }),
+            MakeEnvelopeStep(4, "I40", "MOVE", "MOVE_TO_INVENTORY_SHELF",
+                new() { ["target"] = "${current_shelf.endpoint}", ["speed_mode"] = "NORMAL", ["obstacle_policy"] = "WAIT_RESUME", ["timeout_sec"] = 180, ["_inventory_shelf_scan"] = true },
+                new Dictionary<string, string> { ["move_status"] = "move_status", ["final_pose"] = "current_pose" },
+                new { on_success = "I50", on_error = "I900", on_timeout = "I900" },
+                new { max_attempts = 1, timeout_sec = 180 }),
+            MakeEnvelopeStep(5, "I50", "SCAN", "SCAN_QR_ON_BOTH_SHELF_LEVELS",
+                new() { ["scan_type"] = "QR", ["target_type"] = "BOOK", ["timeout_sec"] = 30, ["continuous"] = true },
+                new Dictionary<string, string> { ["scanned_items"] = "scanned_items", ["scan_status"] = "scan_status" },
+                new { on_success = "I60", on_error = "I900", on_timeout = "I900" },
+                new { max_attempts = 1, timeout_sec = 30 }),
+            MakeEnvelopeStep(6, "I60", "PROCESS_DATA", "VERIFY_SCANNED_BOOKS",
+                new() { ["action"] = "VERIFY_BOOK", ["payload"] = new { shelf_id = "${current_shelf.shelf_id}", scanned_items = "${scanned_items}" } },
+                new Dictionary<string, string> { ["data.verified_book_items"] = "verified_book_items", ["data.issue_detected"] = "issue_detected", ["data.verification_status"] = "verification_status" },
+                new { on_success = "I70", on_error = "I900" }),
+            MakeEnvelopeStep(7, "I70", "EVALUATE", "CHECK_INVENTORY_ISSUES",
+                new() { ["condition_type"] = "DATA_MATCH", ["left"] = "${issue_detected}", ["operator"] = "EQUAL", ["right"] = true }, null,
+                new { on_true = "I80", on_false = "I90", on_error = "I900" }),
+            MakeEnvelopeStep(8, "I80", "PROCESS_DATA", "UPDATE_BOOK_ITEM_INVENTORY_STATUS",
+                new() { ["action"] = "UPDATE_BOOK_ITEM_INVENTORY_STATUS", ["payload"] = new { book_items = "${verified_book_items}", update_status = true, update_location = true, aggregation = "TASK" } },
+                new Dictionary<string, string> { ["data.updated_book_items"] = "updated_book_items" },
+                new { on_success = "I90", on_error = "I900" }),
+            MakeEnvelopeStep(9, "I90", "PROCESS_DATA", "ADVANCE_TO_NEXT_INVENTORY_SHELF",
+                new() { ["action"] = "ADVANCE_INVENTORY_SCOPE", ["payload"] = new { shelves = "${inventory_shelves}", current_shelf_index = "${current_shelf_index}" } },
+                new Dictionary<string, string> { ["data.current_shelf"] = "current_shelf", ["data.current_shelf_index"] = "current_shelf_index", ["data.has_next"] = "has_next" },
+                new { on_success = "I100", on_error = "I900" }),
+            MakeEnvelopeStep(10, "I100", "EVALUATE", "CHECK_REMAINING_INVENTORY_SHELVES",
+                new() { ["left"] = "${has_next}", ["operator"] = "EQUAL", ["right"] = true }, null,
+                new { on_true = "I40", on_false = "I110", on_error = "I900" }),
+            MakeEnvelopeStep(11, "I110", "PROCESS_DATA", "GENERATE_INVENTORY_REPORT",
+                new() { ["action"] = "GENERATE_REPORT", ["payload"] = new { scope_type = "SHELVES", floor_id = "${floor_id}", map_id = "${map_id}", target_shelves = "${target_shelves}", source = "TASK_INVENTORY_RESULTS" } },
+                new Dictionary<string, string> { ["data"] = "inventory_report" },
+                new { on_success = "I120", on_error = "I900" }),
+            MakeEnvelopeStep(12, "I120", "NOTIFY", "NOTIFY_INVENTORY_COMPLETED",
+                new() { ["channel"] = "LIBRARIAN_WS", ["message_type"] = "INFO", ["event_type"] = "INVENTORY_COMPLETED", ["content"] = "Kiểm kê hoàn tất", ["payload"] = "${inventory_report}" },
+                null,
+                new { on_success = "I130", on_error = "I900" }),
+            MakeEnvelopeStep(13, "I130", "END", "INVENTORY_SUCCEEDED",
+                new() { ["result_status"] = "SUCCEEDED", ["output"] = new { report = "${inventory_report}" } }, null, new { }),
+            MakeEnvelopeStep(14, "I900", "NOTIFY", "NOTIFY_INVENTORY_FAILED",
+                new() { ["channel"] = "LIBRARIAN_WS", ["message_type"] = "ERROR", ["event_type"] = "INVENTORY_FAILED", ["content"] = "Kiểm kê không hoàn tất. Vui lòng kiểm tra trạng thái robot và cấu hình kệ." },
+                null,
+                new { on_success = "I910", on_error = "I910" }),
+            MakeEnvelopeStep(15, "I910", "END", "INVENTORY_FAILED",
+                new() { ["result_status"] = "FAILED", ["message"] = "Inventory workflow failed." }, null, new { })
         }),
         new("library-patrol", "Library Patrol", "Patrol an ordered set of active map endpoints, classify observations, record route coverage and notify librarians.", "LIBRARY_PATROL", new[]
         {

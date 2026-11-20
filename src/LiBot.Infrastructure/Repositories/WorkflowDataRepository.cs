@@ -45,12 +45,13 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Guid?> ResolveShelfLevelAsync(string? shelfCode, CancellationToken cancellationToken)
+    public async Task<Guid?> ResolveShelfLevelAsync(string? shelfCode, int? levelNumber, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(shelfCode)) return null;
         return await (from level in db.ShelfLevels.AsNoTracking()
                       join shelf in db.Shelves.AsNoTracking() on level.ShelfId equals shelf.Id
                       where shelf.Name == shelfCode
+                          && (!levelNumber.HasValue || level.LevelNumber == levelNumber.Value)
                       orderby level.LevelNumber
                       select (Guid?)level.Id).FirstOrDefaultAsync(cancellationToken);
     }

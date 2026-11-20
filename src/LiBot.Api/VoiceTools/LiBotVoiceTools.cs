@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Json.Serialization;
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
 using LiBot.Application.Services.Robot;
@@ -116,8 +117,8 @@ public sealed class LiBotVoiceTools(
                 BookItemId: selectedCopy.Id), backendBaseUrl, timeout.Token);
 
             return result.IsAccepted
-                ? VoiceBookGuidanceResult.Started(book.Title)
-                : VoiceBookGuidanceResult.Unavailable();
+                ? VoiceBookGuidanceResult.Started(book.Title, result.MissionId, runtimeId, book.BookId)
+                : VoiceBookGuidanceResult.Failed(book.Title, result.MissionId, runtimeId, book.BookId);
         }
         catch (OperationCanceledException)
         {
@@ -163,8 +164,8 @@ public sealed class LiBotVoiceTools(
                 RuntimeId: runtimeId,
                 FacilityId: endpointId), backendBaseUrl, timeout.Token);
             return result.IsAccepted
-                ? VoiceLocationGuidanceResult.Started(location.Name)
-                : VoiceLocationGuidanceResult.Unavailable();
+                ? VoiceLocationGuidanceResult.Started(location.Name, result.MissionId, runtimeId, endpointId)
+                : VoiceLocationGuidanceResult.Failed(location.Name, result.MissionId, runtimeId, endpointId);
         }
         catch (OperationCanceledException)
         {
@@ -198,42 +199,63 @@ public sealed class LiBotVoiceTools(
 }
 
 public sealed record VoiceBookSearchResult(
-    string ErrorCode,
-    int TotalMatches,
-    IReadOnlyList<VoiceBookSearchItem> Books)
+    [property: JsonPropertyName("errorCode")] string ErrorCode,
+    [property: JsonPropertyName("totalMatches")] int TotalMatches,
+    [property: JsonPropertyName("books")] IReadOnlyList<VoiceBookSearchItem> Books)
 {
     public static VoiceBookSearchResult InvalidInput() => new("INVALID_INPUT", 0, []);
     public static VoiceBookSearchResult Timeout() => new("TOOL_TIMEOUT", 0, []);
 }
 
 public sealed record VoiceBookSearchItem(
-    Guid BookId,
-    string Title,
-    string Author,
-    bool CanGuide);
+    [property: JsonPropertyName("bookId")] Guid BookId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("author")] string Author,
+    [property: JsonPropertyName("canGuide")] bool CanGuide);
 
 public sealed record VoiceLocationSearchResult(
-    string ErrorCode,
-    int TotalMatches,
-    IReadOnlyList<VoiceLocationSearchItem> Locations)
+    [property: JsonPropertyName("errorCode")] string ErrorCode,
+    [property: JsonPropertyName("totalMatches")] int TotalMatches,
+    [property: JsonPropertyName("locations")] IReadOnlyList<VoiceLocationSearchItem> Locations)
 {
     public static VoiceLocationSearchResult InvalidInput() => new("INVALID_INPUT", 0, []);
     public static VoiceLocationSearchResult Timeout() => new("TOOL_TIMEOUT", 0, []);
 }
 
-public sealed record VoiceLocationSearchItem(Guid EndpointId, string Name, bool CanGuide);
+public sealed record VoiceLocationSearchItem(
+    [property: JsonPropertyName("endpointId")] Guid EndpointId,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("canGuide")] bool CanGuide);
 
-public sealed record VoiceBookGuidanceResult(string ErrorCode, string Title)
+public sealed record VoiceBookGuidanceResult(
+    [property: JsonPropertyName("errorCode")] string ErrorCode,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("jobId")] Guid? JobId,
+    [property: JsonPropertyName("executionId")] string? ExecutionId,
+    [property: JsonPropertyName("runtimeId")] string? RuntimeId,
+    [property: JsonPropertyName("destinationId")] Guid? DestinationId = null)
 {
-    public static VoiceBookGuidanceResult Started(string title) => new(string.Empty, title);
-    public static VoiceBookGuidanceResult NotFound() => new("BOOK_NOT_FOUND", string.Empty);
-    public static VoiceBookGuidanceResult NotAvailable() => new("BOOK_NOT_AVAILABLE", string.Empty);
-    public static VoiceBookGuidanceResult Unavailable() => new("GUIDANCE_UNAVAILABLE", string.Empty);
+    public static VoiceBookGuidanceResult Started(string title, Guid jobId, string runtimeId, Guid destinationId) =>
+        new(string.Empty, title, jobId, jobId.ToString(), runtimeId, destinationId);
+    public static VoiceBookGuidanceResult Failed(string title, Guid jobId, string runtimeId, Guid destinationId) =>
+        new("GUIDANCE_FAILED", title, jobId, jobId.ToString(), runtimeId, destinationId);
+    public static VoiceBookGuidanceResult NotFound() => new("BOOK_NOT_FOUND", string.Empty, null, null, null);
+    public static VoiceBookGuidanceResult NotAvailable() => new("BOOK_NOT_AVAILABLE", string.Empty, null, null, null);
+    public static VoiceBookGuidanceResult Unavailable() => new("GUIDANCE_UNAVAILABLE", string.Empty, null, null, null);
 }
 
-public sealed record VoiceLocationGuidanceResult(string ErrorCode, string Name)
+public sealed record VoiceLocationGuidanceResult(
+    [property: JsonPropertyName("errorCode")] string ErrorCode,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("jobId")] Guid? JobId,
+    [property: JsonPropertyName("executionId")] string? ExecutionId,
+    [property: JsonPropertyName("runtimeId")] string? RuntimeId,
+    [property: JsonPropertyName("destinationId")] Guid? DestinationId = null)
 {
-    public static VoiceLocationGuidanceResult Started(string name) => new(string.Empty, name);
-    public static VoiceLocationGuidanceResult NotFound() => new("LOCATION_NOT_FOUND", string.Empty);
-    public static VoiceLocationGuidanceResult Unavailable() => new("GUIDANCE_UNAVAILABLE", string.Empty);
+    public static VoiceLocationGuidanceResult Started(string name, Guid jobId, string runtimeId, Guid destinationId) =>
+        new(string.Empty, name, jobId, jobId.ToString(), runtimeId, destinationId);
+    public static VoiceLocationGuidanceResult Failed(string name, Guid jobId, string runtimeId, Guid destinationId) =>
+        new("GUIDANCE_FAILED", name, jobId, jobId.ToString(), runtimeId, destinationId);
+    public static VoiceLocationGuidanceResult NotFound() => new("LOCATION_NOT_FOUND", string.Empty, null, null, null);
+    public static VoiceLocationGuidanceResult Unavailable() => new("GUIDANCE_UNAVAILABLE", string.Empty, null, null, null);
 }

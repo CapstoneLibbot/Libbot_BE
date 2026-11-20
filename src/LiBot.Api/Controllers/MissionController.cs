@@ -61,22 +61,55 @@ public class MissionController(
         if (workflow is null) return NotFound("Workflow not found.");
         if (!workflow.IsActive) return Conflict("The workflow is inactive.");
         var runtimeId = (request.RuntimeId ?? "real").Trim().ToLowerInvariant();
-        if (runtimeId is not ("sim" or "real") || runtimes.Get(runtimeId) is null)
+        var runtime = runtimes.Get(runtimeId);
+        if (runtimeId is not ("sim" or "real") || runtime is null)
             return BadRequest(new { message = "runtimeId must identify a configured 'sim' or 'real' runtime." });
-        if (!Guid.TryParse(request.RobotId, out var robotId))
-            return BadRequest("A valid robotId is required.");
-        if (!await missionData.RobotExistsAsync(robotId, cancellationToken))
+        Guid? robotId = Guid.TryParse(request.RobotId, out var suppliedRobotId)
+            ? suppliedRobotId
+            : null;
+        if (robotId is null || robotId == Guid.Empty)
+        {
+            var mapId = ReadMapId(request.InitialContext);
+            if (mapId is null
+                && Guid.TryParse(runtime.Telemetry?.ActiveMapId, out var activeMapId))
+                mapId = activeMapId;
+
+            if (mapId is null)
+                return BadRequest("A valid robotId is required, and no mission or active runtime map is available to resolve it.");
+            if (!await missionData.MapExistsAsync(mapId.Value, cancellationToken))
+                return NotFound("Mission map was not found.");
+
+            robotId = await missionData.GetOrCreateRobotIdForMapAsync(
+                mapId.Value, runtimeId, runtime.DisplayName, cancellationToken);
+        }
+        if (!await missionData.RobotExistsAsync(robotId.Value, cancellationToken))
             return NotFound("Robot not found.");
         var mission = new Mission(request.Name ?? workflow.Name, request.Description ?? workflow.Description,
-            robotId, workflowId, priority: ParsePriority(request.Priority));
+            robotId.Value, workflowId, priority: ParsePriority(request.Priority));
         mission.Update(mission.Name, mission.Description, mission.Priority, workflowId);
         var initialContextJson = request.InitialContext is { ValueKind: JsonValueKind.Object } initialContext
             ? initialContext.GetRawText()
             : null;
         await missionData.CreateMissionAsync(mission, workflowId, runtimeId, initialContextJson, cancellationToken);
 
-        var robotName = await missionData.GetRobotNameAsync(robotId, cancellationToken);
+        var robotName = await missionData.GetRobotNameAsync(robotId.Value, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = mission.Id }, ToResponse(mission, robotName, robotId, runtimeId));
+    }
+
+    private static Guid? ReadMapId(JsonElement? initialContext)
+    {
+        if (!initialContext.HasValue || initialContext.Value.ValueKind != JsonValueKind.Object)
+            return null;
+        var context = initialContext.Value;
+
+        if (!context.TryGetProperty("map_id", out var mapIdElement)
+            && !context.TryGetProperty("mapId", out mapIdElement))
+            return null;
+
+        return mapIdElement.ValueKind == JsonValueKind.String
+               && Guid.TryParse(mapIdElement.GetString(), out var mapId)
+            ? mapId
+            : null;
     }
 
     /// <summary>Xem trước task/step của workflow trước khi tạo hoặc chạy mission.</summary>
