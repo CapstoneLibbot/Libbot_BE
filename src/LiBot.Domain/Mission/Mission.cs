@@ -1,4 +1,5 @@
 namespace LiBot.Domain.Mission;
+using LiBot.Domain.Enums;
 
 public class Mission
 {
@@ -10,6 +11,16 @@ public class Mission
     public Guid RobotId { get; private set; }
     public Guid WorkflowId { get; private set; }
     public int Priority { get; private set; }
+
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public JobStatus StatusCode => Enum.TryParse<JobStatus>(Status, true, out var status)
+        ? status
+        : JobStatus.Pending;
+
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public JobPriority PriorityCode => Enum.IsDefined(typeof(JobPriority), Priority)
+        ? (JobPriority)Priority
+        : JobPriority.Normal;
     [System.ComponentModel.DataAnnotations.Schema.Column("CreateAt")]
     public DateTime CreatedAtUtc { get; private set; } = DateTime.UtcNow;
     public DateTime? StartedAtUtc { get; private set; }

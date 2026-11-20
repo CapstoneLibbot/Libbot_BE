@@ -7,6 +7,7 @@ using LiBot.Application.Robot;
 using LiBot.Application.Services.Robot;
 using LiBot.Application.Services.Workflow;
 using LiBot.Application.Workflow;
+using LiBot.Domain.Enums;
 using LiBot.Domain.Mission;
 using LiBot.Infrastructure.Persistence;
 using LiBot.Infrastructure.Robot;
@@ -123,7 +124,7 @@ public sealed class LowBatteryChargingCoordinator(
             var missionData = scope.ServiceProvider.GetRequiredService<IMissionDataRepository>();
 
             var chargingWorkflowId = await db.Workflows.AsNoTracking()
-                .Where(item => item.Type == "ROBOT_RETURN_AND_CHARGING" && item.Status == "Active")
+                .Where(item => item.Type == "ROBOT_RETURN_AND_CHARGING" && item.Status == WorkflowStatus.Active)
                 .Select(item => (Guid?)item.Id)
                 .FirstOrDefaultAsync(cancellationToken);
 

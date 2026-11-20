@@ -1,5 +1,6 @@
 using System.Reflection;
 using LiBot.Domain.Common;
+using LiBot.Domain.Enums;
 using AisleEntity = LiBot.Domain.Library.Aisle;
 using BookEntity = LiBot.Domain.Library.Book;
 using BookCategoryEntity = LiBot.Domain.Library.BookCategory;
@@ -31,7 +32,14 @@ public abstract class LibraryResourceDto<TEntity> : ILibraryResourceDto<TEntity>
     public void LoadFrom(TEntity entity)
     {
         foreach (var source in typeof(TEntity).GetProperties(BindingFlags.Instance | BindingFlags.Public))
-            GetType().GetProperty(source.Name)?.SetValue(this, source.GetValue(entity));
+        {
+            var target = GetType().GetProperty(source.Name);
+            var value = source.GetValue(entity);
+            if (target?.CanWrite != true) continue;
+            if (source.PropertyType.IsEnum && target.PropertyType == typeof(string))
+                value = value?.ToString();
+            target.SetValue(this, value);
+        }
     }
 
     public virtual void ApplyTo(TEntity entity)
@@ -40,9 +48,18 @@ public abstract class LibraryResourceDto<TEntity> : ILibraryResourceDto<TEntity>
         {
             if (source.Name is nameof(Id) or "CreatedAtUtc" or "UpdatedAtUtc") continue;
             var target = typeof(TEntity).GetProperty(source.Name);
-            if (target?.GetSetMethod(true) is not null) target.SetValue(entity, source.GetValue(this));
+            if (target?.GetSetMethod(true) is not null)
+            {
+                var value = source.GetValue(this);
+                if (target.PropertyType.IsEnum && value is string text)
+                    value = Enum.Parse(target.PropertyType, text, true);
+                target.SetValue(entity, value);
+            }
         }
     }
+
+    protected static TEnum ParseStatus<TEnum>(string? value, TEnum fallback)
+        where TEnum : struct, Enum => Enum.TryParse<TEnum>(value, true, out var parsed) ? parsed : fallback;
 }
 
 public sealed class AisleDto : LibraryResourceDto<AisleEntity>
@@ -51,7 +68,7 @@ public sealed class AisleDto : LibraryResourceDto<AisleEntity>
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string Status { get; set; } = "Active";
-    public override AisleEntity ToEntity() => new(FloorId, Name, Description, Status);
+    public override AisleEntity ToEntity() => new(FloorId, Name, Description, ParseStatus(Status, AisleStatus.Active));
 }
 
 public sealed class BookDto : LibraryResourceDto<BookEntity>
@@ -82,7 +99,8 @@ public sealed class BookItemDto : LibraryResourceDto<BookItemEntity>
     public Guid? CurrentShelfLevelId { get; set; }
     public DateTime? LastInventoryAtUtc { get; set; }
     public string Status { get; set; } = "Available";
-    public override BookItemEntity ToEntity() => new(BookId, Barcode, ExpectedShelfLevelId, CurrentShelfLevelId, Status);
+    public override BookItemEntity ToEntity() => new(BookId, Barcode, ExpectedShelfLevelId, CurrentShelfLevelId,
+        ParseStatus(Status, BookItemStatus.Available));
 }
 
 public sealed class EndpointDto : LibraryResourceDto<EndpointEntity>
@@ -118,7 +136,7 @@ public sealed class FloorDto : LibraryResourceDto<FloorEntity>
     public int FloorNumber { get; set; }
     public string? Description { get; set; }
     public string Status { get; set; } = "Active";
-    public override FloorEntity ToEntity() => new(Name, FloorNumber, Description, Status);
+    public override FloorEntity ToEntity() => new(Name, FloorNumber, Description, ParseStatus(Status, FloorStatus.Active));
 }
 
 public sealed class ShelfDto : LibraryResourceDto<ShelfEntity>
@@ -129,7 +147,8 @@ public sealed class ShelfDto : LibraryResourceDto<ShelfEntity>
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string Status { get; set; } = "Active";
-    public override ShelfEntity ToEntity() => new(AisleId, StartEndpointId, EndEndpointId, Name, Description, Status);
+    public override ShelfEntity ToEntity() => new(AisleId, StartEndpointId, EndEndpointId, Name, Description,
+        ParseStatus(Status, ShelfStatus.Active));
 }
 
 public sealed class ShelfLevelDto : LibraryResourceDto<ShelfLevelEntity>
@@ -138,13 +157,13 @@ public sealed class ShelfLevelDto : LibraryResourceDto<ShelfLevelEntity>
     public string Name { get; set; } = string.Empty;
     public int LevelNumber { get; set; }
     public string Status { get; set; } = "Active";
-    public override ShelfLevelEntity ToEntity() => new(ShelfId, LevelNumber, Name, Status);
+    public override ShelfLevelEntity ToEntity() => new(ShelfId, LevelNumber, Name, ParseStatus(Status, ShelfStatus.Active));
 
     public override void ApplyTo(ShelfLevelEntity entity)
     {
         base.ApplyTo(entity);
         if (string.IsNullOrWhiteSpace(Name))
-            entity.Update(ShelfId, LevelNumber, $"Level {LevelNumber}", Status);
+            entity.Update(ShelfId, LevelNumber, $"Level {LevelNumber}", ParseStatus(Status, ShelfStatus.Active));
     }
 }
 
@@ -163,4 +182,5 @@ public sealed class ZoneDto : LibraryResourceDto<ZoneEntity>
     public bool IsActive { get; set; } = true;
     public override ZoneEntity ToEntity() => new(MapId, Name, ZoneType, MinX, MinY, MaxX, MaxY,
         MaxSpeed, Description);
+
 }
