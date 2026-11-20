@@ -1,5 +1,6 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
+using LiBot.Domain.Enums;
 using LiBot.Domain.Mission;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -29,7 +30,7 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
             .Take(pageSize)
             .Select(item => new BookSearchItem(
                 item.Book.Id, item.Book.Isbn, item.Book.Title, item.Book.Author, item.CategoryName,
-                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == "Available"),
+                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == BookItemStatus.Available),
                 item.Book.Image))
             .ToListAsync(cancellationToken);
 
@@ -81,7 +82,7 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
                 item.Book.Title,
                 item.Book.Author,
                 item.CategoryName,
-                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == "Available"),
+                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == BookItemStatus.Available),
                 item.Book.Image))
             .ToListAsync(cancellationToken);
 
@@ -140,7 +141,7 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
 
         var bookItems = copies
             .Select(copy => new BookGuidanceBookItem(
-                copy.Id, copy.Barcode, copy.Status, locationsByCopyId.GetValueOrDefault(copy.Id)))
+                copy.Id, copy.Barcode, copy.Status.ToString(), locationsByCopyId.GetValueOrDefault(copy.Id)))
             .ToList();
 
         return new BookGuidanceDetail(

@@ -11,5 +11,6 @@ public interface IWorkflowRepository
     Task<bool> CreateAsync(WorkflowDefinition workflow, IReadOnlyList<WorkflowStepWriteRequest> steps, CancellationToken cancellationToken);
     Task<bool> UpdateAsync(WorkflowDefinition workflow, IReadOnlyList<WorkflowStepWriteRequest> steps, CancellationToken cancellationToken);
     Task<bool> ActivateAsync(Guid id, CancellationToken cancellationToken);
+    Task<bool> UpdateStatusAsync(Guid id, LiBot.Domain.Enums.WorkflowStatus status, CancellationToken cancellationToken);
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
 }

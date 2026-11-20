@@ -116,7 +116,7 @@ public class BookRepository(LiBotDbContext db) : IBookRepository
             expansions.Contains("items")
                 ? items.Where(item => item.BookId == book.Id)
                     .Select(item => new BookItemResponse(item.Id, item.Barcode, item.ExpectedShelfLevelId,
-                        item.CurrentShelfLevelId, item.LastInventoryAtUtc, item.Status)).ToList()
+                        item.CurrentShelfLevelId, item.LastInventoryAtUtc, item.Status.ToString())).ToList()
                 : null)).ToList();
     }
 }

@@ -1,5 +1,6 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models.Floor;
+using LiBot.Domain.Enums;
 using LiBot.Domain.Library;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -36,7 +37,8 @@ public class FloorRepository(LiBotDbContext db) : IFloorRepository
 
     public async Task<FloorResponse> CreateAsync(FloorWriteRequest request, string? expand, CancellationToken cancellationToken)
     {
-        var entity = new Floor(request.Name, request.FloorNumber, request.Description, request.Status);
+        var entity = new Floor(request.Name, request.FloorNumber, request.Description,
+            Enum.TryParse<FloorStatus>(request.Status, true, out var status) ? status : FloorStatus.Active);
         db.Floors.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
         return (await GetByIdAsync(entity.Id, expand, cancellationToken))!;
@@ -46,7 +48,8 @@ public class FloorRepository(LiBotDbContext db) : IFloorRepository
     {
         var entity = await db.Floors.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (entity is null) return null;
-        entity.Update(request.Name, request.FloorNumber, request.Description, request.Status);
+        entity.Update(request.Name, request.FloorNumber, request.Description,
+            Enum.TryParse<FloorStatus>(request.Status, true, out var status) ? status : FloorStatus.Active);
         await db.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(id, expand, cancellationToken);
     }
@@ -68,7 +71,7 @@ public class FloorRepository(LiBotDbContext db) : IFloorRepository
         var aisles = expansions.Contains("aisles")
             ? await db.Aisles.AsNoTracking().Where(item => ids.Contains(item.FloorId)).ToListAsync(cancellationToken)
             : [];
-        return entities.Select(item => new FloorResponse(item.Id, item.Name, item.FloorNumber, item.Description, item.Status,
+        return entities.Select(item => new FloorResponse(item.Id, item.Name, item.FloorNumber, item.Description, item.Status.ToString(),
             expansions.Contains("aisles") ? aisles.Where(value => value.FloorId == item.Id)
                 .Select(value => new FloorAisleResponse(value.Id, value.Name)).ToList() : null)).ToList();
     }

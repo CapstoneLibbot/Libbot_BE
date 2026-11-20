@@ -1,5 +1,6 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
+using LiBot.Domain.Enums;
 using LiBot.Domain.Mission;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +15,7 @@ public sealed class GuidanceWorkflowRepository(LiBotDbContext db) : IGuidanceWor
     {
         var workflows = await db.Workflows
             .AsNoTracking()
-            .Where(item => item.Type == workflowType && item.Status == "Active")
+            .Where(item => item.Type == workflowType && item.Status == WorkflowStatus.Active)
             .OrderBy(item => item.Id)
             .Take(2)
             .ToListAsync(cancellationToken);

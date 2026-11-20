@@ -1,6 +1,7 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models.Shelf;
 using LiBot.Application.Models.ShelfLevel;
+using LiBot.Domain.Enums;
 using LiBot.Domain.Library;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -16,8 +17,7 @@ public class ShelfRepository(LiBotDbContext db) : IShelfRepository
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim();
-            source = source.Where(item => EF.Functions.Like(item.Name, $"%{search}%")
-                || EF.Functions.Like(item.Status, $"%{search}%"));
+            source = source.Where(item => EF.Functions.Like(item.Name, $"%{search}%"));
         }
         var total = await source.CountAsync(cancellationToken);
         var descending = query.SortOrder.Equals("desc", StringComparison.OrdinalIgnoreCase);
@@ -42,7 +42,8 @@ public class ShelfRepository(LiBotDbContext db) : IShelfRepository
     public async Task<ShelfResponse> CreateAsync(ShelfWriteRequest request, string? expand, CancellationToken cancellationToken)
     {
         var entity = new Shelf(request.AisleId, request.StartEndpointId, request.EndEndpointId,
-            request.Name, request.Description, request.Status);
+            request.Name, request.Description,
+            Enum.TryParse<ShelfStatus>(request.Status, true, out var status) ? status : ShelfStatus.Active);
         db.Shelves.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
         return (await GetByIdAsync(entity.Id, expand, cancellationToken))!;
@@ -53,7 +54,8 @@ public class ShelfRepository(LiBotDbContext db) : IShelfRepository
         var entity = await db.Shelves.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (entity is null) return null;
         entity.Update(request.AisleId, request.StartEndpointId, request.EndEndpointId,
-            request.Name, request.Description, request.Status);
+            request.Name, request.Description,
+            Enum.TryParse<ShelfStatus>(request.Status, true, out var status) ? status : ShelfStatus.Active);
         await db.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(id, expand, cancellationToken);
     }
@@ -92,7 +94,8 @@ public class ShelfRepository(LiBotDbContext db) : IShelfRepository
 
     public async Task<ShelfLevelResponse> CreateLevelAsync(ShelfLevelWriteRequest request, CancellationToken cancellationToken)
     {
-        var entity = new ShelfLevel(request.ShelfId, request.LevelNumber, request.Name, request.Status);
+        var entity = new ShelfLevel(request.ShelfId, request.LevelNumber, request.Name,
+            Enum.TryParse<ShelfStatus>(request.Status, true, out var status) ? status : ShelfStatus.Active);
         db.ShelfLevels.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
         return (await GetLevelByIdAsync(entity.Id, cancellationToken))!;
@@ -102,7 +105,8 @@ public class ShelfRepository(LiBotDbContext db) : IShelfRepository
     {
         var entity = await db.ShelfLevels.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (entity is null) return null;
-        entity.Update(request.ShelfId, request.LevelNumber, request.Name, request.Status);
+        entity.Update(request.ShelfId, request.LevelNumber, request.Name,
+            Enum.TryParse<ShelfStatus>(request.Status, true, out var status) ? status : ShelfStatus.Active);
         await db.SaveChangesAsync(cancellationToken);
         return await GetLevelByIdAsync(id, cancellationToken);
     }
@@ -129,12 +133,12 @@ public class ShelfRepository(LiBotDbContext db) : IShelfRepository
             ? await db.ShelfLevels.AsNoTracking().Where(item => shelfIds.Contains(item.ShelfId)).ToListAsync(cancellationToken)
             : [];
         return entities.Select(item => new ShelfResponse(item.Id, item.AisleId, item.StartEndpointId, item.EndEndpointId,
-            item.Name, item.Description, item.Status,
+            item.Name, item.Description, item.Status.ToString(),
             aisles.TryGetValue(item.AisleId, out var aisle) ? new ShelfAisleResponse(aisle.Id, aisle.Name, aisle.FloorId) : null,
             expansions.Contains("levels") ? levels.Where(level => level.ShelfId == item.Id).OrderBy(level => level.LevelNumber)
                 .Select(ToLevelResponse).ToList() : null)).ToList();
     }
 
     private static ShelfLevelResponse ToLevelResponse(ShelfLevel item) =>
-        new(item.Id, item.ShelfId, item.Name, item.LevelNumber, item.Status);
+        new(item.Id, item.ShelfId, item.Name, item.LevelNumber, item.Status.ToString());
 }

@@ -1,4 +1,5 @@
 namespace LiBot.Domain.Workflow;
+using LiBot.Domain.Enums;
 
 public class WorkflowDefinition
 {
@@ -6,9 +7,9 @@ public class WorkflowDefinition
     public string Name { get; private set; }
     public string? Description { get; private set; }
     public string Type { get; private set; } = "GENERAL";
-    public string Status { get; private set; } = "Active";
+    public WorkflowStatus Status { get; private set; } = WorkflowStatus.Draft;
     public DateTime CreateAt { get; private set; } = DateTime.UtcNow;
-    public bool IsActive => string.Equals(Status, "Active", StringComparison.OrdinalIgnoreCase);
+    public bool IsActive => Status == WorkflowStatus.Active;
 
     public WorkflowDefinition(string name, string? description)
     {
@@ -29,5 +30,7 @@ public class WorkflowDefinition
 
     public void SetType(string type) => Type = string.IsNullOrWhiteSpace(type) ? "GENERAL" : type.Trim();
 
-    public void SetActive(bool isActive) => Status = isActive ? "Active" : "Inactive";
+    public void SetActive(bool isActive) => Status = isActive ? WorkflowStatus.Active : WorkflowStatus.Inactive;
+
+    public void SetStatus(WorkflowStatus status) => Status = status;
 }

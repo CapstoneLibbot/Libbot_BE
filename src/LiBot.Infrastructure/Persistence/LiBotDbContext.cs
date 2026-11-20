@@ -108,6 +108,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.HasOne<Book>().WithMany().HasForeignKey(x => x.BookId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.ExpectedShelfLevelId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.CurrentShelfLevelId).OnDelete(DeleteBehavior.NoAction);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             entity.HasAlternateKey(x => new { x.Id, x.BookId });
         });
 
@@ -116,12 +117,14 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.ToTable("MAP");
             entity.HasKey(x => x.Id);
             entity.HasOne<Floor>().WithMany().HasForeignKey(x => x.FloorId).OnDelete(DeleteBehavior.NoAction);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             entity.Ignore(x => x.CreatedAtUtc).Ignore(x => x.UpdatedAtUtc);
         });
         modelBuilder.Entity<Floor>(entity =>
         {
             entity.ToTable("FLOOR");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         });
         modelBuilder.Entity<Zone>(entity =>
         {
@@ -134,6 +137,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.ToTable("AISLE");
             entity.HasKey(x => x.Id);
             entity.HasOne<Floor>().WithMany().HasForeignKey(x => x.FloorId).OnDelete(DeleteBehavior.NoAction);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         });
         modelBuilder.Entity<Shelf>(entity =>
         {
@@ -142,12 +146,14 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.HasOne<Aisle>().WithMany().HasForeignKey(x => x.AisleId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.StartEndpointId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.EndEndpointId).OnDelete(DeleteBehavior.NoAction);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         });
         modelBuilder.Entity<ShelfLevel>(entity =>
         {
             entity.ToTable("SHELF_LEVEL");
             entity.HasKey(x => x.Id);
             entity.HasOne<Shelf>().WithMany().HasForeignKey(x => x.ShelfId).OnDelete(DeleteBehavior.NoAction);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         });
         modelBuilder.Entity<Endpoint>(entity =>
         {
@@ -227,6 +233,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.ToTable("WORKFLOW");
             entity.HasKey(x => x.Id);
             entity.Ignore(x => x.IsActive);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         });
         modelBuilder.Entity<WorkflowTask>(entity =>
         {

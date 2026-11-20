@@ -1,6 +1,7 @@
 using System.Text.Json;
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
+using LiBot.Domain.Enums;
 using LiBot.Domain.Library;
 
 namespace LiBot.Infrastructure.Services;
@@ -49,8 +50,9 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
     {
         if (request.FloorId == Guid.Empty)
             throw new ArgumentException("floorId is required.", nameof(request));
+        var status = ParseStatus(request.Status);
         var map = new LibraryMap(request.Name, request.Version ?? string.Empty, request.Width, request.Height,
-            request.Data?.GetRawText() ?? "{}", request.FloorId, request.Status ?? "Active");
+            request.Data?.GetRawText() ?? "{}", request.FloorId, status);
         await repository.AddAsync(map, cancellationToken);
         return ToResponse(map);
     }
@@ -96,7 +98,8 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
         if (map is null) return null;
         map.Update(request.Name, request.Version ?? map.Version, request.Width, request.Height,
             request.Data?.GetRawText() ?? map.MapData,
-            request.FloorId == Guid.Empty ? map.FloorId : request.FloorId, request.Status ?? map.Status);
+            request.FloorId == Guid.Empty ? map.FloorId : request.FloorId,
+            request.Status is null ? map.Status : ParseStatus(request.Status));
         await repository.SaveChangesAsync(cancellationToken);
         return ToResponse(map);
     }
@@ -123,7 +126,8 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
     }
 
     private static MapResponse ToResponse(LibraryMap map) =>
-        new(map.Id, map.Name, map.Width, map.Height, ParseData(map.MapData), map.Version, map.FloorId, map.Status);
+        new(map.Id, map.Name, map.Width, map.Height, ParseData(map.MapData), map.Version, map.FloorId,
+            map.Status.ToString());
 
     private static TDto ToResourceResponse<TEntity, TDto>(TEntity entity)
         where TEntity : class
@@ -138,5 +142,12 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
     {
         try { return JsonDocument.Parse(value).RootElement.Clone(); }
         catch (JsonException) { return null; }
+    }
+
+    private static MapStatus ParseStatus(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return MapStatus.Active;
+        if (Enum.TryParse<MapStatus>(value, true, out var status) && Enum.IsDefined(status)) return status;
+        throw new ArgumentException("status must be Active or Archived.", nameof(value));
     }
 }

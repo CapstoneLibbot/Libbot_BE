@@ -48,6 +48,22 @@ public class FloorController : ControllerBase
         catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
     }
 
+    [HttpPatch("{id:guid}/status")]
+    public async Task<ActionResult<BaseResponse<FloorResponse>>> UpdateStatus(
+        Guid id, StatusUpdateRequest request, CancellationToken cancellationToken)
+    {
+        var current = await _service.GetByIdAsync(id, null, cancellationToken);
+        if (current is null) return NotFound(Error("Floor was not found."));
+        try
+        {
+            var updated = await _service.UpdateAsync(id,
+                new FloorWriteRequest(current.Name, current.FloorNumber, current.Description, request.Status),
+                null, cancellationToken);
+            return Ok(new BaseResponse<FloorResponse>(updated!));
+        }
+        catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
+    }
+
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {

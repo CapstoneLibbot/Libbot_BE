@@ -32,4 +32,19 @@ public sealed class ShelfController(
 
         return await base.Update(id, dto, cancellationToken);
     }
+
+    [HttpPatch("{id:guid}/status")]
+    public async Task<IActionResult> UpdateStatus(
+        Guid id, StatusUpdateRequest request, CancellationToken cancellationToken)
+    {
+        var current = await ResourceService.GetByIdAsync(id, cancellationToken);
+        if (current is null) return NotFound(new { message = "Shelf was not found." });
+        current.Status = request.Status;
+        try
+        {
+            var updated = await ResourceService.UpdateAsync(id, current, cancellationToken);
+            return Ok(updated);
+        }
+        catch (ArgumentException exception) { return BadRequest(new { message = exception.Message }); }
+    }
 }
