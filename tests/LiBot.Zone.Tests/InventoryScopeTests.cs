@@ -21,7 +21,7 @@ public sealed class InventoryScopeTests
         var first = new InventoryNavigationTargetRecord(Guid.NewGuid(), "start", 1, 2, 0, map);
         var last = new InventoryNavigationTargetRecord(Guid.NewGuid(), "end", 1, 3, 0, map);
         var shelf = new InventoryShelfScopeRecord(Guid.NewGuid(), "A", "A", first,
-            new[] { new InventoryShelfLevelRecord(Guid.NewGuid(), 1), new InventoryShelfLevelRecord(Guid.NewGuid(), 2) }, first, last);
+            new[] { new InventoryShelfLevelRecord(Guid.NewGuid(), 1), new InventoryShelfLevelRecord(Guid.NewGuid(), 2) }, first, last, true);
         var service = new InventoryWorkflowService(new InventoryRepositoryStub(shelf));
         var mission = Guid.NewGuid();
         var resolveRequest = new InventoryWorkflowActionRequest(mission, "sim", "execution", "RESOLVE_INVENTORY_SCOPE",

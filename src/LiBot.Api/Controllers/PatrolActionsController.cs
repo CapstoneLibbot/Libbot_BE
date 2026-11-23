@@ -373,6 +373,7 @@ public sealed class PatrolActionsController(
 
         var categories = observationData.Select(item => ReadString(item, "category") ?? "OTHER_WARNING").ToArray();
         var fallenBooks = categories.Count(item => item == "FALLEN_BOOK");
+        var leaningBooks = categories.Count(item => item == "LEANING_BOOK_PRESENT");
         var obstacles = categories.Count(item => item == "OBSTACLE");
         var warnings = categories.Count(item => item is "WARNING" or "OTHER_WARNING");
         var coveredCount = coverageData.Count(item => ReadString(item, "status") == "COVERED");
@@ -388,6 +389,7 @@ public sealed class PatrolActionsController(
             duration_seconds = durationSeconds,
             observation_count = observationData.Length,
             fallen_book_count = fallenBooks,
+            leaning_book_detection_count = leaningBooks,
             obstacle_count = obstacles,
             warning_count = warnings,
             path_coverage = new
@@ -404,14 +406,14 @@ public sealed class PatrolActionsController(
         if (runtimeId == "sim")
         {
             reportId = Guid.NewGuid();
-            var simulationReport = new { report_id = reportId, reportData.report_type, reportData.mission_id, reportData.runtime_id, reportData.execution_id, reportData.duration_seconds, reportData.observation_count, reportData.fallen_book_count, reportData.obstacle_count, reportData.warning_count, reportData.path_coverage, reportData.observations };
+            var simulationReport = new { report_id = reportId, reportData.report_type, reportData.mission_id, reportData.runtime_id, reportData.execution_id, reportData.duration_seconds, reportData.observation_count, reportData.fallen_book_count, reportData.leaning_book_detection_count, reportData.obstacle_count, reportData.warning_count, reportData.path_coverage, reportData.observations };
             SimulationWorkflowDataStore.SetPatrolReport(request.MissionId, simulationReport);
             return new ActionResult(simulationReport, 1);
         }
 
         reportId = await dataService.SavePatrolReportAsync(request.MissionId, durationSeconds,
             observationData.Length, warnings + obstacles, JsonSerializer.Serialize(reportData), cancellationToken);
-        var result = new { report_id = reportId, reportData.report_type, reportData.mission_id, reportData.runtime_id, reportData.execution_id, reportData.duration_seconds, reportData.observation_count, reportData.fallen_book_count, reportData.obstacle_count, reportData.warning_count, reportData.path_coverage, reportData.observations };
+        var result = new { report_id = reportId, reportData.report_type, reportData.mission_id, reportData.runtime_id, reportData.execution_id, reportData.duration_seconds, reportData.observation_count, reportData.fallen_book_count, reportData.leaning_book_detection_count, reportData.obstacle_count, reportData.warning_count, reportData.path_coverage, reportData.observations };
         return new ActionResult(result, 1);
     }
 
@@ -492,6 +494,7 @@ public sealed class PatrolActionsController(
         return normalized switch
         {
             "FALLEN_BOOK" or "BOOK_FALLEN" => "FALLEN_BOOK",
+            "LEANING_BOOK_PRESENT" or "LEANING_BOOK" => "LEANING_BOOK_PRESENT",
             "OBSTACLE" or "UNKNOWN_OBSTACLE" => "OBSTACLE",
             "WARNING" => "WARNING",
             _ => "OTHER_WARNING"

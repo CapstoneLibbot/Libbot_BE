@@ -21,7 +21,8 @@ public sealed record InventoryShelfScopeRecord(
     [property: JsonPropertyName("endpoint")] InventoryNavigationTargetRecord Endpoint,
     [property: JsonPropertyName("levels")] IReadOnlyList<InventoryShelfLevelRecord> Levels,
     [property: JsonPropertyName("start_endpoint")] InventoryNavigationTargetRecord? StartEndpoint,
-    [property: JsonPropertyName("end_endpoint")] InventoryNavigationTargetRecord? EndEndpoint);
+    [property: JsonPropertyName("end_endpoint")] InventoryNavigationTargetRecord? EndEndpoint,
+    [property: JsonPropertyName("sweep_shelf")] bool SweepShelf);
 
 public static class InventoryEndpointValidator
 {

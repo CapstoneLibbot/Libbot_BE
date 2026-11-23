@@ -292,7 +292,8 @@ public class MissionController(
                 command = "preflight_workflow",
                 runtime_id = runtimeId,
                 require_hardware = !isSimulation,
-                require_robot_ui = RequiresRobotUi(document.Steps)
+                require_robot_ui = RequiresRobotUi(document.Steps),
+                require_patrol_detector = !isSimulation && string.Equals(document.Type, "LIBRARY_PATROL", StringComparison.OrdinalIgnoreCase)
             }, cancellationToken);
             preflightResponse = response.RootElement.Clone();
         }
@@ -350,6 +351,7 @@ public class MissionController(
                 command = "start_workflow",
                 workflow_version = document.Version,
                 workflow_id = document.WorkflowId,
+                workflow_type = document.Type,
                 mission_id = id.ToString(),
                 task_id = id.ToString(),
                 execution_id = executionId,
@@ -740,6 +742,7 @@ public class MissionController(
                 runtimeId,
                 observationCount = ReadInt(payload, "observation_count"),
                 fallenBookCount = ReadInt(payload, "fallen_book_count"),
+                leaningBookDetectionCount = ReadInt(payload, "leaning_book_detection_count"),
                 unknownObstacleCount = ReadInt(payload, "obstacle_count"),
                 otherWarningCount = ReadInt(payload, "warning_count"),
                 completedAtUtc = DateTime.UtcNow

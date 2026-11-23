@@ -10,3 +10,4 @@ obj/
 .env
 .env.*
 !.env.example
+src/LiBot.Api/App_Data/patrol-evidence/

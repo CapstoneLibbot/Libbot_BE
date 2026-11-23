@@ -194,12 +194,17 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
         if (levels.Count != 2 || !levels.Any(item => item.LevelNumber == 1) || !levels.Any(item => item.LevelNumber == 2))
             throw new InvalidOperationException($"Shelf '{code}' must have exactly level 1 and level 2 configured for the two-tier scanner.");
 
+        var orderedLevels = levels.OrderBy(item => item.LevelNumber).ToArray();
         var start = new InventoryNavigationTargetRecord(startEndpoint.Id, startEndpoint.Name,
             startEndpoint.PositionX, startEndpoint.PositionY, startEndpoint.Theta, startEndpoint.MapId);
+        if (start.EndpointId == endEndpoint.Id)
+        {
+            return new InventoryShelfScopeRecord(shelfId, code, name, start, orderedLevels, start, null, false);
+        }
+
         var end = new InventoryNavigationTargetRecord(endEndpoint.Id, endEndpoint.Name,
             endEndpoint.PositionX, endEndpoint.PositionY, endEndpoint.Theta, endEndpoint.MapId);
         InventoryEndpointValidator.Validate(start, end);
-        return new InventoryShelfScopeRecord(shelfId, code, name, start,
-            levels.OrderBy(item => item.LevelNumber).ToArray(), start, end);
+        return new InventoryShelfScopeRecord(shelfId, code, name, start, orderedLevels, start, end, true);
     }
 }
