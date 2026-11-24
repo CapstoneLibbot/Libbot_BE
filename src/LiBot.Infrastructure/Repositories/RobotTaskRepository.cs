@@ -10,6 +10,8 @@ public sealed class RobotTaskRepository(LiBotDbContext db) : IRobotTaskRepositor
     {
         var task = await db.JobTasks.AsNoTracking()
             .FirstOrDefaultAsync(item => item.Id == taskId, cancellationToken);
+        if (task is not null)
+            await JobEventPersistence.HydrateJobTaskAsync(db, task, cancellationToken);
         return string.Equals(task?.RuntimeId, "sim", StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -13,6 +13,8 @@
   <ItemGroup>
     <EmbeddedResource Include="..\..\docs\database\create-logical-erd-schema.sql"
                       LogicalName="LiBot.Infrastructure.Persistence.Migrations.create-logical-erd-schema.sql" />
+    <EmbeddedResource Include="..\..\docs\database\update-logical-erd.sql"
+                      LogicalName="LiBot.Infrastructure.Persistence.Migrations.update-logical-erd.sql" />
     <EmbeddedResource Include="..\..\docs\database\migrations\align-legacy-schema-to-logical-erd.sql"
                       LogicalName="LiBot.Infrastructure.Persistence.Migrations.align-legacy-schema-to-logical-erd.sql" />
   </ItemGroup>

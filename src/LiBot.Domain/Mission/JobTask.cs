@@ -7,9 +7,11 @@ namespace LiBot.Domain.Mission;
 public class JobTask : Entity
 {
     private static readonly JsonSerializerOptions PersistenceJsonOptions = new(JsonSerializerDefaults.Web);
+    private bool _persistenceStateChanged = true;
 
     public Guid JobId { get; private set; }
     public Guid WorkflowTaskId { get; private set; }
+    public int SequenceNo { get; private set; } = 1;
     public string Name { get; private set; }
     public string Status { get; private set; }
     [NotMapped]
@@ -17,7 +19,7 @@ public class JobTask : Entity
     public string RuntimeId { get; private set; } = "real";
     public string? ExecutionId { get; private set; }
     public string? ExecutionState { get; private set; }
-    [Column("Description")]
+    [NotMapped]
     public string? PersistencePayload
     {
         get => JsonSerializer.Serialize(new JobTaskPersistencePayload(Description, RuntimeId, ExecutionId, ExecutionState),
@@ -59,9 +61,9 @@ public class JobTask : Entity
             ExecutionState = null;
         }
     }
-    [Column("StartedAt")]
+    [NotMapped]
     public DateTime? StartedAtUtc { get; private set; }
-    [Column("CompletedAt")]
+    [NotMapped]
     public DateTime? CompletedAtUtc { get; private set; }
 
     private JobTask()
@@ -92,6 +94,7 @@ public class JobTask : Entity
         if (string.IsNullOrWhiteSpace(executionId))
             throw new ArgumentException("Execution id is required.", nameof(executionId));
         ExecutionId = executionId.Trim();
+        _persistenceStateChanged = true;
     }
 
     public void PrepareForRetry()
@@ -101,11 +104,13 @@ public class JobTask : Entity
         StartedAtUtc = null;
         CompletedAtUtc = null;
         Status = "Pending";
+        _persistenceStateChanged = true;
     }
 
     public void UpdateExecutionState(string executionState)
     {
         ExecutionState = executionState;
+        _persistenceStateChanged = true;
         try
         {
             using var document = JsonDocument.Parse(executionState);
@@ -151,6 +156,7 @@ public class JobTask : Entity
             throw new InvalidOperationException("Task has already started.");
         StartedAtUtc = startedAtUtc ?? DateTime.UtcNow;
         Status = "Running";
+        _persistenceStateChanged = true;
     }
 
     public void Complete(DateTime? completedAtUtc = null)
@@ -161,6 +167,52 @@ public class JobTask : Entity
             throw new InvalidOperationException("Task has already completed.");
         CompletedAtUtc = completedAtUtc ?? DateTime.UtcNow;
         Status = "Completed";
+        _persistenceStateChanged = true;
+    }
+
+    public bool HasUnpersistedPersistenceState => _persistenceStateChanged;
+
+    public void MarkPersistenceStatePersisted() => _persistenceStateChanged = false;
+
+    public string SerializePersistenceState() => JsonSerializer.Serialize(
+        new JobTaskPersistenceState(Description, RuntimeId, ExecutionId, ExecutionState, StartedAtUtc, CompletedAtUtc),
+        PersistenceJsonOptions);
+
+    public void LoadPersistenceState(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            PersistencePayload = null;
+            StartedAtUtc = null;
+            CompletedAtUtc = null;
+            _persistenceStateChanged = false;
+            return;
+        }
+
+        try
+        {
+            var state = JsonSerializer.Deserialize<JobTaskPersistenceState>(value, PersistenceJsonOptions);
+            if (state is not null)
+            {
+                Description = state.Description;
+                RuntimeId = string.IsNullOrWhiteSpace(state.RuntimeId) ? "real" : state.RuntimeId;
+                ExecutionId = state.ExecutionId;
+                ExecutionState = state.ExecutionState;
+                StartedAtUtc = state.StartedAtUtc;
+                CompletedAtUtc = state.CompletedAtUtc;
+                _persistenceStateChanged = false;
+                return;
+            }
+        }
+        catch (JsonException)
+        {
+            // Accept rows written by the earlier persistence payload format.
+        }
+
+        PersistencePayload = value;
+        StartedAtUtc = null;
+        CompletedAtUtc = null;
+        _persistenceStateChanged = false;
     }
 
     private sealed record JobTaskPersistencePayload(
@@ -168,4 +220,12 @@ public class JobTask : Entity
         string? RuntimeId,
         string? ExecutionId,
         string? ExecutionState);
+
+    private sealed record JobTaskPersistenceState(
+        string? Description,
+        string? RuntimeId,
+        string? ExecutionId,
+        string? ExecutionState,
+        DateTime? StartedAtUtc,
+        DateTime? CompletedAtUtc);
 }

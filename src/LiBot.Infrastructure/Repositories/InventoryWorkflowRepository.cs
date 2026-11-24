@@ -135,7 +135,8 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
         string? data,
         CancellationToken cancellationToken)
     {
-        var jobEvent = new JobEvent(missionId, eventType, data);
+        var jobEvent = await JobEventPersistence.CreateForMissionAsync(
+            db, missionId, eventType, data, cancellationToken);
         await db.JobEvents.AddAsync(jobEvent, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return jobEvent.Id;
@@ -145,11 +146,7 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
         Guid missionId,
         string eventType,
         CancellationToken cancellationToken) =>
-        await db.JobEvents.AsNoTracking()
-            .Where(item => item.JobId == missionId && item.EventType == eventType)
-            .OrderBy(item => item.EventTimeUtc)
-            .Select(item => item.Data)
-            .ToListAsync(cancellationToken);
+        await JobEventPersistence.GetEventDataAsync(db, missionId, eventType, cancellationToken);
 
     public async Task<Guid> SaveInventoryReportAsync(
         Guid missionId,
@@ -165,7 +162,8 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
         var report = new InventoryReport(missionId, scopeType, totalShelves,
             totalBooksScanned, totalAvailable, totalMisplaced, totalMissing, data);
         await db.InventoryReports.AddAsync(report, cancellationToken);
-        await db.JobEvents.AddAsync(new JobEvent(missionId, "INVENTORY_REPORT", data), cancellationToken);
+        await db.JobEvents.AddAsync(await JobEventPersistence.CreateForMissionAsync(
+            db, missionId, "INVENTORY_REPORT", data, cancellationToken), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return report.Id;
     }

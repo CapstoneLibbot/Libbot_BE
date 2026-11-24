@@ -25,6 +25,8 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
     public async Task<WorkflowMissionRecord?> GetMissionAsync(Guid missionId, CancellationToken cancellationToken)
     {
         var task = await db.JobTasks.AsNoTracking().FirstOrDefaultAsync(item => item.JobId == missionId, cancellationToken);
+        if (task is not null)
+            await JobEventPersistence.HydrateJobTaskAsync(db, task, cancellationToken);
         return task is null ? null : new WorkflowMissionRecord(task.RuntimeId, task.StartedAtUtc);
     }
 
@@ -80,7 +82,8 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
 
     public async Task<Guid> AddJobEventAsync(Guid missionId, string eventType, string? data, CancellationToken cancellationToken)
     {
-        var jobEvent = new JobEvent(missionId, eventType, data);
+        var jobEvent = await JobEventPersistence.CreateForMissionAsync(
+            db, missionId, eventType, data, cancellationToken);
         await db.JobEvents.AddAsync(jobEvent, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return jobEvent.Id;
@@ -88,11 +91,7 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
 
     public async Task<IReadOnlyList<string?>> GetJobEventDataAsync(
         Guid missionId, string eventType, CancellationToken cancellationToken) =>
-        await db.JobEvents.AsNoTracking()
-            .Where(item => item.JobId == missionId && item.EventType == eventType)
-            .OrderBy(item => item.EventTimeUtc)
-            .Select(item => item.Data)
-            .ToListAsync(cancellationToken);
+        await JobEventPersistence.GetEventDataAsync(db, missionId, eventType, cancellationToken);
 
     public Task<int> CountMissingBooksAsync(IReadOnlyCollection<Guid> shelfLevelIds,
         IReadOnlyCollection<string> scannedBarcodes, CancellationToken cancellationToken)
@@ -111,7 +110,8 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
         var report = new InventoryReport(missionId, scopeType, 1,
             totalBooksScanned, correctlyPlaced, misplaced, missing, data);
         await db.InventoryReports.AddAsync(report, cancellationToken);
-        await db.JobEvents.AddAsync(new JobEvent(missionId, "INVENTORY_REPORT", data), cancellationToken);
+        await db.JobEvents.AddAsync(await JobEventPersistence.CreateForMissionAsync(
+            db, missionId, "INVENTORY_REPORT", data, cancellationToken), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return report.Id;
     }
@@ -121,7 +121,8 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
     {
         var report = new PatrolReport(missionId, durationSeconds, observationCount, warnings, data);
         await db.PatrolReports.AddAsync(report, cancellationToken);
-        await db.JobEvents.AddAsync(new JobEvent(missionId, "PATROL_REPORT", data), cancellationToken);
+        await db.JobEvents.AddAsync(await JobEventPersistence.CreateForMissionAsync(
+            db, missionId, "PATROL_REPORT", data, cancellationToken), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return report.Id;
     }

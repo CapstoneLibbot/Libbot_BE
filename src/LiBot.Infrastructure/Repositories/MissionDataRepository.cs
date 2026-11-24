@@ -20,10 +20,13 @@ public sealed class MissionDataRepository(LiBotDbContext db) : IMissionDataRepos
         return query.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
     }
 
-    public Task<JobTask?> GetTaskAsync(Guid missionId, bool tracking, CancellationToken cancellationToken)
+    public async Task<JobTask?> GetTaskAsync(Guid missionId, bool tracking, CancellationToken cancellationToken)
     {
         var query = tracking ? db.JobTasks : db.JobTasks.AsNoTracking();
-        return query.FirstOrDefaultAsync(item => item.JobId == missionId, cancellationToken);
+        var task = await query.FirstOrDefaultAsync(item => item.JobId == missionId, cancellationToken);
+        if (task is not null)
+            await JobEventPersistence.HydrateJobTaskAsync(db, task, cancellationToken);
+        return task;
     }
 
     public Task<WorkflowDefinition?> GetWorkflowAsync(Guid id, bool tracking, CancellationToken cancellationToken)
@@ -99,8 +102,10 @@ public sealed class MissionDataRepository(LiBotDbContext db) : IMissionDataRepos
         var sequence = 1;
         foreach (var step in steps)
             await db.JobSteps.AddAsync(new JobStep(jobTask.Id, step.Id, sequence++, step.StepType), cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
         if (!string.IsNullOrWhiteSpace(initialContext))
-            await db.JobEvents.AddAsync(new JobEvent(mission.Id, "WORKFLOW_INITIAL_CONTEXT", initialContext), cancellationToken);
+            await db.JobEvents.AddAsync(await JobEventPersistence.CreateForMissionAsync(
+                db, mission.Id, "WORKFLOW_INITIAL_CONTEXT", initialContext, cancellationToken), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -118,10 +123,9 @@ public sealed class MissionDataRepository(LiBotDbContext db) : IMissionDataRepos
             ParseConfiguration(row.Configuration), row.Description)).ToList();
     }
 
-    public Task<string?> GetInitialContextAsync(Guid missionId, CancellationToken cancellationToken) =>
-        db.JobEvents.AsNoTracking()
-            .Where(item => item.JobId == missionId && item.EventType == "WORKFLOW_INITIAL_CONTEXT")
-            .OrderByDescending(item => item.EventTimeUtc).Select(item => item.Data).FirstOrDefaultAsync(cancellationToken);
+    public async Task<string?> GetInitialContextAsync(Guid missionId, CancellationToken cancellationToken) =>
+        (await JobEventPersistence.GetEventDataAsync(db, missionId, "WORKFLOW_INITIAL_CONTEXT", cancellationToken))
+            .LastOrDefault();
 
     public async Task<JobTask> CreateMissingJobTaskAsync(Guid missionId, Guid workflowId, string runtimeId,
         CancellationToken cancellationToken)
@@ -158,12 +162,12 @@ public sealed class MissionDataRepository(LiBotDbContext db) : IMissionDataRepos
 
     public async Task<IReadOnlyList<string?>> GetWorkflowStepEventDataAsync(Guid missionId,
         CancellationToken cancellationToken) =>
-        await db.JobEvents.AsNoTracking().Where(item => item.JobId == missionId && item.EventType == "WORKFLOW_STEP")
-            .OrderBy(item => item.EventTimeUtc).Select(item => item.Data).ToListAsync(cancellationToken);
+        await JobEventPersistence.GetEventDataAsync(db, missionId, "WORKFLOW_STEP", cancellationToken);
 
     public async Task AddWorkflowStepEventAsync(Guid missionId, string data, CancellationToken cancellationToken)
     {
-        await db.JobEvents.AddAsync(new JobEvent(missionId, "WORKFLOW_STEP", data), cancellationToken);
+        await db.JobEvents.AddAsync(await JobEventPersistence.CreateForMissionAsync(
+            db, missionId, "WORKFLOW_STEP", data, cancellationToken), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
     }
 

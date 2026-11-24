@@ -98,7 +98,9 @@ public sealed class GuidanceWorkflowRepository(LiBotDbContext db) : IGuidanceWor
                 db.JobSteps.Add(new JobStep(jobTask.Id, step.Id, sequence++, step.StepType));
         }
 
-        db.JobEvents.Add(new JobEvent(mission.Id, "WORKFLOW_INITIAL_CONTEXT", initialContext));
+        await db.SaveChangesAsync(cancellationToken);
+        db.JobEvents.Add(await JobEventPersistence.CreateForMissionAsync(
+            db, mission.Id, "WORKFLOW_INITIAL_CONTEXT", initialContext, cancellationToken));
         await db.SaveChangesAsync(cancellationToken);
     }
 

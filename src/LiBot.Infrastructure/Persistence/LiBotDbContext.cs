@@ -5,13 +5,29 @@ using LiBot.Domain.Mission;
 using LiBot.Domain.Workflow;
 using LiBot.Domain.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using RobotEntity = LiBot.Domain.Robot.Robot;
 using RobotLog = LiBot.Domain.Robot.RobotLog;
+using ConfigBatteryRobot = LiBot.Domain.Robot.ConfigBatteryRobot;
 
 namespace LiBot.Infrastructure.Persistence;
 
 public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContext(options)
 {
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        PersistPendingJobTaskState();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override async Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        await PersistPendingJobTaskStateAsync(cancellationToken);
+        return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     public DbSet<User> Users => Set<User>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Notification> Notifications => Set<Notification>();
@@ -40,11 +56,47 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
     public DbSet<WorkflowTask> WorkflowTasks => Set<WorkflowTask>();
     public DbSet<TaskStep> TaskSteps => Set<TaskStep>();
     public DbSet<Schedule> Schedules => Set<Schedule>();
-    public DbSet<BookReceipt> BookReceipts => Set<BookReceipt>();
-    public DbSet<BookReceiptDetail> BookReceiptDetails => Set<BookReceiptDetail>();
     public DbSet<BookIssue> BookIssues => Set<BookIssue>();
     public DbSet<BookIssueDetail> BookIssueDetails => Set<BookIssueDetail>();
     public DbSet<InventoryReportDetail> InventoryReportDetails => Set<InventoryReportDetail>();
+    public DbSet<ConfigBatteryRobot> BatteryRobotConfigs => Set<ConfigBatteryRobot>();
+
+    private void PersistPendingJobTaskState()
+    {
+        foreach (var entry in ChangeTracker.Entries<JobTask>()
+                     .Where(item => item.State == EntityState.Added || item.Entity.HasUnpersistedPersistenceState))
+        {
+            var task = entry.Entity;
+            var step = JobSteps.Local.Where(item => item.JobTaskId == task.Id)
+                .OrderBy(item => item.Sequence).FirstOrDefault()
+                ?? JobSteps.AsNoTracking().Where(item => item.JobTaskId == task.Id)
+                    .OrderBy(item => item.Sequence).FirstOrDefault();
+            if (step is null) continue;
+
+            JobEvents.Add(new JobEvent(step.Id, JobEventPersistence.JobTaskStateEventType,
+                task.SerializePersistenceState()));
+            task.MarkPersistenceStatePersisted();
+        }
+    }
+
+    private async Task PersistPendingJobTaskStateAsync(CancellationToken cancellationToken)
+    {
+        foreach (var entry in ChangeTracker.Entries<JobTask>()
+                     .Where(item => item.State == EntityState.Added || item.Entity.HasUnpersistedPersistenceState))
+        {
+            var task = entry.Entity;
+            var step = JobSteps.Local.Where(item => item.JobTaskId == task.Id)
+                .OrderBy(item => item.Sequence).FirstOrDefault();
+            if (step is null)
+                step = await JobSteps.AsNoTracking().Where(item => item.JobTaskId == task.Id)
+                    .OrderBy(item => item.Sequence).FirstOrDefaultAsync(cancellationToken);
+            if (step is null) continue;
+
+            JobEvents.Add(new JobEvent(step.Id, JobEventPersistence.JobTaskStateEventType,
+                task.SerializePersistenceState()));
+            task.MarkPersistenceStatePersisted();
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -109,7 +161,6 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.ExpectedShelfLevelId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<ShelfLevel>().WithMany().HasForeignKey(x => x.CurrentShelfLevelId).OnDelete(DeleteBehavior.NoAction);
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
-            entity.HasAlternateKey(x => new { x.Id, x.BookId });
         });
 
         modelBuilder.Entity<LibraryMap>(entity =>
@@ -173,6 +224,13 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.HasOne<EndpointGroup>().WithMany().HasForeignKey(x => x.EndpointGroupId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<Endpoint>().WithMany().HasForeignKey(x => x.EndpointId).OnDelete(DeleteBehavior.NoAction);
         });
+        modelBuilder.Entity<ConfigBatteryRobot>(entity =>
+        {
+            entity.ToTable("CONFIG_BATTERY_ROBOT");
+            entity.HasKey(x => x.Id);
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<RobotEntity>().WithMany().HasForeignKey(x => x.RobotId).OnDelete(DeleteBehavior.NoAction);
+        });
 
         modelBuilder.Entity<Mission>(entity =>
         {
@@ -190,7 +248,9 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.Ignore(x => x.RuntimeId);
             entity.Ignore(x => x.ExecutionId);
             entity.Ignore(x => x.ExecutionState);
-            entity.Property(x => x.PersistencePayload).HasColumnName("Description");
+            entity.Ignore(x => x.PersistencePayload);
+            entity.Ignore(x => x.StartedAtUtc);
+            entity.Ignore(x => x.CompletedAtUtc);
             entity.Property(x => x.Name).IsRequired();
             entity.Property(x => x.Status).IsRequired();
             entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
@@ -207,7 +267,8 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("JOB_EVENT");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
+            entity.Ignore(x => x.EventType);
+            entity.HasOne<JobStep>().WithMany().HasForeignKey(x => x.JobStepId).OnDelete(DeleteBehavior.NoAction);
         });
         modelBuilder.Entity<Feedback>(entity =>
         {
@@ -255,18 +316,6 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.HasOne<WorkflowDefinition>().WithMany().HasForeignKey(x => x.WorkflowId).OnDelete(DeleteBehavior.NoAction);
         });
 
-        modelBuilder.Entity<BookReceipt>(entity =>
-        {
-            entity.ToTable("BOOK_RECEIPT"); entity.HasKey(x => x.Id);
-        });
-        modelBuilder.Entity<BookReceiptDetail>(entity =>
-        {
-            entity.ToTable("BOOK_RECEIPT_DETAIL"); entity.HasKey(x => x.Id);
-            entity.HasOne<BookReceipt>().WithMany().HasForeignKey(x => x.ReceiptId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasOne<Book>().WithMany().HasForeignKey(x => x.BookId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasOne<BookItem>().WithMany().HasForeignKey(x => new { x.BookItemId, x.BookId }).HasPrincipalKey(x => new { x.Id, x.BookId }).OnDelete(DeleteBehavior.NoAction);
-            entity.HasIndex(x => new { x.ReceiptId, x.BookItemId }).IsUnique();
-        });
         modelBuilder.Entity<BookIssue>(entity =>
         {
             entity.ToTable("BOOK_ISSUE"); entity.HasKey(x => x.Id);
@@ -275,9 +324,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("BOOK_ISSUE_DETAIL"); entity.HasKey(x => x.Id);
             entity.HasOne<BookIssue>().WithMany().HasForeignKey(x => x.IssueId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasOne<Book>().WithMany().HasForeignKey(x => x.BookId).OnDelete(DeleteBehavior.NoAction);
-            entity.HasOne<BookItem>().WithMany().HasForeignKey(x => new { x.BookItemId, x.BookId }).HasPrincipalKey(x => new { x.Id, x.BookId }).OnDelete(DeleteBehavior.NoAction);
-            entity.HasIndex(x => new { x.IssueId, x.BookItemId }).IsUnique();
+            entity.HasOne<BookItem>().WithMany().HasForeignKey(x => x.BookItemId).OnDelete(DeleteBehavior.NoAction);
         });
         modelBuilder.Entity<InventoryReportDetail>(entity =>
         {
@@ -290,24 +337,83 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
 
         // Keep the EF schema limited to the columns defined in the SQL ERD.
         IgnoreAuditColumns<BookCategory, Book, BookItem, Aisle, Floor, Shelf, ShelfLevel, Endpoint,
-            EndpointGroup, EndpointGroupMember, Feedback, JobTask, JobStep, BookReceipt, BookReceiptDetail,
-            BookIssue, BookIssueDetail, InventoryReportDetail>(modelBuilder);
+            EndpointGroup, EndpointGroupMember, Feedback, JobTask, JobStep, BookIssue, BookIssueDetail,
+            InventoryReportDetail, ConfigBatteryRobot>(modelBuilder);
         IgnoreUpdatedAt<AuditLog, Notification, Zone, WorkflowTask, TaskStep, InventoryReport, PatrolReport>(modelBuilder);
         IgnoreAuditColumns<RobotLog>(modelBuilder);
         modelBuilder.Entity<JobEvent>().Ignore(x => x.CreatedAtUtc).Ignore(x => x.UpdatedAtUtc);
+
+        ApplySnakeCaseColumnNames(modelBuilder);
+        ConfigureLogicalErdColumnNames(modelBuilder);
     }
 
-    private static void IgnoreAuditColumns<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18>(ModelBuilder modelBuilder)
+    private static void ApplySnakeCaseColumnNames(ModelBuilder modelBuilder)
+    {
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            var table = StoreObjectIdentifier.Table(entityType.GetTableName()!, entityType.GetSchema());
+            foreach (var property in entityType.GetProperties())
+                property.SetColumnName(ToSnakeCase(property.Name), table);
+        }
+    }
+
+    private static void ConfigureLogicalErdColumnNames(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<User>().Property(x => x.CreatedAtUtc).HasColumnName("created_at");
+        modelBuilder.Entity<User>().Property(x => x.UpdatedAtUtc).HasColumnName("updated_at");
+        modelBuilder.Entity<User>().Property(x => x.LastLoginAtUtc).HasColumnName("last_login_at");
+        modelBuilder.Entity<AuditLog>().Property(x => x.CreatedAtUtc).HasColumnName("created_at");
+        modelBuilder.Entity<Notification>().Property(x => x.CreatedAtUtc).HasColumnName("created_at");
+        modelBuilder.Entity<Zone>().Property(x => x.CreatedAtUtc).HasColumnName("created_at");
+        modelBuilder.Entity<WorkflowTask>().Property(x => x.CreatedAtUtc).HasColumnName("created_at");
+        modelBuilder.Entity<WorkflowTask>().Property(x => x.SequenceNumber).HasColumnName("sequence_no");
+        modelBuilder.Entity<TaskStep>().Property(x => x.CreatedAtUtc).HasColumnName("created_at");
+        modelBuilder.Entity<InventoryReport>().Property(x => x.CreatedAtUtc).HasColumnName("created_at");
+        modelBuilder.Entity<PatrolReport>().Property(x => x.CreatedAtUtc).HasColumnName("created_at");
+        modelBuilder.Entity<Schedule>().Property(x => x.CreatedAtUtc).HasColumnName("created_at");
+        modelBuilder.Entity<Schedule>().Property(x => x.UpdatedAtUtc).HasColumnName("updated_at");
+        modelBuilder.Entity<Schedule>().Property(x => x.LastRunAtUtc).HasColumnName("last_run_at");
+        modelBuilder.Entity<Schedule>().Property(x => x.NextRunAtUtc).HasColumnName("next_run_at");
+        modelBuilder.Entity<LibraryMap>().Property(x => x.MapData).HasColumnName("map_data");
+        modelBuilder.Entity<Book>().Property(x => x.Image).HasColumnName("image_url");
+        modelBuilder.Entity<Mission>().Property(x => x.CreatedAtUtc).HasColumnName("create_at");
+        modelBuilder.Entity<Mission>().Property(x => x.StartedAtUtc).HasColumnName("started_at");
+        modelBuilder.Entity<Mission>().Property(x => x.CompletedAtUtc).HasColumnName("completed_at");
+        modelBuilder.Entity<RobotLog>().Property(x => x.RecordedAtUtc).HasColumnName("record_at");
+        modelBuilder.Entity<JobEvent>().Property(x => x.EventTimeUtc).HasColumnName("event_time");
+        modelBuilder.Entity<JobStep>().Property(x => x.Description).HasColumnName("configuration");
+        modelBuilder.Entity<JobTask>().Property(x => x.SequenceNo).HasColumnName("sequence_no");
+        modelBuilder.Entity<EndpointGroupMember>().Property(x => x.EndpointGroupId).HasColumnName("enpoint_group_id");
+        modelBuilder.Entity<InventoryReport>().Property(x => x.TotalShelves).HasColumnName("total_shelfs");
+        modelBuilder.Entity<InventoryReport>().Property(x => x.TotalBooksScanned).HasColumnName("total_book_scaned");
+    }
+
+    private static string ToSnakeCase(string value)
+    {
+        var result = new System.Text.StringBuilder(value.Length + 8);
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (char.IsUpper(character) && index > 0 &&
+                (char.IsLower(value[index - 1]) || char.IsDigit(value[index - 1]) ||
+                 (index + 1 < value.Length && char.IsLower(value[index + 1]))))
+                result.Append('_');
+            result.Append(char.ToLowerInvariant(character));
+        }
+        return result.ToString();
+    }
+
+    private static void IgnoreAuditColumns<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17>(ModelBuilder modelBuilder)
         where T1 : Entity where T2 : Entity where T3 : Entity where T4 : Entity where T5 : Entity where T6 : Entity
         where T7 : Entity where T8 : Entity where T9 : Entity where T10 : Entity where T11 : Entity where T12 : Entity
-        where T13 : Entity where T14 : Entity where T15 : Entity where T16 : Entity where T17 : Entity where T18 : Entity
+        where T13 : Entity where T14 : Entity where T15 : Entity where T16 : Entity where T17 : Entity
     {
         IgnoreAuditColumns<T1>(modelBuilder); IgnoreAuditColumns<T2>(modelBuilder); IgnoreAuditColumns<T3>(modelBuilder);
         IgnoreAuditColumns<T4>(modelBuilder); IgnoreAuditColumns<T5>(modelBuilder); IgnoreAuditColumns<T6>(modelBuilder);
         IgnoreAuditColumns<T7>(modelBuilder); IgnoreAuditColumns<T8>(modelBuilder); IgnoreAuditColumns<T9>(modelBuilder);
         IgnoreAuditColumns<T10>(modelBuilder); IgnoreAuditColumns<T11>(modelBuilder); IgnoreAuditColumns<T12>(modelBuilder);
         IgnoreAuditColumns<T13>(modelBuilder); IgnoreAuditColumns<T14>(modelBuilder); IgnoreAuditColumns<T15>(modelBuilder);
-        IgnoreAuditColumns<T16>(modelBuilder); IgnoreAuditColumns<T17>(modelBuilder); IgnoreAuditColumns<T18>(modelBuilder);
+        IgnoreAuditColumns<T16>(modelBuilder); IgnoreAuditColumns<T17>(modelBuilder);
     }
 
     private static void IgnoreAuditColumns<T>(ModelBuilder modelBuilder) where T : Entity

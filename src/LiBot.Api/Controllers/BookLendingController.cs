@@ -54,7 +54,7 @@ public sealed class BookLendingController(LiBotDbContext db) : ControllerBase
         foreach (var item in items)
         {
             item.Borrow();
-            db.BookIssueDetails.Add(new BookIssueDetail(issue.Id, item.Id, item.BookId));
+            db.BookIssueDetails.Add(new BookIssueDetail(issue.Id, item.Id));
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -87,13 +87,13 @@ public sealed class BookLendingController(LiBotDbContext db) : ControllerBase
             return Conflict(new { message = "One or more selected book items are not currently borrowed." });
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var receipt = new BookReceipt("RETURN", "Completed", items.Count,
+        var receipt = new BookIssue("RETURN", "Completed", items.Count,
             DateOnly.FromDateTime(DateTime.UtcNow), request?.Note);
-        db.BookReceipts.Add(receipt);
+        db.BookIssues.Add(receipt);
         foreach (var item in items)
         {
             item.ReturnToExpectedShelf();
-            db.BookReceiptDetails.Add(new BookReceiptDetail(receipt.Id, item.Id, item.BookId));
+            db.BookIssueDetails.Add(new BookIssueDetail(receipt.Id, item.Id, request?.Note));
         }
 
         var allReturned = details.All(detail => !selectedIds.Contains(detail.BookItemId)
@@ -153,16 +153,16 @@ public sealed class BookLendingController(LiBotDbContext db) : ControllerBase
     [HttpGet("returns")]
     public async Task<ActionResult<IReadOnlyList<BookReturnResponse>>> GetReturns(CancellationToken cancellationToken)
     {
-        var receipts = await db.BookReceipts.AsNoTracking()
-            .Where(item => item.ReceiptType == "RETURN")
-            .OrderByDescending(item => item.ReceivedDate).ThenByDescending(item => item.Id)
+        var receipts = await db.BookIssues.AsNoTracking()
+            .Where(item => item.IssueType == "RETURN")
+            .OrderByDescending(item => item.IssueDate).ThenByDescending(item => item.Id)
             .ToListAsync(cancellationToken);
         var receiptIds = receipts.Select(item => item.Id).ToArray();
-        var details = await db.BookReceiptDetails.AsNoTracking()
-            .Where(item => receiptIds.Contains(item.ReceiptId)).ToListAsync(cancellationToken);
+        var details = await db.BookIssueDetails.AsNoTracking()
+            .Where(item => receiptIds.Contains(item.IssueId)).ToListAsync(cancellationToken);
         return Ok(receipts.Select(receipt => new BookReturnResponse(
-            receipt.Id, receipt.ReceiptType, receipt.Status, receipt.ReceivedDate, receipt.Total, receipt.Note,
-            details.Where(item => item.ReceiptId == receipt.Id).Select(item => item.BookItemId).ToList())).ToList());
+            receipt.Id, receipt.IssueType, receipt.Status, receipt.IssueDate, receipt.Total, receipt.Note,
+            details.Where(item => item.IssueId == receipt.Id).Select(item => item.BookItemId).ToList())).ToList());
     }
 
     private async Task<IReadOnlyList<BookLoanResponse>> BuildLoanResponsesAsync(

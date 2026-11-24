@@ -27,6 +27,26 @@ internal static partial class MigrationSql
             .ToArray();
     }
 
+    public static string GetLogicalErdFieldList()
+    {
+        var sql = ReadResource("update-logical-erd.sql");
+        var fields = new List<string>();
+        foreach (Match tableMatch in TargetTableRegex().Matches(sql))
+        {
+            var table = tableMatch.Groups["table"].Value;
+            foreach (Match columnMatch in TargetColumnRegex().Matches(tableMatch.Groups["body"].Value))
+            {
+                var column = columnMatch.Groups["column"].Value;
+                fields.Add($"(N'{table.Replace("'", "''", StringComparison.Ordinal)}', N'{column.Replace("'", "''", StringComparison.Ordinal)}')");
+            }
+        }
+
+        if (fields.Count == 0)
+            throw new InvalidOperationException("The logical ERD SQL did not contain any table fields.");
+
+        return string.Join(",\n", fields);
+    }
+
     private static string ReadResource(string fileName)
     {
         var resourceName = $"LiBot.Infrastructure.Persistence.Migrations.{fileName}";
@@ -41,4 +61,10 @@ internal static partial class MigrationSql
 
     [GeneratedRegex(@"(?m)^CREATE TABLE dbo\.\[(?<table>[^\]]+)\]\s*\(", RegexOptions.IgnoreCase)]
     private static partial Regex CreateTableRegex();
+
+    [GeneratedRegex(@"(?is)CREATE\s+TABLE\s+\[(?<table>[^\]]+)\]\s*\((?<body>.*?)\n\);", RegexOptions.IgnoreCase)]
+    private static partial Regex TargetTableRegex();
+
+    [GeneratedRegex(@"(?m)^\s*\[(?<column>[^\]]+)\]\s+", RegexOptions.IgnoreCase)]
+    private static partial Regex TargetColumnRegex();
 }
