@@ -27,13 +27,18 @@ public static class InventoryEndpointValidator
 {
     public static void Validate(InventoryNavigationTargetRecord start, InventoryNavigationTargetRecord end)
     {
-        if (start.EndpointId == Guid.Empty || end.EndpointId == Guid.Empty || start.EndpointId == end.EndpointId)
-            throw new InvalidOperationException("A shelf must have two distinct endpoints.");
+        if (start.EndpointId == Guid.Empty || end.EndpointId == Guid.Empty)
+            throw new InvalidOperationException("Shelf endpoint ID is missing.");
         if (start.MapId == Guid.Empty || start.MapId != end.MapId)
             throw new InvalidOperationException("Shelf endpoints must belong to the same map.");
         if (!double.IsFinite(start.X) || !double.IsFinite(start.Y) || !double.IsFinite(start.Theta)
             || !double.IsFinite(end.X) || !double.IsFinite(end.Y) || !double.IsFinite(end.Theta))
             throw new InvalidOperationException("Shelf endpoint pose must be finite.");
+        // A shelf may be configured as a point destination by assigning the
+        // same endpoint to both ends. Inventory navigation handles this as a
+        // single goal and then advances to the next selected shelf.
+        if (start.EndpointId == end.EndpointId)
+            return;
         var dx = end.X - start.X;
         var dy = end.Y - start.Y;
         var length = Math.Sqrt(dx * dx + dy * dy);
