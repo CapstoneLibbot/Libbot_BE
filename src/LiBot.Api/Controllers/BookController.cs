@@ -16,15 +16,18 @@ namespace LiBot.Api.Controllers;
 public class BookController : ControllerBase
 {
     private readonly IBookService _bookService;
+    private readonly IBookItemService _bookItemQueryService;
     private readonly ILibraryResourceService<BookCategory, BookCategoryResourceDto> _categoryService;
     private readonly ILibraryResourceService<BookItem, BookItemResourceDto> _bookItemService;
 
     public BookController(
         IBookService bookService,
+        IBookItemService bookItemQueryService,
         ILibraryResourceService<BookCategory, BookCategoryResourceDto> categoryService,
         ILibraryResourceService<BookItem, BookItemResourceDto> bookItemService)
     {
         _bookService = bookService ?? throw new ArgumentNullException(nameof(bookService));
+        _bookItemQueryService = bookItemQueryService ?? throw new ArgumentNullException(nameof(bookItemQueryService));
         _categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
         _bookItemService = bookItemService ?? throw new ArgumentNullException(nameof(bookItemService));
     }
@@ -144,9 +147,53 @@ public class BookController : ControllerBase
         await _categoryService.DeleteAsync(id, cancellationToken) ? Ok(BaseResponse<object>.SuccessMessage("Book category deleted successfully.")) : NotFound(Error("Book category was not found."));
 
     [HttpGet("items")]
-    public async Task<IActionResult> GetBookItems(CancellationToken cancellationToken) =>
-        Ok(new BaseResponse<IReadOnlyList<BookItemResourceDto>>(
+    public async Task<IActionResult> GetBookItems(
+        [FromQuery] Guid? bookId,
+        [FromQuery] Guid? shelfLevelId,
+        CancellationToken cancellationToken)
+    {
+        if (bookId is not null && shelfLevelId is not null)
+            return BadRequest(Error("Only one of bookId or shelfLevelId can be provided."));
+
+        if (bookId is Guid requestedBookId)
+            return await GetBookItemsByBookId(requestedBookId, cancellationToken);
+
+        if (shelfLevelId is Guid requestedShelfLevelId)
+            return await GetBookItemsByShelfLevelId(requestedShelfLevelId, cancellationToken);
+
+        return Ok(new BaseResponse<IReadOnlyList<BookItemResourceDto>>(
             await _bookItemService.GetAllAsync(cancellationToken)));
+    }
+
+    /// <summary>Gets all physical copies that belong to a book.</summary>
+    [HttpGet("items/by-book/{bookId:guid}")]
+    public async Task<IActionResult> GetBookItemByBookId(
+        Guid bookId,
+        CancellationToken cancellationToken) =>
+        await GetBookItemsByBookId(bookId, cancellationToken);
+
+    /// <summary>Gets all physical copies currently placed on a shelf level.</summary>
+    [HttpGet("items/by-shelf-level/{shelfLevelId:guid}")]
+    public async Task<IActionResult> GetBookItemByShelfLevelId(
+        Guid shelfLevelId,
+        CancellationToken cancellationToken) =>
+        await GetBookItemsByShelfLevelId(shelfLevelId, cancellationToken);
+
+    private async Task<IActionResult> GetBookItemsByBookId(
+        Guid bookId,
+        CancellationToken cancellationToken)
+    {
+        var items = await _bookItemQueryService.GetByBookIdAsync(bookId, cancellationToken);
+        return Ok(new BaseResponse<IReadOnlyList<BookItemResourceDto>>(items));
+    }
+
+    private async Task<IActionResult> GetBookItemsByShelfLevelId(
+        Guid shelfLevelId,
+        CancellationToken cancellationToken)
+    {
+        var items = await _bookItemQueryService.GetByShelfLevelIdAsync(shelfLevelId, cancellationToken);
+        return Ok(new BaseResponse<IReadOnlyList<BookItemResourceDto>>(items));
+    }
 
     [HttpGet("items/{id:guid}")]
     public async Task<IActionResult> GetBookItemById(Guid id, CancellationToken cancellationToken)
