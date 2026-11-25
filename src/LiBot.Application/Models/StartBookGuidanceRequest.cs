@@ -4,8 +4,8 @@ using System.Text.Json.Serialization;
 namespace LiBot.Application.Models;
 
 public sealed record StartBookGuidanceRequest(
-    string Query,
-    Guid RobotId,
+    string? Query = null,
+    Guid RobotId = default,
     string? BackendBaseUrl = null,
     string? RuntimeId = null,
     Guid? BookId = null,

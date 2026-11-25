@@ -9,6 +9,7 @@ public interface ILibraryMapService
     Task<IReadOnlyList<ZoneDto>> GetZonesByMapIdAsync(Guid mapId, CancellationToken cancellationToken);
     Task<IReadOnlyList<SavedRobotMapResponse>> GetRobotMapsAsync(CancellationToken cancellationToken);
     Task<SavedRobotMapResponse?> GetLatestRobotMapAsync(CancellationToken cancellationToken);
+    Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken);
     Task<MapResponse?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<MapResponse> CreateAsync(MapWriteRequest request, CancellationToken cancellationToken);
     Task<MapResponse> SaveRobotSnapshotAsync(string name, OccupancyGridDto grid, string robotPath, CancellationToken cancellationToken);

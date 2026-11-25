@@ -83,9 +83,18 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
             return "Robot must be localized before starting guidance.";
         if (runtime.Telemetry?.NavigationReady != true)
             return "Nav2 is not ready. Set the initial pose and wait for activation.";
-        if (string.Equals(runtime.Endpoint.Kind, "REAL", StringComparison.OrdinalIgnoreCase)
-            && (!response.Armed || !string.Equals(runtime.ArmLeaseId, armLeaseId, StringComparison.Ordinal)))
-            return "Arm the physical robot and provide its current lease before starting guidance.";
+        if (string.Equals(runtime.Endpoint.Kind, "REAL", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!response.Armed || string.IsNullOrWhiteSpace(armLeaseId))
+            {
+                if (Arm(runtimeId) is null)
+                    return "Arm the physical robot before starting guidance.";
+            }
+            else if (!string.Equals(runtime.ArmLeaseId, armLeaseId, StringComparison.Ordinal))
+            {
+                return "Arm the physical robot and provide its current lease before starting guidance.";
+            }
+        }
 
         return null;
     }
@@ -110,7 +119,10 @@ public sealed class RobotRuntimeService : BackgroundService, IRobotRuntimeServic
         if (runtime.Telemetry?.NavigationReady != true)
             return "Nav2 is not ready. Set the initial pose and wait for activation.";
         if (string.Equals(runtime.Endpoint.Kind, "REAL", StringComparison.OrdinalIgnoreCase) && !response.Armed)
-            return "Arm the physical robot before starting guidance.";
+        {
+            if (Arm(runtimeId) is null)
+                return "Arm the physical robot before starting guidance.";
+        }
 
         return null;
     }

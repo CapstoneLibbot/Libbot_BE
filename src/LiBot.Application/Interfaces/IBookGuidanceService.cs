@@ -25,6 +25,11 @@ public interface IBookGuidanceService
         Guid bookId,
         CancellationToken cancellationToken);
 
+    Task<BookCopyStartTarget?> GetCopyStartTargetAsync(
+        Guid bookId,
+        Guid bookItemId,
+        CancellationToken cancellationToken);
+
     Task<FeedbackResponse?> SaveFeedbackAsync(
         FeedbackRequest request,
         CancellationToken cancellationToken);

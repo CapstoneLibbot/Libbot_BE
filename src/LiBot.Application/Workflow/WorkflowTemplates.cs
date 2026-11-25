@@ -270,7 +270,7 @@ public static class WorkflowTemplates
         return new WorkflowTemplateResponse(
             "search-guide-facility",
             "Tìm và hướng dẫn đến facility",
-            "Tìm facility trong thư viện, hiển thị vị trí, dẫn người đọc đến nơi và thu thập đánh giá.",
+            "Dẫn người đọc đến địa điểm đã chọn và thông báo khi đến nơi.",
             FacilityGuidanceWorkflow.Type,
             steps);
     }

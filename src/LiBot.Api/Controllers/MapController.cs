@@ -40,7 +40,7 @@ public class MapController(
     [HttpGet("{id:guid}/endpoints")]
     public async Task<IActionResult> GetEndpoints(Guid id, CancellationToken cancellationToken)
     {
-        if (await maps.GetByIdAsync(id, cancellationToken) is null)
+        if (!await maps.ExistsAsync(id, cancellationToken))
             return NotFound(new { message = "Map was not found." });
         return Ok(await maps.GetEndpointsByMapIdAsync(id, cancellationToken));
     }
@@ -49,7 +49,7 @@ public class MapController(
     [HttpGet("{id:guid}/zones")]
     public async Task<IActionResult> GetZones(Guid id, CancellationToken cancellationToken)
     {
-        if (await maps.GetByIdAsync(id, cancellationToken) is null)
+        if (!await maps.ExistsAsync(id, cancellationToken))
             return NotFound(new { message = "Map was not found." });
         return Ok(await maps.GetZonesByMapIdAsync(id, cancellationToken));
     }

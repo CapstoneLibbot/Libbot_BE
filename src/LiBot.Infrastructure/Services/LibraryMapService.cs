@@ -26,19 +26,14 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
         return zones.Select(zone => ToResourceResponse<Zone, ZoneDto>(zone)).ToList();
     }
 
-    public async Task<IReadOnlyList<SavedRobotMapResponse>> GetRobotMapsAsync(CancellationToken cancellationToken)
-    {
-        var maps = await repository.GetAllAsync(occupancyMaps: true, cancellationToken);
-        return maps.OrderByDescending(map => map.Version).Where(IsRobotMap)
-            .Select(map => new SavedRobotMapResponse(map.Id, map.Name, map.Width, map.Height, map.Version)).ToList();
-    }
+    public Task<IReadOnlyList<SavedRobotMapResponse>> GetRobotMapsAsync(CancellationToken cancellationToken) =>
+        repository.GetRobotMapSummariesAsync(cancellationToken);
 
-    public async Task<SavedRobotMapResponse?> GetLatestRobotMapAsync(CancellationToken cancellationToken)
-    {
-        var maps = await repository.GetAllAsync(occupancyMaps: true, cancellationToken);
-        var map = maps.OrderByDescending(item => item.Version).FirstOrDefault(IsRobotMap);
-        return map is null ? null : new SavedRobotMapResponse(map.Id, map.Name, map.Width, map.Height, map.Version);
-    }
+    public Task<SavedRobotMapResponse?> GetLatestRobotMapAsync(CancellationToken cancellationToken) =>
+        repository.GetLatestRobotMapSummaryAsync(cancellationToken);
+
+    public Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken) =>
+        repository.ExistsAsync(id, cancellationToken);
 
     public async Task<MapResponse?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -111,18 +106,6 @@ public sealed class LibraryMapService(ILibraryMapRepository repository) : ILibra
         repository.Remove(map);
         await repository.SaveChangesAsync(cancellationToken);
         return true;
-    }
-
-    private static bool IsRobotMap(LibraryMap map)
-    {
-        try
-        {
-            using var data = JsonDocument.Parse(map.MapData);
-            return data.RootElement.TryGetProperty("format", out var format)
-                && format.ValueKind == JsonValueKind.String
-                && format.GetString() == "occupancy-grid-v1";
-        }
-        catch (JsonException) { return false; }
     }
 
     private static MapResponse ToResponse(LibraryMap map) =>

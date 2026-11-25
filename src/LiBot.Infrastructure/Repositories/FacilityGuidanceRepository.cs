@@ -14,7 +14,8 @@ public sealed class FacilityGuidanceRepository(LiBotDbContext db) : IFacilityGui
         bool exact,
         int page,
         int pageSize,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? mapId = null)
     {
         var term = query?.Trim() ?? string.Empty;
         var facilitiesQuery =
@@ -23,6 +24,11 @@ public sealed class FacilityGuidanceRepository(LiBotDbContext db) : IFacilityGui
             join floor in db.Floors.AsNoTracking() on map.FloorId equals floor.Id
             where endpoint.IsActive && endpoint.EndpointType == "WAYPOINT"
             select new { Endpoint = endpoint, Map = map, Floor = floor };
+
+        if (mapId.HasValue && mapId.Value != Guid.Empty)
+        {
+            facilitiesQuery = facilitiesQuery.Where(item => item.Endpoint.MapId == mapId.Value);
+        }
 
         if (!string.IsNullOrEmpty(term))
         {

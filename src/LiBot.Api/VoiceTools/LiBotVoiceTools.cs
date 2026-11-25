@@ -5,6 +5,7 @@ using LiBot.Application.Models;
 using LiBot.Application.Services.Robot;
 using LiBot.Application.Workflow.BookGuidance;
 using LiBot.Application.Workflow.FacilityGuidance;
+using LiBot.Domain.Enums;
 using ModelContextProtocol.Server;
 using Microsoft.Extensions.Options;
 
@@ -66,8 +67,15 @@ public sealed class LiBotVoiceTools(
         try
         {
             using var timeout = new CancellationTokenSource(ToolTimeout);
+            Guid? activeMapId = null;
+            var configuredRuntimeId = options?.Value?.GuidanceRuntimeId?.Trim();
+            var targetRuntimeId = string.IsNullOrWhiteSpace(configuredRuntimeId) ? "real" : configuredRuntimeId;
+            if (Guid.TryParse(runtimes?.Get(targetRuntimeId)?.Telemetry?.ActiveMapId, out var parsedMapId))
+            {
+                activeMapId = parsedMapId;
+            }
             var response = await facilityGuidance.SearchAsync(
-                normalizedQuery, "FUZZY", page: 1, pageSize: ResultLimit, cancellationToken: timeout.Token);
+                normalizedQuery, "FUZZY", page: 1, pageSize: ResultLimit, cancellationToken: timeout.Token, mapId: activeMapId);
             return new VoiceLocationSearchResult(
                 string.Empty,
                 response.TotalCount,
@@ -97,14 +105,25 @@ public sealed class LiBotVoiceTools(
             var book = await bookGuidance.GetBookAsync(bookId, CancellationToken.None);
             if (book is null) return VoiceBookGuidanceResult.NotFound();
 
-            var selectedCopy = book.BookItems.FirstOrDefault(item =>
-                string.Equals(item.Status, "Available", StringComparison.OrdinalIgnoreCase) &&
-                item.Location?.Endpoint is { } endpoint &&
-                double.IsFinite(endpoint.X) && double.IsFinite(endpoint.Y) && double.IsFinite(endpoint.Theta));
-            if (selectedCopy is null) return VoiceBookGuidanceResult.NotAvailable();
+            var availableCopies = book.BookItems
+                .Where(item =>
+                    string.Equals(item.Status, nameof(BookItemStatus.Available), StringComparison.OrdinalIgnoreCase) &&
+                    item.Location?.Endpoint is { } endpoint &&
+                    double.IsFinite(endpoint.X) && double.IsFinite(endpoint.Y) && double.IsFinite(endpoint.Theta))
+                .ToList();
+            if (availableCopies.Count == 0) return VoiceBookGuidanceResult.NotAvailable();
 
             if (runtimes.ValidateVoiceGuidanceStart(runtimeId) is not null)
                 return VoiceBookGuidanceResult.Unavailable();
+            var runtime = runtimes.Get(runtimeId);
+            if (runtime is null || !Guid.TryParse(runtime.Telemetry?.ActiveMapId, out var activeMapId))
+                return VoiceBookGuidanceResult.Unavailable();
+
+            var selectedCopy = availableCopies.FirstOrDefault(item =>
+                item.Location!.Endpoint!.MapId == activeMapId);
+            if (selectedCopy is null)
+                return VoiceBookGuidanceResult.Unavailable();
+            var endpointId = selectedCopy.Location!.Endpoint!.EndpointId;
 
             var backendBaseUrl = configuration["LiBot:BackendBaseUrl"]?.TrimEnd('/') ?? string.Empty;
             using var timeout = new CancellationTokenSource(ToolTimeout);
@@ -114,11 +133,12 @@ public sealed class LiBotVoiceTools(
                 BackendBaseUrl: backendBaseUrl,
                 RuntimeId: runtimeId,
                 BookId: book.BookId,
-                BookItemId: selectedCopy.Id), backendBaseUrl, timeout.Token);
+                BookItemId: selectedCopy.Id,
+                EndpointId: endpointId), backendBaseUrl, timeout.Token);
 
             return result.IsAccepted
-                ? VoiceBookGuidanceResult.Started(book.Title, result.JobId, runtimeId, book.BookId)
-                : VoiceBookGuidanceResult.Failed(book.Title, result.JobId, runtimeId, book.BookId);
+                ? VoiceBookGuidanceResult.Started(book.Title, result.JobId, runtimeId, endpointId)
+                : VoiceBookGuidanceResult.Failed(book.Title, result.JobId, runtimeId, endpointId);
         }
         catch (OperationCanceledException)
         {
@@ -153,6 +173,11 @@ public sealed class LiBotVoiceTools(
             var endpoint = location.Location.Endpoint;
             if (!double.IsFinite(endpoint.X) || !double.IsFinite(endpoint.Y) || !double.IsFinite(endpoint.Theta)
                 || runtimes.ValidateVoiceGuidanceStart(runtimeId) is not null)
+                return VoiceLocationGuidanceResult.Unavailable();
+            var runtime = runtimes.Get(runtimeId);
+            if (runtime is null
+                || !Guid.TryParse(runtime.Telemetry?.ActiveMapId, out var activeMapId)
+                || activeMapId != location.Location.MapId)
                 return VoiceLocationGuidanceResult.Unavailable();
 
             var backendBaseUrl = configuration["LiBot:BackendBaseUrl"]?.TrimEnd('/') ?? string.Empty;
@@ -230,10 +255,10 @@ public sealed record VoiceLocationSearchItem(
 public sealed record VoiceBookGuidanceResult(
     [property: JsonPropertyName("errorCode")] string ErrorCode,
     [property: JsonPropertyName("title")] string Title,
-    [property: JsonPropertyName("jobId")] Guid? JobId,
-    [property: JsonPropertyName("executionId")] string? ExecutionId,
-    [property: JsonPropertyName("runtimeId")] string? RuntimeId,
-    [property: JsonPropertyName("destinationId")] Guid? DestinationId = null)
+    [property: JsonPropertyName("jobId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] Guid? JobId = null,
+    [property: JsonPropertyName("executionId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? ExecutionId = null,
+    [property: JsonPropertyName("runtimeId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? RuntimeId = null,
+    [property: JsonPropertyName("destinationId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] Guid? DestinationId = null)
 {
     public static VoiceBookGuidanceResult Started(string title, Guid jobId, string runtimeId, Guid destinationId) =>
         new(string.Empty, title, jobId, jobId.ToString(), runtimeId, destinationId);
@@ -247,10 +272,10 @@ public sealed record VoiceBookGuidanceResult(
 public sealed record VoiceLocationGuidanceResult(
     [property: JsonPropertyName("errorCode")] string ErrorCode,
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("jobId")] Guid? JobId,
-    [property: JsonPropertyName("executionId")] string? ExecutionId,
-    [property: JsonPropertyName("runtimeId")] string? RuntimeId,
-    [property: JsonPropertyName("destinationId")] Guid? DestinationId = null)
+    [property: JsonPropertyName("jobId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] Guid? JobId = null,
+    [property: JsonPropertyName("executionId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? ExecutionId = null,
+    [property: JsonPropertyName("runtimeId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? RuntimeId = null,
+    [property: JsonPropertyName("destinationId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] Guid? DestinationId = null)
 {
     public static VoiceLocationGuidanceResult Started(string name, Guid jobId, string runtimeId, Guid destinationId) =>
         new(string.Empty, name, jobId, jobId.ToString(), runtimeId, destinationId);

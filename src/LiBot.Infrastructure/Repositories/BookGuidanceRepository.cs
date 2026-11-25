@@ -65,10 +65,10 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
 
         if (!string.IsNullOrWhiteSpace(category))
         {
-            var categoryTerm = category.Trim().ToLowerInvariant();
+            var categoryTerm = category.Trim();
             booksQuery = booksQuery.Where(item =>
                 item.CategoryName != null &&
-                EF.Functions.Like(item.CategoryName.ToLower(), $"%{categoryTerm}%"));
+                EF.Functions.Like(item.CategoryName, $"%{categoryTerm}%"));
         }
 
         var totalCount = await booksQuery.CountAsync(cancellationToken);
@@ -150,6 +150,48 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
         {
             BookItems = bookItems
         };
+    }
+
+    public async Task<BookCopyStartTarget?> GetCopyStartTargetAsync(
+        Guid bookId,
+        Guid bookItemId,
+        CancellationToken cancellationToken)
+    {
+        var bookInfo = await db.Books
+            .AsNoTracking()
+            .Where(book => book.Id == bookId)
+            .Select(book => new { book.Title })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (bookInfo is null) return null;
+
+        var copy = await (
+            from item in db.BookItems.AsNoTracking()
+            join level in db.ShelfLevels.AsNoTracking() on item.ExpectedShelfLevelId equals level.Id into levels
+            from level in levels.DefaultIfEmpty()
+            join shelf in db.Shelves.AsNoTracking() on level.ShelfId equals shelf.Id into shelves
+            from shelf in shelves.DefaultIfEmpty()
+            join endpoint in db.Endpoints.AsNoTracking().Where(e => e.IsActive)
+                on shelf.StartEndpointId equals endpoint.Id into endpoints
+            from endpoint in endpoints.DefaultIfEmpty()
+            where item.Id == bookItemId && item.BookId == bookId
+            select new
+            {
+                Status = item.Status.ToString(),
+                Endpoint = endpoint == null
+                    ? null
+                    : new NavigationEndpoint(
+                        endpoint.Id,
+                        endpoint.MapId,
+                        endpoint.Name,
+                        endpoint.PositionX,
+                        endpoint.PositionY,
+                        endpoint.Theta)
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return copy is null
+            ? new BookCopyStartTarget(bookInfo.Title, null, null)
+            : new BookCopyStartTarget(bookInfo.Title, copy.Status, copy.Endpoint);
     }
 
     public async Task<FeedbackResponse?> SaveFeedbackAsync(

@@ -20,6 +20,7 @@ public interface IBookGuidanceRepository
         CancellationToken cancellationToken);
 
     Task<BookGuidanceDetail?> GetBookAsync(Guid bookId, CancellationToken cancellationToken);
+    Task<BookCopyStartTarget?> GetCopyStartTargetAsync(Guid bookId, Guid bookItemId, CancellationToken cancellationToken);
     Task<FeedbackResponse?> SaveFeedbackAsync(FeedbackRequest request, CancellationToken cancellationToken);
     Task<IReadOnlyList<FeedbackResponse>> GetFeedbackAsync(Guid? jobId, CancellationToken cancellationToken);
     Task<FeedbackResponse?> GetFeedbackByIdAsync(Guid feedbackId, CancellationToken cancellationToken);

@@ -16,13 +16,14 @@ public sealed class FacilityGuidanceController(
     IRobotRuntimeService runtimes,
     IConfiguration configuration) : ControllerBase
 {
-    /// <summary>Tìm khu vực hoặc địa điểm theo tên.</summary>
+    /// <summary>Tìm khu vực hoặc địa điểm theo tên (tùy chọn lọc theo mapId).</summary>
     [HttpGet("search")]
     public async Task<ActionResult<FacilitySearchResponse>> Search(
         [FromQuery] string? query = null,
         [FromQuery] string matchMode = "FUZZY",
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
+        [FromQuery] Guid? mapId = null,
         CancellationToken cancellationToken = default)
     {
         if (!string.Equals(matchMode, "FUZZY", StringComparison.OrdinalIgnoreCase) &&
@@ -32,7 +33,7 @@ public sealed class FacilityGuidanceController(
         if (pageSize is < 1 or > 100) return BadRequest("pageSize must be between 1 and 100.");
         if ((long)(page - 1) * pageSize > int.MaxValue) return BadRequest("page is too large.");
 
-        return Ok(await service.SearchAsync(query, matchMode, page, pageSize, cancellationToken));
+        return Ok(await service.SearchAsync(query, matchMode, page, pageSize, cancellationToken, mapId));
     }
 
     /// <summary>Lấy toàn bộ facility đang hoạt động cùng vị trí điều hướng.</summary>
@@ -129,26 +130,44 @@ public sealed class FacilityGuidanceController(
         StartFacilityGuidanceRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
-        if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.FacilityId is null || request.RobotId == Guid.Empty)
-            return BadRequest("runtimeId, robotId and facilityId are required.");
-        if (!await jobData.RobotExistsAsync(request.RobotId, cancellationToken))
-            return NotFound("Robot not found.");
+        if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.FacilityId is null)
+            return BadRequest("runtimeId and facilityId are required.");
 
         var runtimeId = request.RuntimeId.Trim().ToLowerInvariant();
-        if (runtimes.Get(runtimeId) is null)
+        var runtime = runtimes.Get(runtimeId);
+        if (runtime is null)
             return BadRequest(new { message = $"Robot runtime '{runtimeId}' is not configured." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
-            return Conflict(new { message = "Start Gazebo runs from the job Run button so execution state stays transient." });
+            return Conflict(new { code = GuidanceErrorCodes.SimUseRunButton, message = "Start Gazebo runs from the job Run button so execution state stays transient." });
 
         var facility = await service.GetFacilityAsync(request.FacilityId.Value, cancellationToken);
         if (facility is null) return NotFound("Facility not found.");
         var endpoint = facility.Location.Endpoint;
         if (!double.IsFinite(endpoint.X) || !double.IsFinite(endpoint.Y) || !double.IsFinite(endpoint.Theta))
-            return UnprocessableEntity(new { message = "Selected facility has no valid navigation endpoint." });
+            return UnprocessableEntity(new { code = GuidanceErrorCodes.InvalidEndpoint, message = "Selected facility has no valid navigation endpoint." });
 
         var runtimeError = runtimes.ValidateGuidanceStart(runtimeId, request.ArmLeaseId);
-        if (runtimeError is not null) return Conflict(new { message = runtimeError });
+        if (runtimeError is not null)
+            return Conflict(new { code = GuidanceErrorCodes.FromRuntimeValidation(runtimeError), message = runtimeError });
+        if (!Guid.TryParse(runtime.Telemetry?.ActiveMapId, out var activeMapId))
+            return Conflict(new { code = GuidanceErrorCodes.NoActiveMap, message = "The robot has no active map. Start navigation on the map containing this destination first." });
+        if (activeMapId != facility.Location.MapId)
+            return Conflict(new { code = GuidanceErrorCodes.WrongActiveMap, message = "The selected destination is not on the robot's active map." });
+        if (!await jobData.MapExistsAsync(activeMapId, cancellationToken))
+            return NotFound("The robot's active map was not found.");
+
+        var robotId = request.RobotId;
+        if (robotId == Guid.Empty)
+        {
+            robotId = await jobData.GetOrCreateRobotIdForMapAsync(
+                activeMapId, runtimeId, runtime.DisplayName, cancellationToken);
+        }
+        else if (!await jobData.RobotExistsAsync(robotId, cancellationToken))
+        {
+            return NotFound("Robot not found.");
+        }
+
+        var queryName = !string.IsNullOrWhiteSpace(request.Query) ? request.Query.Trim() : facility.Name;
 
         var baseUrl = !string.IsNullOrWhiteSpace(request.BackendBaseUrl)
             ? request.BackendBaseUrl.TrimEnd('/')
@@ -157,7 +176,7 @@ public sealed class FacilityGuidanceController(
 
         try
         {
-            var normalizedRequest = request with { RuntimeId = runtimeId };
+            var normalizedRequest = request with { Query = queryName, RobotId = robotId, RuntimeId = runtimeId };
             var result = await service.StartAsync(normalizedRequest, baseUrl, cancellationToken);
             if (result.Workflow is null)
             {
@@ -169,7 +188,7 @@ public sealed class FacilityGuidanceController(
             {
                 var message = GetString(result.Robot, "message") ?? GetString(result.Robot, "error")
                     ?? "Robot runtime did not accept the facility guidance workflow.";
-                return UnprocessableEntity(new { message, jobId = result.JobId, robot = result.Robot });
+                return UnprocessableEntity(new { code = GuidanceErrorCodes.RobotRejected, message, jobId = result.JobId, robot = result.Robot });
             }
 
             return Accepted(new

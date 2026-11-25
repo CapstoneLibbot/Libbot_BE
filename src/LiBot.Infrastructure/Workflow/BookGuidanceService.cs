@@ -6,6 +6,7 @@ using LiBot.Application.Models;
 using LiBot.Application.Services.Workflow;
 using LiBot.Application.Workflow;
 using LiBot.Contracts.Workflow;
+using LiBot.Domain.Enums;
 using LiBot.Domain.Job;
 using LiBot.Infrastructure.Robot;
 
@@ -46,6 +47,12 @@ public sealed class BookGuidanceService(
         Guid bookId,
         CancellationToken cancellationToken)
         => books.GetBookAsync(bookId, cancellationToken);
+
+    public Task<BookCopyStartTarget?> GetCopyStartTargetAsync(
+        Guid bookId,
+        Guid bookItemId,
+        CancellationToken cancellationToken)
+        => books.GetCopyStartTargetAsync(bookId, bookItemId, cancellationToken);
 
     public Task<FeedbackResponse?> SaveFeedbackAsync(
         FeedbackRequest request,
@@ -122,7 +129,8 @@ public sealed class BookGuidanceService(
             return new BookGuidanceStartResult(Guid.Empty, null, default, false);
         }
 
-        var job = new Job("Search & Guide to Book", $"Reader search: {request.Query.Trim()}",
+        var queryText = request.Query?.Trim() ?? string.Empty;
+        var job = new Job("Search & Guide to Book", $"Reader search: {(string.IsNullOrEmpty(queryText) ? "Guidance" : queryText)}",
             request.RobotId, loadedWorkflow.Id);
         job.Start();
         var runtimeId = string.IsNullOrWhiteSpace(request.RuntimeId)
@@ -150,15 +158,17 @@ public sealed class BookGuidanceService(
             status = "ACCEPTED",
             updatedAt = DateTime.UtcNow
         }));
-        var initialContext = JsonSerializer.Serialize(new Dictionary<string, object?>
+        var contextValues = new Dictionary<string, object?>
         {
-            ["query"] = request.Query.Trim(),
+            ["query"] = queryText,
             ["book_id"] = request.BookId?.ToString(),
             ["book_item_id"] = request.BookItemId?.ToString(),
+            ["endpoint_id"] = request.EndpointId?.ToString(),
             ["runtime_id"] = runtimeId,
             ["task_id"] = job.Id.ToString(),
             ["backend_base_url"] = backendBaseUrl
-        });
+        };
+        var initialContext = JsonSerializer.Serialize(contextValues);
         await workflowRepository.CreateExecutionAsync(job, jobTask, workflowDocument, initialContext, cancellationToken);
         var persistedWorkflow = await jobData.GetRobotWorkflowDocumentAsync(job.Id, cancellationToken)
             ?? throw new BookGuidanceWorkflowConfigurationException("The job step configuration could not be loaded.");
@@ -167,15 +177,7 @@ public sealed class BookGuidanceService(
             "start_workflow",
             job.Id.ToString(),
             job.Id.ToString(),
-            new Dictionary<string, object?>
-            {
-                ["query"] = request.Query.Trim(),
-                ["book_id"] = request.BookId?.ToString(),
-                ["book_item_id"] = request.BookItemId?.ToString(),
-                ["runtime_id"] = runtimeId,
-                ["task_id"] = job.Id.ToString(),
-                ["backend_base_url"] = backendBaseUrl
-            },
+            contextValues,
             persistedWorkflow.Steps.Select(ToStepDictionary).ToArray());
 
         try
@@ -277,7 +279,7 @@ public sealed class BookGuidanceService(
     {
         var job = await workflowRepository.GetJobAsync(taskId, cancellationToken);
         if (job is null) return false;
-        if (job.Status is "Completed" or "Failed" or "Cancelled") return true;
+        if (job.StatusCode is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled) return true;
 
         if (string.Equals(request.Status, "SUCCEEDED", StringComparison.OrdinalIgnoreCase)) job.Complete();
         else job.Fail();

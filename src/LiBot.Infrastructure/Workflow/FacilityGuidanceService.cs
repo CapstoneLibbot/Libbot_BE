@@ -6,6 +6,7 @@ using LiBot.Application.Models;
 using LiBot.Application.Services.Workflow;
 using LiBot.Application.Workflow;
 using LiBot.Contracts.Workflow;
+using LiBot.Domain.Enums;
 using LiBot.Domain.Job;
 using LiBot.Infrastructure.Robot;
 
@@ -28,10 +29,11 @@ public sealed class FacilityGuidanceService(
         string matchMode,
         int page,
         int pageSize,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? mapId = null)
     {
         var exact = string.Equals(matchMode, "EXACT", StringComparison.OrdinalIgnoreCase);
-        return await facilities.SearchAsync(query, exact, page, pageSize, cancellationToken);
+        return await facilities.SearchAsync(query, exact, page, pageSize, cancellationToken, mapId);
     }
 
     public Task<IReadOnlyList<FacilityGuidanceDetail>> GetAllFacilitiesAsync(CancellationToken cancellationToken) =>
@@ -117,7 +119,8 @@ public sealed class FacilityGuidanceService(
             return new FacilityGuidanceStartResult(Guid.Empty, null, default, false);
         }
 
-        var job = new Job("Search & Guide to Facility", $"Reader facility search: {request.Query.Trim()}",
+        var queryText = request.Query?.Trim() ?? string.Empty;
+        var job = new Job("Search & Guide to Facility", $"Reader facility search: {(string.IsNullOrEmpty(queryText) ? "Facility Guidance" : queryText)}",
             request.RobotId, loadedWorkflow.Id);
         job.Start();
         var runtimeId = string.IsNullOrWhiteSpace(request.RuntimeId)
@@ -145,14 +148,15 @@ public sealed class FacilityGuidanceService(
             status = "ACCEPTED",
             updatedAt = DateTime.UtcNow
         }));
-        var initialContext = JsonSerializer.Serialize(new Dictionary<string, object?>
+        var contextValues = new Dictionary<string, object?>
         {
-            ["query"] = request.Query.Trim(),
+            ["query"] = queryText,
             ["facility_id"] = request.FacilityId?.ToString(),
             ["runtime_id"] = runtimeId,
             ["task_id"] = job.Id.ToString(),
             ["backend_base_url"] = backendBaseUrl
-        });
+        };
+        var initialContext = JsonSerializer.Serialize(contextValues);
         await workflowRepository.CreateExecutionAsync(job, jobTask, workflowDocument, initialContext, cancellationToken);
         var persistedWorkflow = await jobData.GetRobotWorkflowDocumentAsync(job.Id, cancellationToken)
             ?? throw new FacilityGuidanceWorkflowConfigurationException("The job step configuration could not be loaded.");
@@ -161,14 +165,7 @@ public sealed class FacilityGuidanceService(
             "start_workflow",
             job.Id.ToString(),
             job.Id.ToString(),
-            new Dictionary<string, object?>
-            {
-                ["query"] = request.Query.Trim(),
-                ["facility_id"] = request.FacilityId?.ToString(),
-                ["runtime_id"] = runtimeId,
-                ["task_id"] = job.Id.ToString(),
-                ["backend_base_url"] = backendBaseUrl
-            },
+            contextValues,
             persistedWorkflow.Steps.Select(ToStepDictionary).ToArray());
 
         try
@@ -270,7 +267,7 @@ public sealed class FacilityGuidanceService(
     {
         var job = await workflowRepository.GetJobAsync(taskId, cancellationToken);
         if (job is null) return false;
-        if (job.Status is "Completed" or "Failed" or "Cancelled") return true;
+        if (job.StatusCode is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled) return true;
 
         if (string.Equals(request.Status, "SUCCEEDED", StringComparison.OrdinalIgnoreCase)) job.Complete();
         else job.Fail();
