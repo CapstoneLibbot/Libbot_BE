@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.ComponentModel.DataAnnotations.Schema;
 using LiBot.Domain.Common;
 
-namespace LiBot.Domain.Mission;
+namespace LiBot.Domain.Job;
 
 public class JobTask : Entity
 {
@@ -72,18 +72,21 @@ public class JobTask : Entity
         Status = "Pending";
     }
 
-    public JobTask(Guid jobId, Guid workflowTaskId, string name, string runtimeId = "real", string status = "Pending")
+    public JobTask(Guid jobId, Guid workflowTaskId, int sequenceNo, string name, string runtimeId = "real", string status = "Pending")
     {
         if (jobId == Guid.Empty)
             throw new ArgumentException("Job id is required.", nameof(jobId));
         if (workflowTaskId == Guid.Empty)
             throw new ArgumentException("Workflow task id is required.", nameof(workflowTaskId));
+        if (sequenceNo < 1)
+            throw new ArgumentOutOfRangeException(nameof(sequenceNo));
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Job task name is required.", nameof(name));
         if (string.IsNullOrWhiteSpace(status))
             throw new ArgumentException("Job task status is required.", nameof(status));
         JobId = jobId;
         WorkflowTaskId = workflowTaskId;
+        SequenceNo = sequenceNo;
         Name = name.Trim();
         Status = status.Trim();
         RuntimeId = string.IsNullOrWhiteSpace(runtimeId) ? "real" : runtimeId.Trim().ToLowerInvariant();

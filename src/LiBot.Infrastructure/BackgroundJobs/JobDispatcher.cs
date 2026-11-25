@@ -1,6 +1,6 @@
 namespace LiBot.Infrastructure.BackgroundJobs;
 
-public class MissionDispatcher
+public class JobDispatcher
 {
     public Task DispatchAsync(CancellationToken cancellationToken = default)
     {

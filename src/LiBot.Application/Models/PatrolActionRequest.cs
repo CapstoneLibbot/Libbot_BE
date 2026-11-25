@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace LiBot.Application.Models;
 
 public sealed record PatrolActionRequest(
-    Guid MissionId,
+    Guid JobId,
     string RuntimeId,
     string Action,
     JsonElement Payload,

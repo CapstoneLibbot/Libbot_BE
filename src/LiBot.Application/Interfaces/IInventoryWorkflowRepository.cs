@@ -21,15 +21,15 @@ public interface IInventoryWorkflowRepository
         IReadOnlyCollection<InventoryBookItemUpdate> updates,
         CancellationToken cancellationToken);
 
-    Task<Guid> AddJobEventAsync(Guid missionId, string eventType, string? data, CancellationToken cancellationToken);
+    Task<Guid> AddJobEventAsync(Guid jobId, string eventType, string? data, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<string?>> GetJobEventDataAsync(
-        Guid missionId,
+        Guid jobId,
         string eventType,
         CancellationToken cancellationToken);
 
     Task<Guid> SaveInventoryReportAsync(
-        Guid missionId,
+        Guid jobId,
         string scopeType,
         int totalShelves,
         int totalBooksScanned,
@@ -39,5 +39,5 @@ public interface IInventoryWorkflowRepository
         string data,
         CancellationToken cancellationToken);
 
-    Task<InventoryReportRecord?> GetInventoryReportAsync(Guid missionId, CancellationToken cancellationToken);
+    Task<InventoryReportRecord?> GetInventoryReportAsync(Guid jobId, CancellationToken cancellationToken);
 }

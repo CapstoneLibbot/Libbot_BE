@@ -150,6 +150,30 @@ public sealed class WorkflowDocumentService(IWorkflowDocumentRepository reposito
         return null;
     }
 
+    public string? ValidateTasks(IReadOnlyList<WorkflowTaskWriteRequest> tasks)
+    {
+        if (tasks.Count == 0) return "A workflow must contain at least one task.";
+        if (tasks.Any(item => item.Sequence < 1)) return "Workflow task sequence numbers must be positive.";
+        if (tasks.Select(item => item.Sequence).Distinct().Count() != tasks.Count)
+            return "Workflow task sequence numbers must be unique.";
+        if (tasks.Any(item => string.IsNullOrWhiteSpace(item.Name)))
+            return "Workflow task names are required.";
+        if (tasks.Any(item => item.Steps is null || item.Steps.Count == 0))
+            return "Every workflow task must contain at least one step.";
+
+        var flattened = new List<WorkflowStepWriteRequest>();
+        var sequence = 1;
+        foreach (var task in tasks.OrderBy(item => item.Sequence))
+        {
+            if (task.Steps.Any(item => item.Sequence < 1))
+                return $"Task '{task.Name}' step sequence numbers must be positive.";
+            if (task.Steps.Select(item => item.Sequence).Distinct().Count() != task.Steps.Count)
+                return $"Task '{task.Name}' step sequence numbers must be unique.";
+            flattened.AddRange(task.Steps.OrderBy(item => item.Sequence).Select(step => step with { Sequence = sequence++ }));
+        }
+        return ValidateSteps(flattened);
+    }
+
     public async Task<RobotWorkflowDocument?> BuildRobotDocumentAsync(
         Guid workflowId,
         string runtimeId,
@@ -163,109 +187,128 @@ public sealed class WorkflowDocumentService(IWorkflowDocumentRepository reposito
         var stepsByTask = taskSteps.GroupBy(item => item.WorkflowTaskId)
             .ToDictionary(group => group.Key, group => group.ToList());
 
-        var exportedSteps = new List<JsonElement>(tasks.Count);
-        for (var index = 0; index < tasks.Count; index++)
+        var exportedTasks = new List<RobotWorkflowTaskDocument>(tasks.Count);
+        var writeSteps = new List<WorkflowStepWriteRequest>();
+        var globalIndex = 0;
+        foreach (var task in tasks.OrderBy(item => item.SequenceNumber))
         {
-            var task = tasks[index];
-            if (!stepsByTask.TryGetValue(task.Id, out var matching) || matching.Count != 1)
+            if (!stepsByTask.TryGetValue(task.Id, out var matching) || matching.Count == 0)
                 throw new InvalidWorkflowDefinitionException(
-                    $"Task '{task.Name}' must contain exactly one configured step.");
+                    $"Task '{task.Name}' must contain at least one configured step.");
 
-            var taskStep = matching[0];
-            if (!SupportedTypes.Contains(taskStep.StepType))
-                throw new InvalidWorkflowDefinitionException(
-                    $"Step '{task.Name}' uses unsupported type '{taskStep.StepType}'.");
-
-            var config = ParseConfiguration(taskStep.Configuration, task.Name);
-            var stepId = GetStepId(config, task.Name, index);
-            var definition = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
-            foreach (var property in config.EnumerateObject()) definition[property.Name] = property.Value.Clone();
-            definition["id"] = JsonSerializer.SerializeToElement(stepId);
-            definition["name"] = JsonSerializer.SerializeToElement(task.Name);
-            definition["type"] = JsonSerializer.SerializeToElement(taskStep.StepType.ToUpperInvariant());
-
-            var nestedParameters = config.TryGetProperty("params", out var configuredParams);
-            var movementConfig = nestedParameters ? configuredParams : config;
-            var endpointId = ReadGuid(movementConfig, "endpoint_id");
-            var endpointName = ReadString(movementConfig, "endpoint_name");
-            var targetText = ReadString(movementConfig, "target");
-            if (endpointId is null && endpointName is null && !string.IsNullOrWhiteSpace(targetText)
-                && !targetText.Contains("${", StringComparison.Ordinal))
+            var exportedSteps = new List<RobotWorkflowStepDocument>(matching.Count);
+            foreach (var taskStep in matching.OrderBy(item => item.SequenceNo))
             {
-                if (Guid.TryParse(targetText, out var targetId)) endpointId = targetId;
-                else endpointName = targetText;
-            }
-            if (endpointId is not null || endpointName is not null)
-            {
-                var endpoint = await repository.GetActiveEndpointAsync(endpointId, endpointName, cancellationToken);
-                if (endpoint is null)
+                if (!SupportedTypes.Contains(taskStep.StepType))
                     throw new InvalidWorkflowDefinitionException(
-                        $"MOVE step '{task.Name}' refers to an inactive or unknown endpoint.");
-                var updatedParameters = movementConfig.EnumerateObject()
-                    .Where(property => !property.Name.Equals("endpoint_id", StringComparison.OrdinalIgnoreCase)
-                        && !property.Name.Equals("endpoint_name", StringComparison.OrdinalIgnoreCase))
-                    .ToDictionary(property => property.Name, property => property.Value.Clone(), StringComparer.OrdinalIgnoreCase);
-                updatedParameters["target"] = JsonSerializer.SerializeToElement(new
-                {
-                    x = endpoint.PositionX,
-                    y = endpoint.PositionY,
-                    theta = endpoint.Theta
-                });
-                if (nestedParameters) definition["params"] = JsonSerializer.SerializeToElement(updatedParameters);
-                else
-                {
-                    definition.Remove("endpoint_id");
-                    definition.Remove("endpoint_name");
-                    definition["target"] = updatedParameters["target"];
-                }
-            }
-            else if (movementConfig.TryGetProperty("x", out var x) && movementConfig.TryGetProperty("y", out var y))
-            {
-                var updatedParameters = movementConfig.EnumerateObject()
-                    .Where(property => !property.Name.Equals("x", StringComparison.OrdinalIgnoreCase)
-                        && !property.Name.Equals("y", StringComparison.OrdinalIgnoreCase)
-                        && !property.Name.Equals("theta", StringComparison.OrdinalIgnoreCase))
-                    .ToDictionary(property => property.Name, property => property.Value.Clone(), StringComparer.OrdinalIgnoreCase);
-                updatedParameters["target"] = JsonSerializer.SerializeToElement(new
-                {
-                    x = x.GetDouble(),
-                    y = y.GetDouble(),
-                    theta = movementConfig.TryGetProperty("theta", out var theta) ? theta.GetDouble() : 0d
-                });
-                if (nestedParameters) definition["params"] = JsonSerializer.SerializeToElement(updatedParameters);
-                else
-                {
-                    definition["target"] = updatedParameters["target"];
-                    definition.Remove("x");
-                    definition.Remove("y");
-                    definition.Remove("theta");
-                }
-            }
+                        $"Step '{task.Name}' uses unsupported type '{taskStep.StepType}'.");
 
-            if (string.Equals(workflow.Type, "BOOKSHELF_INVENTORY", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(task.Name, "MOVE_TO_INVENTORY_SHELF", StringComparison.Ordinal)
-                && string.Equals(taskStep.StepType, "MOVE", StringComparison.OrdinalIgnoreCase))
-            {
-                if (nestedParameters)
+                var stepConfig = ParseConfiguration(taskStep.Configuration, task.Name);
+                var stepName = ReadString(stepConfig, "name")
+                    ?? (matching.Count == 1 ? task.Name : $"{task.Name} {taskStep.SequenceNo}");
+                var stepId = GetStepId(stepConfig, stepName, globalIndex);
+                var definition = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+                foreach (var property in stepConfig.EnumerateObject()) definition[property.Name] = property.Value.Clone();
+                definition["id"] = JsonSerializer.SerializeToElement(stepId);
+                definition["name"] = JsonSerializer.SerializeToElement(stepName);
+                definition["type"] = JsonSerializer.SerializeToElement(taskStep.StepType.ToUpperInvariant());
+
+                var nestedParameters = stepConfig.TryGetProperty("params", out var configuredParams);
+                var movementConfig = nestedParameters ? configuredParams : stepConfig;
+                var endpointId = ReadGuid(movementConfig, "endpoint_id");
+                var endpointName = ReadString(movementConfig, "endpoint_name");
+                var targetText = ReadString(movementConfig, "target");
+                if (endpointId is null && endpointName is null && !string.IsNullOrWhiteSpace(targetText)
+                    && !targetText.Contains("${", StringComparison.Ordinal))
                 {
-                    var parameters = definition["params"].EnumerateObject()
-                        .ToDictionary(property => property.Name, property => property.Value.Clone(), StringComparer.OrdinalIgnoreCase);
-                    if (!parameters.ContainsKey("_inventory_shelf_scan"))
-                        parameters["_inventory_shelf_scan"] = JsonSerializer.SerializeToElement(true);
-                    definition["params"] = JsonSerializer.SerializeToElement(parameters);
+                    if (Guid.TryParse(targetText, out var targetId)) endpointId = targetId;
+                    else endpointName = targetText;
                 }
-                else if (!definition.ContainsKey("_inventory_shelf_scan"))
-                    definition["_inventory_shelf_scan"] = JsonSerializer.SerializeToElement(true);
+                if (endpointId is not null || endpointName is not null)
+                {
+                    var endpoint = await repository.GetActiveEndpointAsync(endpointId, endpointName, cancellationToken);
+                    if (endpoint is null)
+                        throw new InvalidWorkflowDefinitionException(
+                            $"MOVE step '{stepName}' refers to an inactive or unknown endpoint.");
+                    var updatedParameters = movementConfig.EnumerateObject()
+                        .Where(property => !property.Name.Equals("endpoint_id", StringComparison.OrdinalIgnoreCase)
+                            && !property.Name.Equals("endpoint_name", StringComparison.OrdinalIgnoreCase))
+                        .ToDictionary(property => property.Name, property => property.Value.Clone(), StringComparer.OrdinalIgnoreCase);
+                    updatedParameters["target"] = JsonSerializer.SerializeToElement(new
+                    {
+                        x = endpoint.PositionX,
+                        y = endpoint.PositionY,
+                        theta = endpoint.Theta
+                    });
+                    if (nestedParameters) definition["params"] = JsonSerializer.SerializeToElement(updatedParameters);
+                    else
+                    {
+                        definition.Remove("endpoint_id");
+                        definition.Remove("endpoint_name");
+                        definition["target"] = updatedParameters["target"];
+                    }
+                }
+                else if (movementConfig.TryGetProperty("x", out var x) && movementConfig.TryGetProperty("y", out var y))
+                {
+                    var updatedParameters = movementConfig.EnumerateObject()
+                        .Where(property => !property.Name.Equals("x", StringComparison.OrdinalIgnoreCase)
+                            && !property.Name.Equals("y", StringComparison.OrdinalIgnoreCase)
+                            && !property.Name.Equals("theta", StringComparison.OrdinalIgnoreCase))
+                        .ToDictionary(property => property.Name, property => property.Value.Clone(), StringComparer.OrdinalIgnoreCase);
+                    updatedParameters["target"] = JsonSerializer.SerializeToElement(new
+                    {
+                        x = x.GetDouble(),
+                        y = y.GetDouble(),
+                        theta = movementConfig.TryGetProperty("theta", out var theta) ? theta.GetDouble() : 0d
+                    });
+                    if (nestedParameters) definition["params"] = JsonSerializer.SerializeToElement(updatedParameters);
+                    else
+                    {
+                        definition["target"] = updatedParameters["target"];
+                        definition.Remove("x");
+                        definition.Remove("y");
+                        definition.Remove("theta");
+                    }
+                }
+
+                if (string.Equals(workflow.Type, "BOOKSHELF_INVENTORY", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(stepName, "MOVE_TO_INVENTORY_SHELF", StringComparison.Ordinal)
+                    && string.Equals(taskStep.StepType, "MOVE", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (nestedParameters)
+                    {
+                        var parameters = definition["params"].EnumerateObject()
+                            .ToDictionary(property => property.Name, property => property.Value.Clone(), StringComparer.OrdinalIgnoreCase);
+                        if (!parameters.ContainsKey("_inventory_shelf_scan"))
+                            parameters["_inventory_shelf_scan"] = JsonSerializer.SerializeToElement(true);
+                        definition["params"] = JsonSerializer.SerializeToElement(parameters);
+                    }
+                    else if (!definition.ContainsKey("_inventory_shelf_scan"))
+                        definition["_inventory_shelf_scan"] = JsonSerializer.SerializeToElement(true);
+                }
+
+                var exportedConfiguration = JsonSerializer.SerializeToElement(definition);
+                exportedSteps.Add(new RobotWorkflowStepDocument(
+                    taskStep.Id,
+                    taskStep.SequenceNo,
+                    taskStep.StepType.ToUpperInvariant(),
+                    exportedConfiguration));
+                writeSteps.Add(new WorkflowStepWriteRequest(
+                    ++globalIndex,
+                    taskStep.StepType,
+                    stepName,
+                    stepConfig,
+                    stepId,
+                    taskStep.Description));
             }
-            exportedSteps.Add(JsonSerializer.SerializeToElement(definition));
+            exportedTasks.Add(new RobotWorkflowTaskDocument(
+                task.Id,
+                task.SequenceNumber,
+                task.Name,
+                task.Description,
+                exportedSteps));
         }
 
-        var writeSteps = tasks.Select((task, index) => new WorkflowStepWriteRequest(
-            task.SequenceNumber,
-            stepsByTask[task.Id][0].StepType,
-            task.Name,
-            ParseConfiguration(stepsByTask[task.Id][0].Configuration, task.Name),
-            Description: task.Description)).ToList();
         var validationError = ValidateSteps(writeSteps);
         if (validationError is not null) throw new InvalidWorkflowDefinitionException(validationError);
 
@@ -275,7 +318,7 @@ public sealed class WorkflowDocumentService(IWorkflowDocumentRepository reposito
             workflow.Name,
             workflow.Type,
             runtimeId.ToLowerInvariant(),
-            exportedSteps);
+            exportedTasks);
     }
 
     private static JsonElement ParseConfiguration(string? configuration, string stepName)

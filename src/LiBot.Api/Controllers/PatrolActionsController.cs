@@ -28,10 +28,10 @@ public sealed class PatrolActionsController(
     [HttpPost]
     public async Task<IActionResult> Execute(PatrolActionRequest request, CancellationToken cancellationToken)
     {
-        if (request.MissionId == Guid.Empty || string.IsNullOrWhiteSpace(request.RuntimeId)
+        if (request.JobId == Guid.Empty || string.IsNullOrWhiteSpace(request.RuntimeId)
             || string.IsNullOrWhiteSpace(request.Action) || request.Payload.ValueKind != JsonValueKind.Object
             || string.IsNullOrWhiteSpace(request.IdempotencyKey))
-            return BadRequest(new { message = "missionId, runtimeId, action, object payload and idempotencyKey are required." });
+            return BadRequest(new { message = "jobId, runtimeId, action, object payload and idempotencyKey are required." });
 
         var action = request.Action.Trim().ToUpperInvariant();
         if (!SupportedActions.Contains(action))
@@ -40,24 +40,24 @@ public sealed class PatrolActionsController(
         if (runtimeId is not ("real" or "sim"))
             return BadRequest(new { message = "runtimeId must be 'real' or 'sim'." });
 
-        var mission = await dataService.GetMissionAsync(request.MissionId, cancellationToken);
+        var job = await dataService.GetJobAsync(request.JobId, cancellationToken);
         var activeSimulation = runtimeId == "sim"
-            && SimulationExecutionStore.TryGetExecution(request.MissionId, out _, out var activeRuntime)
+            && SimulationExecutionStore.TryGetExecution(request.JobId, out _, out var activeRuntime)
             && string.Equals(activeRuntime, "sim", StringComparison.OrdinalIgnoreCase);
-        if (mission is null && !activeSimulation) return NotFound(new { message = "Mission task not found." });
-        if (mission is not null && !string.Equals(mission.RuntimeId, runtimeId, StringComparison.OrdinalIgnoreCase))
-            return Conflict(new { message = "Runtime does not match the mission." });
+        if (job is null && !activeSimulation) return NotFound(new { message = "Job task not found." });
+        if (job is not null && !string.Equals(job.RuntimeId, runtimeId, StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { message = "Runtime does not match the job." });
         if (runtimeId == "sim" && !activeSimulation)
-            return Conflict(new { message = "No active in-memory simulation exists for this mission." });
+            return Conflict(new { message = "No active in-memory simulation exists for this job." });
 
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             action + ":" + request.Payload.GetRawText())));
-        var cacheKey = $"{request.MissionId:N}:{request.IdempotencyKey.Trim()}";
+        var cacheKey = $"{request.JobId:N}:{request.IdempotencyKey.Trim()}";
         var gate = ActionLocks.GetOrAdd(cacheKey, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken);
         try
         {
-            var cached = await FindCachedActionAsync(request.MissionId, runtimeId, request.IdempotencyKey.Trim(), cancellationToken);
+            var cached = await FindCachedActionAsync(request.JobId, runtimeId, request.IdempotencyKey.Trim(), cancellationToken);
             if (cached is not null)
             {
                 if (!string.Equals(cached.Fingerprint, fingerprint, StringComparison.Ordinal))
@@ -89,9 +89,9 @@ public sealed class PatrolActionsController(
                 response
             });
             if (runtimeId == "sim")
-                SimulationWorkflowDataStore.AddPatrolAction(request.MissionId, request.IdempotencyKey.Trim(), fingerprint, response);
+                SimulationWorkflowDataStore.AddPatrolAction(request.JobId, request.IdempotencyKey.Trim(), fingerprint, response);
             else
-                await dataService.AddJobEventAsync(request.MissionId, "PATROL_ACTION_IDEMPOTENCY", idempotencyRecord, cancellationToken);
+                await dataService.AddJobEventAsync(request.JobId, "PATROL_ACTION_IDEMPOTENCY", idempotencyRecord, cancellationToken);
             return Ok(response);
         }
         finally
@@ -257,7 +257,7 @@ public sealed class PatrolActionsController(
             var item = new
             {
                 event_id = Guid.NewGuid(),
-                mission_id = request.MissionId,
+                job_id = request.JobId,
                 runtime_id = runtimeId,
                 execution_id = executionId,
                 path_id = pathId,
@@ -269,21 +269,21 @@ public sealed class PatrolActionsController(
             events.Add(item);
             if (runtimeId == "sim")
             {
-                SimulationWorkflowDataStore.AddPatrolObservation(request.MissionId, item);
-                SimulationWorkflowDataStore.AddPatrolCategory(request.MissionId, category);
+                SimulationWorkflowDataStore.AddPatrolObservation(request.JobId, item);
+                SimulationWorkflowDataStore.AddPatrolCategory(request.JobId, category);
             }
             else
             {
-                await dataService.AddJobEventAsync(request.MissionId, "PATROL_OBSERVATION", JsonSerializer.Serialize(item), cancellationToken);
+                await dataService.AddJobEventAsync(request.JobId, "PATROL_OBSERVATION", JsonSerializer.Serialize(item), cancellationToken);
             }
         }
 
-        var classificationData = JsonSerializer.Serialize(new { mission_id = request.MissionId, runtime_id = runtimeId, execution_id = executionId, path_id = pathId, events });
+        var classificationData = JsonSerializer.Serialize(new { job_id = request.JobId, runtime_id = runtimeId, execution_id = executionId, path_id = pathId, events });
         var jobEventId = runtimeId == "sim"
             ? Guid.NewGuid()
-            : await dataService.AddJobEventAsync(request.MissionId, "PATROL_OBSERVATIONS_CLASSIFIED", classificationData, cancellationToken);
+            : await dataService.AddJobEventAsync(request.JobId, "PATROL_OBSERVATIONS_CLASSIFIED", classificationData, cancellationToken);
         if (runtimeId == "sim")
-            SimulationWorkflowDataStore.AddPatrolObservation(request.MissionId, new { event_type = "PATROL_OBSERVATIONS_CLASSIFIED", job_event_id = jobEventId, execution_id = executionId, path_id = pathId, events });
+            SimulationWorkflowDataStore.AddPatrolObservation(request.JobId, new { event_type = "PATROL_OBSERVATIONS_CLASSIFIED", job_event_id = jobEventId, execution_id = executionId, path_id = pathId, events });
         return new ActionResult(new { events, job_event_id = jobEventId }, events.Count);
     }
 
@@ -305,15 +305,15 @@ public sealed class PatrolActionsController(
         var planned = Math.Max(1, ReadInt(request.Payload, "planned_path_count") ?? 1);
 
         var priorCoverage = runtimeId == "sim"
-            ? SimulationWorkflowDataStore.GetPatrolCoverage(request.MissionId)
-            : (await dataService.GetJobEventDataAsync(request.MissionId, "PATROL_PATH_COVERAGE", cancellationToken))
+            ? SimulationWorkflowDataStore.GetPatrolCoverage(request.JobId)
+            : (await dataService.GetJobEventDataAsync(request.JobId, "PATROL_PATH_COVERAGE", cancellationToken))
                 .Where(data => MatchesExecution(data, executionId)).Where(data => !string.IsNullOrWhiteSpace(data))
                 .Select(data => ParseElement(data!)).Where(item => item.ValueKind == JsonValueKind.Object).ToArray();
         var priorCount = priorCoverage.Count(item => ReadString(item, "status") == "COVERED");
         var coveredAt = DateTime.UtcNow;
         var coverageEvent = new
         {
-            mission_id = request.MissionId,
+            job_id = request.JobId,
             runtime_id = runtimeId,
             execution_id = executionId,
             job_event_id = jobEventId,
@@ -326,12 +326,12 @@ public sealed class PatrolActionsController(
         Guid coverageEventId;
         if (runtimeId == "sim")
         {
-            SimulationWorkflowDataStore.AddPatrolCoverage(request.MissionId, coverageEvent);
+            SimulationWorkflowDataStore.AddPatrolCoverage(request.JobId, coverageEvent);
             coverageEventId = Guid.NewGuid();
         }
         else
         {
-            coverageEventId = await dataService.AddJobEventAsync(request.MissionId, "PATROL_PATH_COVERAGE", JsonSerializer.Serialize(coverageEvent), cancellationToken);
+            coverageEventId = await dataService.AddJobEventAsync(request.JobId, "PATROL_PATH_COVERAGE", JsonSerializer.Serialize(coverageEvent), cancellationToken);
         }
         var covered = priorCount + 1;
         return new ActionResult(new
@@ -359,15 +359,15 @@ public sealed class PatrolActionsController(
     {
         var executionId = ReadString(request.Payload, "execution_id");
         var observationData = runtimeId == "sim"
-            ? SimulationWorkflowDataStore.GetPatrolObservations(request.MissionId)
+            ? SimulationWorkflowDataStore.GetPatrolObservations(request.JobId)
                 .Where(item => ReadString(item, "event_type") is null)
                 .ToArray()
-            : (await dataService.GetJobEventDataAsync(request.MissionId, "PATROL_OBSERVATION", cancellationToken))
+            : (await dataService.GetJobEventDataAsync(request.JobId, "PATROL_OBSERVATION", cancellationToken))
                 .Where(data => MatchesExecution(data, executionId)).Where(data => !string.IsNullOrWhiteSpace(data))
                 .Select(data => ParseElement(data!)).ToArray();
         var coverageData = runtimeId == "sim"
-            ? SimulationWorkflowDataStore.GetPatrolCoverage(request.MissionId)
-            : (await dataService.GetJobEventDataAsync(request.MissionId, "PATROL_PATH_COVERAGE", cancellationToken))
+            ? SimulationWorkflowDataStore.GetPatrolCoverage(request.JobId)
+            : (await dataService.GetJobEventDataAsync(request.JobId, "PATROL_PATH_COVERAGE", cancellationToken))
                 .Where(data => MatchesExecution(data, executionId)).Where(data => !string.IsNullOrWhiteSpace(data))
                 .Select(data => ParseElement(data!)).ToArray();
 
@@ -377,12 +377,12 @@ public sealed class PatrolActionsController(
         var warnings = categories.Count(item => item is "WARNING" or "OTHER_WARNING");
         var coveredCount = coverageData.Count(item => ReadString(item, "status") == "COVERED");
         var totalPaths = coverageData.Select(item => ReadInt(item, "planned_path_count") ?? 0).DefaultIfEmpty(0).Max();
-        var started = (await dataService.GetMissionAsync(request.MissionId, cancellationToken))?.StartedAtUtc;
+        var started = (await dataService.GetJobAsync(request.JobId, cancellationToken))?.StartedAtUtc;
         var durationSeconds = started is DateTime startedAt ? Math.Max(0, (int)(DateTime.UtcNow - startedAt).TotalSeconds) : 0;
         var reportData = new
         {
             report_type = runtimeId == "sim" ? "SIMULATION_PATROL" : "PATROL",
-            mission_id = request.MissionId,
+            job_id = request.JobId,
             runtime_id = runtimeId,
             execution_id = executionId,
             duration_seconds = durationSeconds,
@@ -404,14 +404,14 @@ public sealed class PatrolActionsController(
         if (runtimeId == "sim")
         {
             reportId = Guid.NewGuid();
-            var simulationReport = new { report_id = reportId, reportData.report_type, reportData.mission_id, reportData.runtime_id, reportData.execution_id, reportData.duration_seconds, reportData.observation_count, reportData.fallen_book_count, reportData.obstacle_count, reportData.warning_count, reportData.path_coverage, reportData.observations };
-            SimulationWorkflowDataStore.SetPatrolReport(request.MissionId, simulationReport);
+            var simulationReport = new { report_id = reportId, reportData.report_type, reportData.job_id, reportData.runtime_id, reportData.execution_id, reportData.duration_seconds, reportData.observation_count, reportData.fallen_book_count, reportData.obstacle_count, reportData.warning_count, reportData.path_coverage, reportData.observations };
+            SimulationWorkflowDataStore.SetPatrolReport(request.JobId, simulationReport);
             return new ActionResult(simulationReport, 1);
         }
 
-        reportId = await dataService.SavePatrolReportAsync(request.MissionId, durationSeconds,
+        reportId = await dataService.SavePatrolReportAsync(request.JobId, durationSeconds,
             observationData.Length, warnings + obstacles, JsonSerializer.Serialize(reportData), cancellationToken);
-        var result = new { report_id = reportId, reportData.report_type, reportData.mission_id, reportData.runtime_id, reportData.execution_id, reportData.duration_seconds, reportData.observation_count, reportData.fallen_book_count, reportData.obstacle_count, reportData.warning_count, reportData.path_coverage, reportData.observations };
+        var result = new { report_id = reportId, reportData.report_type, reportData.job_id, reportData.runtime_id, reportData.execution_id, reportData.duration_seconds, reportData.observation_count, reportData.fallen_book_count, reportData.obstacle_count, reportData.warning_count, reportData.path_coverage, reportData.observations };
         return new ActionResult(result, 1);
     }
 
@@ -448,15 +448,15 @@ public sealed class PatrolActionsController(
     }
 
     private async Task<CachedAction?> FindCachedActionAsync(
-        Guid missionId, string runtimeId, string key, CancellationToken cancellationToken)
+        Guid jobId, string runtimeId, string key, CancellationToken cancellationToken)
     {
         if (runtimeId == "sim")
         {
-            return SimulationWorkflowDataStore.TryGetPatrolAction(missionId, key, out var fingerprint, out var response)
+            return SimulationWorkflowDataStore.TryGetPatrolAction(jobId, key, out var fingerprint, out var response)
                 ? new CachedAction(fingerprint, response)
                 : null;
         }
-        var events = await dataService.GetJobEventDataAsync(missionId, "PATROL_ACTION_IDEMPOTENCY", cancellationToken);
+        var events = await dataService.GetJobEventDataAsync(jobId, "PATROL_ACTION_IDEMPOTENCY", cancellationToken);
         foreach (var data in events.Where(item => !string.IsNullOrWhiteSpace(item)))
         {
             var root = ParseElement(data!);

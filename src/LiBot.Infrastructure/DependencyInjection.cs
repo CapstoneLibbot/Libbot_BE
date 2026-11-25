@@ -69,8 +69,8 @@ public static class DependencyInjection
         services.AddScoped<IGuidanceWorkflowRepository, GuidanceWorkflowRepository>();
         services.AddScoped<ILibraryMapRepository, LibraryMapRepository>();
         services.AddScoped<ILibraryMapService, LibraryMapService>();
-        services.AddScoped<IMissionDataRepository, MissionDataRepository>();
-        services.AddScoped<IMissionDataService, MissionDataService>();
+        services.AddScoped<IJobDataRepository, JobDataRepository>();
+        services.AddScoped<IJobDataService, JobDataService>();
         services.AddScoped<IRobotTaskRepository, RobotTaskRepository>();
         services.AddScoped<IWorkflowDataRepository, WorkflowDataRepository>();
         services.AddScoped<IInventoryWorkflowRepository, InventoryWorkflowRepository>();

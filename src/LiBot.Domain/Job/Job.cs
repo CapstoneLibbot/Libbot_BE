@@ -1,7 +1,7 @@
-namespace LiBot.Domain.Mission;
+namespace LiBot.Domain.Job;
 using LiBot.Domain.Enums;
 
-public class Mission
+public class Job
 {
     public Guid Id { get; private set; } = Guid.NewGuid();
     public string Name { get; private set; }
@@ -28,12 +28,12 @@ public class Mission
     [System.ComponentModel.DataAnnotations.Schema.Column("CompletedAt")]
     public DateTime? CompletedAtUtc { get; private set; }
 
-    private Mission() => Name = string.Empty;
+    private Job() => Name = string.Empty;
 
-    public Mission(string name, string? description, Guid robotId, Guid workflowId, Guid? createdBy = null, int priority = 0)
+    public Job(string name, string? description, Guid robotId, Guid workflowId, Guid? createdBy = null, int priority = 0)
     {
         if (string.IsNullOrWhiteSpace(name))
-            throw new ArgumentException("Mission name is required.", nameof(name));
+            throw new ArgumentException("Job name is required.", nameof(name));
         if (robotId == Guid.Empty)
             throw new ArgumentException("Robot id is required.", nameof(robotId));
         if (workflowId == Guid.Empty)
@@ -50,7 +50,7 @@ public class Mission
     public void Start()
     {
         if (Status != "Pending")
-            throw new InvalidOperationException("Only pending missions can start.");
+            throw new InvalidOperationException("Only pending jobs can start.");
 
         Status = "Running";
         StartedAtUtc = DateTime.UtcNow;
@@ -59,7 +59,7 @@ public class Mission
     public void Retry()
     {
         if (Status is not ("Failed" or "Cancelled"))
-            throw new InvalidOperationException("Only failed or cancelled missions can be retried.");
+            throw new InvalidOperationException("Only failed or cancelled jobs can be retried.");
 
         Status = "Pending";
         StartedAtUtc = null;
@@ -75,7 +75,7 @@ public class Mission
     public void Update(string name, string? description, int priority, Guid workflowId)
     {
         if (string.IsNullOrWhiteSpace(name))
-            throw new ArgumentException("Mission name is required.", nameof(name));
+            throw new ArgumentException("Job name is required.", nameof(name));
         if (workflowId == Guid.Empty)
             throw new ArgumentException("Workflow id is required.", nameof(workflowId));
         Name = name.Trim();
@@ -87,7 +87,7 @@ public class Mission
     public void Cancel()
     {
         if (Status is "Completed" or "Cancelled")
-            throw new InvalidOperationException("Completed or cancelled missions cannot be cancelled.");
+            throw new InvalidOperationException("Completed or cancelled jobs cannot be cancelled.");
         Status = "Cancelled";
         CompletedAtUtc = DateTime.UtcNow;
     }
@@ -95,7 +95,7 @@ public class Mission
     public void Fail()
     {
         if (Status is "Completed" or "Cancelled")
-            throw new InvalidOperationException("Completed or cancelled missions cannot be failed.");
+            throw new InvalidOperationException("Completed or cancelled jobs cannot be failed.");
         Status = "Failed";
         CompletedAtUtc = DateTime.UtcNow;
     }

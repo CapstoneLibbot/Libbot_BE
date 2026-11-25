@@ -1,6 +1,6 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
-using LiBot.Domain.Mission;
+using LiBot.Domain.Job;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 

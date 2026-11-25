@@ -1,6 +1,6 @@
 namespace LiBot.Infrastructure.BackgroundJobs;
 
-public class MissionTimeoutMonitor
+public class JobTimeoutMonitor
 {
     public Task CheckTimeoutsAsync(CancellationToken cancellationToken = default)
     {

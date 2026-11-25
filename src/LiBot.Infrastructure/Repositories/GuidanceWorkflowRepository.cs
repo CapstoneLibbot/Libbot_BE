@@ -1,7 +1,7 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
 using LiBot.Domain.Enums;
-using LiBot.Domain.Mission;
+using LiBot.Domain.Job;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -35,12 +35,14 @@ public sealed class GuidanceWorkflowRepository(LiBotDbContext db) : IGuidanceWor
                 : await db.TaskSteps
                     .AsNoTracking()
                     .Where(item => taskIds.Contains(item.WorkflowTaskId))
+                    .OrderBy(item => item.WorkflowTaskId)
+                    .ThenBy(item => item.SequenceNo)
                     .ToListAsync(cancellationToken);
             var stepsByTask = steps
                 .GroupBy(item => item.WorkflowTaskId)
                 .ToDictionary(group => group.Key, group => group
                     .Select(step => new GuidanceTaskStepSnapshot(
-                        step.Id, step.StepType, step.Configuration, step.CreatedAtUtc))
+                        step.Id, step.SequenceNo, step.StepType, step.Configuration, step.CreatedAtUtc))
                     .ToList());
 
             snapshots.Add(new GuidanceWorkflowSnapshot(
@@ -59,53 +61,45 @@ public sealed class GuidanceWorkflowRepository(LiBotDbContext db) : IGuidanceWor
     }
 
     public async Task CreateExecutionAsync(
-        Mission mission,
+        Job job,
         JobTask jobTask,
-        Guid workflowId,
+        RobotWorkflowDocument workflowDocument,
         string initialContext,
         CancellationToken cancellationToken)
     {
-        db.Jobs.Add(mission);
-        db.JobTasks.Add(jobTask);
+        db.Jobs.Add(job);
+        if (job.WorkflowId != workflowDocument.WorkflowId)
+            throw new InvalidOperationException("Job workflow id does not match the execution workflow id.");
+        if (workflowDocument.Tasks.Count == 0 || workflowDocument.Tasks.Any(task => task.Steps.Count == 0))
+            throw new InvalidOperationException("A guidance workflow must have at least one step in every task.");
 
-        var workflowTasks = await db.WorkflowTasks
-            .AsNoTracking()
-            .Where(task => task.WorkflowId == workflowId)
-            .OrderBy(task => task.SequenceNumber)
-            .ToListAsync(cancellationToken);
-        var workflowTaskIds = workflowTasks.Select(task => task.Id).ToArray();
-        var primaryWorkflowTask = workflowTasks.FirstOrDefault();
-        if (primaryWorkflowTask is null)
-            throw new InvalidOperationException($"Workflow '{workflowId}' does not contain any tasks.");
-        if (mission.WorkflowId != workflowId)
-            throw new InvalidOperationException("Mission workflow id does not match the execution workflow id.");
-        jobTask.AssignWorkflowTask(primaryWorkflowTask.Id, primaryWorkflowTask.Name);
-        var steps = workflowTaskIds.Length == 0
-            ? []
-            : await db.TaskSteps
-                .AsNoTracking()
-                .Where(step => workflowTaskIds.Contains(step.WorkflowTaskId))
-                .OrderBy(step => step.CreatedAtUtc)
-                .ToListAsync(cancellationToken);
-
-        var stepsByTask = steps.GroupBy(step => step.WorkflowTaskId)
-            .ToDictionary(group => group.Key, group => group.ToList());
-        var sequence = 1;
-        foreach (var workflowTaskId in workflowTaskIds)
+        foreach (var taskDocument in workflowDocument.Tasks.OrderBy(item => item.Sequence))
         {
-            if (!stepsByTask.TryGetValue(workflowTaskId, out var taskSteps)) continue;
-            foreach (var step in taskSteps)
-                db.JobSteps.Add(new JobStep(jobTask.Id, step.Id, sequence++, step.StepType));
+            var task = taskDocument.WorkflowTaskId == jobTask.WorkflowTaskId
+                ? jobTask
+                : new JobTask(job.Id, taskDocument.WorkflowTaskId, taskDocument.Sequence,
+                    taskDocument.Name, workflowDocument.RuntimeId);
+            if (task.WorkflowTaskId != taskDocument.WorkflowTaskId
+                || task.SequenceNo != taskDocument.Sequence
+                || !string.Equals(task.Name, taskDocument.Name, StringComparison.Ordinal))
+                throw new InvalidOperationException("The primary job task does not match its workflow task.");
+            db.JobTasks.Add(task);
+            foreach (var step in taskDocument.Steps.OrderBy(item => item.Sequence))
+                db.JobSteps.Add(new JobStep(task.Id, step.TaskStepId, step.Sequence, step.Type,
+                    step.Configuration.GetRawText()));
         }
 
         await db.SaveChangesAsync(cancellationToken);
-        db.JobEvents.Add(await JobEventPersistence.CreateForMissionAsync(
-            db, mission.Id, "WORKFLOW_INITIAL_CONTEXT", initialContext, cancellationToken));
-        await db.SaveChangesAsync(cancellationToken);
+        if (!string.Equals(workflowDocument.RuntimeId, "sim", StringComparison.OrdinalIgnoreCase))
+        {
+            db.JobEvents.Add(await JobEventPersistence.CreateForJobAsync(
+                db, job.Id, "WORKFLOW_INITIAL_CONTEXT", initialContext, cancellationToken));
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
-    public Task<Mission?> GetMissionAsync(Guid missionId, CancellationToken cancellationToken) =>
-        db.Jobs.FirstOrDefaultAsync(job => job.Id == missionId, cancellationToken);
+    public Task<Job?> GetJobAsync(Guid jobId, CancellationToken cancellationToken) =>
+        db.Jobs.FirstOrDefaultAsync(job => job.Id == jobId, cancellationToken);
 
     public Task SaveChangesAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);
 }

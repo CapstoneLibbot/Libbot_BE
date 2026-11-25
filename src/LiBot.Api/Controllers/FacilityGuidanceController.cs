@@ -12,7 +12,7 @@ namespace LiBot.Api.Controllers;
 [Route("api/facility-guidance")]
 public sealed class FacilityGuidanceController(
     IFacilityGuidanceService service,
-    IMissionDataService missionData,
+    IJobDataService jobData,
     IRobotRuntimeService runtimes,
     IConfiguration configuration) : ControllerBase
 {
@@ -123,7 +123,7 @@ public sealed class FacilityGuidanceController(
     }
 
     /// <summary>Bắt đầu nhiệm vụ robot hướng dẫn đến địa điểm đã tìm được.</summary>
-    /// <remarks>Luồng Gazebo được khởi chạy qua mission Run để giữ trạng thái mô phỏng tạm thời.</remarks>
+    /// <remarks>Luồng Gazebo được khởi chạy qua job Run để giữ trạng thái mô phỏng tạm thời.</remarks>
     [HttpPost("start")]
     public async Task<IActionResult> Start(
         StartFacilityGuidanceRequest request,
@@ -132,14 +132,14 @@ public sealed class FacilityGuidanceController(
         if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
         if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.FacilityId is null || request.RobotId == Guid.Empty)
             return BadRequest("runtimeId, robotId and facilityId are required.");
-        if (!await missionData.RobotExistsAsync(request.RobotId, cancellationToken))
+        if (!await jobData.RobotExistsAsync(request.RobotId, cancellationToken))
             return NotFound("Robot not found.");
 
         var runtimeId = request.RuntimeId.Trim().ToLowerInvariant();
         if (runtimes.Get(runtimeId) is null)
             return BadRequest(new { message = $"Robot runtime '{runtimeId}' is not configured." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
-            return Conflict(new { message = "Start Gazebo runs from the mission Run button so execution state stays transient." });
+            return Conflict(new { message = "Start Gazebo runs from the job Run button so execution state stays transient." });
 
         var facility = await service.GetFacilityAsync(request.FacilityId.Value, cancellationToken);
         if (facility is null) return NotFound("Facility not found.");
@@ -169,13 +169,13 @@ public sealed class FacilityGuidanceController(
             {
                 var message = GetString(result.Robot, "message") ?? GetString(result.Robot, "error")
                     ?? "Robot runtime did not accept the facility guidance workflow.";
-                return UnprocessableEntity(new { message, jobId = result.MissionId, robot = result.Robot });
+                return UnprocessableEntity(new { message, jobId = result.JobId, robot = result.Robot });
             }
 
             return Accepted(new
             {
-                jobId = result.MissionId,
-                executionId = result.MissionId,
+                jobId = result.JobId,
+                executionId = result.JobId,
                 workflowId = result.Workflow.Id,
                 runtimeId,
                 robot = result.Robot

@@ -65,7 +65,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "LiBot API",
         Version = "v1",
-        Description = "API quản lý thư viện, workflow/mission và điều khiển robot LiBot. Mỗi nhóm endpoint có mô tả chức năng; xem XML documentation tại các operation để biết mục đích và cách sử dụng."
+        Description = "API quản lý thư viện, workflow/job và điều khiển robot LiBot. Mỗi nhóm endpoint có mô tả chức năng; xem XML documentation tại các operation để biết mục đích và cách sử dụng."
     });
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, "LiBot.Api.xml"), includeControllerXmlComments: true);
 });

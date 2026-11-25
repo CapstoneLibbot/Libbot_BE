@@ -1,4 +1,4 @@
-using LiBot.Domain.Mission;
+using LiBot.Domain.Job;
 using Microsoft.EntityFrameworkCore;
 
 namespace LiBot.Infrastructure.Persistence;
@@ -7,7 +7,7 @@ internal static class JobEventPersistence
 {
     public const string JobTaskStateEventType = "__JOB_TASK_STATE";
 
-    public static async Task<JobEvent> CreateForMissionAsync(
+    public static async Task<JobEvent> CreateForJobAsync(
         LiBotDbContext db,
         Guid jobId,
         string eventType,
@@ -17,13 +17,16 @@ internal static class JobEventPersistence
         var jobStepId = await (from step in db.JobSteps.AsNoTracking()
                                join task in db.JobTasks.AsNoTracking() on step.JobTaskId equals task.Id
                                where task.JobId == jobId
-                               orderby step.Sequence, step.Id
+                               orderby task.SequenceNo, step.Sequence, step.Id
                                select step.Id).FirstOrDefaultAsync(cancellationToken);
         if (jobStepId == Guid.Empty)
             throw new InvalidOperationException($"Job '{jobId}' has no job step for its event.");
 
         return new JobEvent(jobStepId, eventType, data);
     }
+
+    public static JobEvent CreateForJobStep(Guid jobStepId, string eventType, string? data) =>
+        new(jobStepId, eventType, data);
 
     public static async Task<IReadOnlyList<string?>> GetEventDataAsync(
         LiBotDbContext db,

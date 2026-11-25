@@ -8,5 +8,6 @@ public interface IWorkflowDocumentService
     IReadOnlyList<WorkflowTemplateResponse> GetTemplates();
     WorkflowTemplateResponse? GetTemplate(string templateId);
     string? ValidateSteps(IReadOnlyList<WorkflowStepWriteRequest> steps);
+    string? ValidateTasks(IReadOnlyList<WorkflowTaskWriteRequest> tasks);
     Task<RobotWorkflowDocument?> BuildRobotDocumentAsync(Guid workflowId, string runtimeId, CancellationToken cancellationToken);
 }

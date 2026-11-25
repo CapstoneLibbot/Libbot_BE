@@ -28,14 +28,14 @@ public sealed class WorkflowManagementService(
     {
         if (string.IsNullOrWhiteSpace(request.Name))
             return Invalid<WorkflowResponse>("Workflow name is required.");
-        var steps = request.Steps ?? [];
-        var validationError = documents.ValidateSteps(steps);
+        var tasks = request.Tasks ?? [];
+        var validationError = documents.ValidateTasks(tasks);
         if (validationError is not null) return Invalid<WorkflowResponse>(validationError);
 
         var workflow = new WorkflowDefinition(request.Name, request.Description ?? string.Empty);
         workflow.SetType(request.Type ?? "GENERAL");
         workflow.SetActive(request.IsActive ?? true);
-        await repository.CreateAsync(workflow, steps, cancellationToken);
+        await repository.CreateAsync(workflow, tasks, cancellationToken);
         var aggregate = await repository.GetByIdAsync(workflow.Id, tracking: false, cancellationToken);
         return Success(ToResponse(aggregate!));
     }
@@ -45,16 +45,19 @@ public sealed class WorkflowManagementService(
     {
         var template = documents.GetTemplate(templateId);
         if (template is null) return NotFound<WorkflowResponse>("Workflow template not found.");
-        var steps = template.Steps.Select(step =>
-            new WorkflowStepWriteRequest(step.Sequence, step.Type, step.Name, step.Configuration, step.Name)).ToList();
-        var validationError = documents.ValidateSteps(steps);
+        var tasks = template.Steps.Select(step => new WorkflowTaskWriteRequest(
+            step.Sequence,
+            step.Name,
+            step.Name,
+            [new WorkflowStepWriteRequest(1, step.Type, step.Name, step.Configuration, step.Name)])).ToList();
+        var validationError = documents.ValidateTasks(tasks);
         if (validationError is not null) return Invalid<WorkflowResponse>(validationError);
 
         var workflow = new WorkflowDefinition(
             string.IsNullOrWhiteSpace(request?.Name) ? template.Name : request.Name!, template.Description);
         workflow.SetType(template.Type);
         workflow.SetActive(true);
-        await repository.CreateAsync(workflow, steps, cancellationToken);
+        await repository.CreateAsync(workflow, tasks, cancellationToken);
         var aggregate = await repository.GetByIdAsync(workflow.Id, tracking: false, cancellationToken);
         return Success(ToResponse(aggregate!));
     }
@@ -64,8 +67,8 @@ public sealed class WorkflowManagementService(
     {
         if (string.IsNullOrWhiteSpace(request.Name))
             return Invalid<WorkflowResponse>("Workflow name is required.");
-        var steps = request.Steps ?? [];
-        var validationError = documents.ValidateSteps(steps);
+        var tasks = request.Tasks ?? [];
+        var validationError = documents.ValidateTasks(tasks);
         if (validationError is not null) return Invalid<WorkflowResponse>(validationError);
         var aggregate = await repository.GetByIdAsync(id, tracking: true, cancellationToken);
         if (aggregate is null) return NotFound<WorkflowResponse>();
@@ -74,8 +77,8 @@ public sealed class WorkflowManagementService(
         workflow.Update(request.Name, request.Description ?? string.Empty);
         workflow.SetType(request.Type ?? workflow.Type);
         workflow.SetActive(request.IsActive ?? workflow.IsActive);
-        if (!await repository.UpdateAsync(workflow, steps, cancellationToken))
-            return Conflict<WorkflowResponse>("This workflow has mission history and its steps cannot be replaced.");
+        if (!await repository.UpdateAsync(workflow, tasks, cancellationToken))
+            return Conflict<WorkflowResponse>("This workflow has job history and its steps cannot be replaced.");
         var updated = await repository.GetByIdAsync(id, tracking: false, cancellationToken);
         return Success(ToResponse(updated!));
     }
@@ -107,24 +110,43 @@ public sealed class WorkflowManagementService(
         if (await repository.GetByIdAsync(id, tracking: false, cancellationToken) is null)
             return NotFound<bool>();
         if (!await repository.DeleteAsync(id, cancellationToken))
-            return Conflict<bool>("This workflow has mission history and cannot be deleted.");
+            return Conflict<bool>("This workflow has job history and cannot be deleted.");
         return Success(true);
     }
 
     private static WorkflowResponse ToResponse(LiBot.Application.Workflow.WorkflowAggregate aggregate)
     {
-        var steps = aggregate.Tasks
-            .Where(task => aggregate.Steps.ContainsKey(task.Id))
-            .Select(task =>
+        var flatSteps = new List<WorkflowStepResponse>();
+        var tasks = new List<WorkflowTaskResponse>();
+        var globalSequence = 1;
+        foreach (var task in aggregate.Tasks.OrderBy(item => item.SequenceNumber))
+        {
+            var taskSteps = aggregate.Steps.TryGetValue(task.Id, out var values)
+                ? values.OrderBy(item => item.SequenceNo).ToList()
+                : [];
+            var responses = new List<WorkflowStepResponse>(taskSteps.Count);
+            foreach (var step in taskSteps)
             {
-                var step = aggregate.Steps[task.Id];
-                return new WorkflowStepResponse(step.Id, task.SequenceNumber, step.StepType, task.Name,
-                    ParseConfiguration(step.Configuration), task.Description);
-            }).ToList();
+                var configuration = ParseConfiguration(step.Configuration);
+                var stepName = ReadStepName(configuration) ?? (taskSteps.Count == 1 ? task.Name : $"{task.Name} {step.SequenceNo}");
+                responses.Add(new WorkflowStepResponse(step.Id, step.SequenceNo, step.StepType, stepName,
+                    configuration, step.Description));
+                flatSteps.Add(new WorkflowStepResponse(step.Id, globalSequence++, step.StepType, stepName,
+                    configuration, step.Description));
+            }
+            tasks.Add(new WorkflowTaskResponse(task.Id, task.SequenceNumber, task.Name, task.Description, responses));
+        }
         var workflow = aggregate.Workflow;
         return new WorkflowResponse(workflow.Id, workflow.Name, workflow.Description, workflow.Type,
-            workflow.IsActive, steps);
+            workflow.IsActive, tasks, flatSteps);
     }
+
+    private static string? ReadStepName(System.Text.Json.JsonElement? configuration) =>
+        configuration is { ValueKind: System.Text.Json.JsonValueKind.Object } value
+        && value.TryGetProperty("name", out var name)
+        && name.ValueKind == System.Text.Json.JsonValueKind.String
+            ? name.GetString()
+            : null;
 
     private static System.Text.Json.JsonElement? ParseConfiguration(string? configuration)
     {

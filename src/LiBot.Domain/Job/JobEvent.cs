@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using LiBot.Domain.Common;
 
-namespace LiBot.Domain.Mission;
+namespace LiBot.Domain.Job;
 
 public class JobEvent : Entity
 {

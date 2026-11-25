@@ -2,7 +2,7 @@ using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
 using LiBot.Domain.Enums;
 using LiBot.Domain.Library;
-using LiBot.Domain.Mission;
+using LiBot.Domain.Job;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -130,26 +130,26 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
     }
 
     public async Task<Guid> AddJobEventAsync(
-        Guid missionId,
+        Guid jobId,
         string eventType,
         string? data,
         CancellationToken cancellationToken)
     {
-        var jobEvent = await JobEventPersistence.CreateForMissionAsync(
-            db, missionId, eventType, data, cancellationToken);
+        var jobEvent = await JobEventPersistence.CreateForJobAsync(
+            db, jobId, eventType, data, cancellationToken);
         await db.JobEvents.AddAsync(jobEvent, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return jobEvent.Id;
     }
 
     public async Task<IReadOnlyList<string?>> GetJobEventDataAsync(
-        Guid missionId,
+        Guid jobId,
         string eventType,
         CancellationToken cancellationToken) =>
-        await JobEventPersistence.GetEventDataAsync(db, missionId, eventType, cancellationToken);
+        await JobEventPersistence.GetEventDataAsync(db, jobId, eventType, cancellationToken);
 
     public async Task<Guid> SaveInventoryReportAsync(
-        Guid missionId,
+        Guid jobId,
         string scopeType,
         int totalShelves,
         int totalBooksScanned,
@@ -159,24 +159,24 @@ public sealed class InventoryWorkflowRepository(LiBotDbContext db) : IInventoryW
         string data,
         CancellationToken cancellationToken)
     {
-        var report = new InventoryReport(missionId, scopeType, totalShelves,
+        var report = new InventoryReport(jobId, scopeType, totalShelves,
             totalBooksScanned, totalAvailable, totalMisplaced, totalMissing, data);
         await db.InventoryReports.AddAsync(report, cancellationToken);
-        await db.JobEvents.AddAsync(await JobEventPersistence.CreateForMissionAsync(
-            db, missionId, "INVENTORY_REPORT", data, cancellationToken), cancellationToken);
+        await db.JobEvents.AddAsync(await JobEventPersistence.CreateForJobAsync(
+            db, jobId, "INVENTORY_REPORT", data, cancellationToken), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return report.Id;
     }
 
-    public async Task<InventoryReportRecord?> GetInventoryReportAsync(Guid missionId, CancellationToken cancellationToken)
+    public async Task<InventoryReportRecord?> GetInventoryReportAsync(Guid jobId, CancellationToken cancellationToken)
     {
         var report = await db.InventoryReports.AsNoTracking()
-            .Where(item => item.JobId == missionId)
+            .Where(item => item.JobId == jobId)
             .OrderByDescending(item => item.CreatedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
         return report is null
             ? null
-            : new InventoryReportRecord(report.Id, missionId, report.ScopeType, report.TotalShelves,
+            : new InventoryReportRecord(report.Id, jobId, report.ScopeType, report.TotalShelves,
                 report.TotalBooksScanned, report.TotalAvailable, report.TotalMisplaced, report.TotalMissing,
                 report.Data ?? "{}", report.CreatedAtUtc);
     }

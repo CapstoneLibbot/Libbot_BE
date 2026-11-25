@@ -56,7 +56,7 @@ public sealed record InventoryBookItemUpdate(Guid BookItemId, Guid? ShelfLevelId
 
 public sealed record InventoryReportRecord(
     Guid ReportId,
-    Guid MissionId,
+    Guid JobId,
     string ScopeType,
     int TotalShelves,
     int TotalBooksScanned,
@@ -67,7 +67,7 @@ public sealed record InventoryReportRecord(
     DateTime CreatedAtUtc);
 
 public sealed record InventoryWorkflowActionRequest(
-    Guid MissionId,
+    Guid JobId,
     string RuntimeId,
     string ExecutionId,
     string Action,
@@ -103,8 +103,8 @@ public sealed record VerifiedInventoryBookItem(
 public sealed record InventoryWorkflowReportResponse(
     [property: JsonPropertyName("reportId")]
     Guid ReportId,
-    [property: JsonPropertyName("missionId")]
-    Guid MissionId,
+    [property: JsonPropertyName("jobId")]
+    Guid JobId,
     [property: JsonPropertyName("reportType")]
     string ReportType,
     [property: JsonPropertyName("runtimeId")]

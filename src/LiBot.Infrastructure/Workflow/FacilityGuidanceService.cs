@@ -3,8 +3,10 @@ using LiBot.Application.Robot;
 using LiBot.Application.Interfaces;
 using LiBot.Application.Workflow.FacilityGuidance;
 using LiBot.Application.Models;
+using LiBot.Application.Services.Workflow;
+using LiBot.Application.Workflow;
 using LiBot.Contracts.Workflow;
-using LiBot.Domain.Mission;
+using LiBot.Domain.Job;
 using LiBot.Infrastructure.Robot;
 
 namespace LiBot.Infrastructure.Workflow;
@@ -14,7 +16,9 @@ public sealed class FacilityGuidanceService(
     IGuidanceWorkflowRepository workflowRepository,
     ILiBotTcpClient tcpClient,
     FacilityGuidanceRuntimeRegistry runtimeRegistry,
-    IRobotTaskRepository robotTasks) : IFacilityGuidanceService
+    IRobotTaskRepository robotTasks,
+    IWorkflowDocumentService workflowDocuments,
+    IJobDataService jobData) : IFacilityGuidanceService
 {
     public Task<bool> IsSimulationTaskAsync(Guid taskId, CancellationToken cancellationToken) =>
         robotTasks.IsSimulationTaskAsync(taskId, cancellationToken);
@@ -89,18 +93,17 @@ public sealed class FacilityGuidanceService(
                     $"Workflow task '{task.Name}' ({task.Id}) does not contain a step.");
             }
 
-            if (task.Steps.Count > 1)
+            foreach (var taskStep in task.Steps.OrderBy(item => item.SequenceNumber))
             {
-                throw new FacilityGuidanceWorkflowConfigurationException(
-                    $"Workflow task '{task.Name}' ({task.Id}) contains more than one step.");
+                var stepName = task.Steps.Count == 1 ? task.Name : $"{task.Name} {taskStep.SequenceNumber}";
+                var definition = ParseStepConfiguration(taskStep.Configuration, stepName, taskStep.StepType);
+                steps.Add(definition);
             }
-
-            var taskStep = task.Steps[0];
-            var definition = ParseStepConfiguration(taskStep.Configuration, task.Name, taskStep.StepType);
-            steps.Add(definition);
         }
 
-        return new FacilityGuidanceLoadedWorkflow(workflow.Id, workflow.Tasks[0].Id, workflow.Type, workflow.Name, steps);
+        var primaryTask = workflow.Tasks.OrderBy(item => item.SequenceNumber).First();
+        return new FacilityGuidanceLoadedWorkflow(workflow.Id, primaryTask.Id, primaryTask.SequenceNumber,
+            primaryTask.Name, workflow.Type, workflow.Name, steps);
     }
 
     public async Task<FacilityGuidanceStartResult> StartAsync(
@@ -114,19 +117,30 @@ public sealed class FacilityGuidanceService(
             return new FacilityGuidanceStartResult(Guid.Empty, null, default, false);
         }
 
-        var mission = new Mission("Search & Guide to Facility", $"Reader facility search: {request.Query.Trim()}",
+        var job = new Job("Search & Guide to Facility", $"Reader facility search: {request.Query.Trim()}",
             request.RobotId, loadedWorkflow.Id);
-        mission.Start();
+        job.Start();
         var runtimeId = string.IsNullOrWhiteSpace(request.RuntimeId)
             ? "real"
             : request.RuntimeId.Trim().ToLowerInvariant();
-        var jobTask = new JobTask(mission.Id, loadedWorkflow.PrimaryTaskId, mission.Name, runtimeId);
+        RobotWorkflowDocument workflowDocument;
+        try
+        {
+            workflowDocument = await workflowDocuments.BuildRobotDocumentAsync(loadedWorkflow.Id, runtimeId, cancellationToken)
+                ?? throw new FacilityGuidanceWorkflowConfigurationException("The active facility guidance workflow was not found.");
+        }
+        catch (InvalidWorkflowDefinitionException exception)
+        {
+            throw new FacilityGuidanceWorkflowConfigurationException(exception.Message, exception);
+        }
+        var jobTask = new JobTask(job.Id, loadedWorkflow.PrimaryTaskId, loadedWorkflow.PrimaryTaskSequence,
+            loadedWorkflow.PrimaryTaskName, runtimeId);
         jobTask.Start();
-        jobTask.SetExecutionId(mission.Id.ToString());
+        jobTask.SetExecutionId(job.Id.ToString());
         jobTask.UpdateExecutionState(JsonSerializer.Serialize(new
         {
-            missionId = mission.Id,
-            executionId = mission.Id,
+            jobId = job.Id,
+            executionId = job.Id,
             runtimeId,
             status = "ACCEPTED",
             updatedAt = DateTime.UtcNow
@@ -136,24 +150,26 @@ public sealed class FacilityGuidanceService(
             ["query"] = request.Query.Trim(),
             ["facility_id"] = request.FacilityId?.ToString(),
             ["runtime_id"] = runtimeId,
-            ["task_id"] = mission.Id.ToString(),
+            ["task_id"] = job.Id.ToString(),
             ["backend_base_url"] = backendBaseUrl
         });
-        await workflowRepository.CreateExecutionAsync(mission, jobTask, loadedWorkflow.Id, initialContext, cancellationToken);
+        await workflowRepository.CreateExecutionAsync(job, jobTask, workflowDocument, initialContext, cancellationToken);
+        var persistedWorkflow = await jobData.GetRobotWorkflowDocumentAsync(job.Id, cancellationToken)
+            ?? throw new FacilityGuidanceWorkflowConfigurationException("The job step configuration could not be loaded.");
 
         var tcpRequest = new LiBotStartWorkflowRequest(
             "start_workflow",
-            mission.Id.ToString(),
-            mission.Id.ToString(),
+            job.Id.ToString(),
+            job.Id.ToString(),
             new Dictionary<string, object?>
             {
                 ["query"] = request.Query.Trim(),
                 ["facility_id"] = request.FacilityId?.ToString(),
                 ["runtime_id"] = runtimeId,
-                ["task_id"] = mission.Id.ToString(),
+                ["task_id"] = job.Id.ToString(),
                 ["backend_base_url"] = backendBaseUrl
             },
-            loadedWorkflow.Steps);
+            persistedWorkflow.Steps.Select(ToStepDictionary).ToArray());
 
         try
         {
@@ -162,11 +178,11 @@ public sealed class FacilityGuidanceService(
             var isAccepted = IsAccepted(body);
             if (!isAccepted)
             {
-                mission.Fail();
+                job.Fail();
                 jobTask.UpdateExecutionState(JsonSerializer.Serialize(new
                 {
-                    missionId = mission.Id,
-                    executionId = mission.Id,
+                    jobId = job.Id,
+                    executionId = job.Id,
                     runtimeId,
                     status = "FAILED",
                     error = ReadMessage(body),
@@ -176,18 +192,18 @@ public sealed class FacilityGuidanceService(
             }
             else
             {
-                runtimeRegistry.Register(mission.Id.ToString(), runtimeId);
+                runtimeRegistry.Register(job.Id.ToString(), runtimeId);
             }
 
-            return new FacilityGuidanceStartResult(mission.Id, loadedWorkflow, body, isAccepted);
+            return new FacilityGuidanceStartResult(job.Id, loadedWorkflow, body, isAccepted);
         }
         catch (LiBotTcpException exception)
         {
-            mission.Fail();
+            job.Fail();
             jobTask.UpdateExecutionState(JsonSerializer.Serialize(new
             {
-                missionId = mission.Id,
-                executionId = mission.Id,
+                jobId = job.Id,
+                executionId = job.Id,
                 runtimeId,
                 status = "FAILED",
                 error = exception.Message,
@@ -252,12 +268,12 @@ public sealed class FacilityGuidanceService(
         CompleteFacilityGuidanceRequest request,
         CancellationToken cancellationToken)
     {
-        var mission = await workflowRepository.GetMissionAsync(taskId, cancellationToken);
-        if (mission is null) return false;
-        if (mission.Status is "Completed" or "Failed" or "Cancelled") return true;
+        var job = await workflowRepository.GetJobAsync(taskId, cancellationToken);
+        if (job is null) return false;
+        if (job.Status is "Completed" or "Failed" or "Cancelled") return true;
 
-        if (string.Equals(request.Status, "SUCCEEDED", StringComparison.OrdinalIgnoreCase)) mission.Complete();
-        else mission.Fail();
+        if (string.Equals(request.Status, "SUCCEEDED", StringComparison.OrdinalIgnoreCase)) job.Complete();
+        else job.Fail();
         await workflowRepository.SaveChangesAsync(cancellationToken);
         return true;
     }
@@ -315,4 +331,8 @@ public sealed class FacilityGuidanceService(
         definition["type"] = stepType;
         return definition;
     }
+
+    private static IReadOnlyDictionary<string, object?> ToStepDictionary(JsonElement step) =>
+        step.EnumerateObject().ToDictionary(property => property.Name,
+            property => (object?)property.Value.Clone(), StringComparer.OrdinalIgnoreCase);
 }

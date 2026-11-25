@@ -1,7 +1,7 @@
 namespace LiBot.Application.Models;
 
 public sealed record InventoryIssueRequest(
-    Guid MissionId,
+    Guid JobId,
     string RuntimeId,
     string IssueType,
     string Barcode,

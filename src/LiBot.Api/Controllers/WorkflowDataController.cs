@@ -174,17 +174,17 @@ public sealed class WorkflowDataController(
     [HttpPost("inventory/scan")]
     public async Task<IActionResult> RecordInventoryScan(InventoryScanRequest request, CancellationToken cancellationToken)
     {
-        if (request.MissionId == Guid.Empty || string.IsNullOrWhiteSpace(request.Code))
-            return BadRequest(new { message = "missionId and qrCode are required." });
-        var task = await dataService.GetMissionAsync(request.MissionId, cancellationToken);
+        if (request.JobId == Guid.Empty || string.IsNullOrWhiteSpace(request.Code))
+            return BadRequest(new { message = "jobId and qrCode are required." });
+        var task = await dataService.GetJobAsync(request.JobId, cancellationToken);
         var runtimeId = task?.RuntimeId ?? request.RuntimeId;
-        if (task is null && !IsActiveSimulation(request.MissionId, runtimeId))
-            return NotFound(new { message = "Mission task not found." });
+        if (task is null && !IsActiveSimulation(request.JobId, runtimeId))
+            return NotFound(new { message = "Job task not found." });
         if (task is not null && !MatchesRuntime(runtimeId, request.RuntimeId))
-            return Conflict(new { message = "Runtime does not match the mission." });
+            return Conflict(new { message = "Runtime does not match the job." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-            && !IsActiveSimulation(request.MissionId, runtimeId))
-            return Conflict(new { message = "No active in-memory simulation exists for this mission." });
+            && !IsActiveSimulation(request.JobId, runtimeId))
+            return Conflict(new { message = "No active in-memory simulation exists for this job." });
 
         var barcode = request.Code!.Trim();
         if (runtimeId == "real" && string.IsNullOrWhiteSpace(request.ShelfCode))
@@ -225,34 +225,34 @@ public sealed class WorkflowDataController(
         };
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
         {
-            SimulationWorkflowDataStore.AddInventoryScan(request.MissionId, scan);
+            SimulationWorkflowDataStore.AddInventoryScan(request.JobId, scan);
             return Ok(scan);
         }
-        await dataService.AddJobEventAsync(request.MissionId, "INVENTORY_SCAN", JsonSerializer.Serialize(scan), cancellationToken);
+        await dataService.AddJobEventAsync(request.JobId, "INVENTORY_SCAN", JsonSerializer.Serialize(scan), cancellationToken);
         return Ok(scan);
     }
 
     /// <summary>Lấy các barcode đã quét trong nhiệm vụ kiểm kê đang chạy hoặc đã hoàn tất.</summary>
-    [HttpGet("inventory/scans/{missionId:guid}")]
+    [HttpGet("inventory/scans/{jobId:guid}")]
     public async Task<IActionResult> GetInventoryScans(
-        Guid missionId,
+        Guid jobId,
         [FromQuery] string? runtimeId,
         CancellationToken cancellationToken)
     {
-        var task = await dataService.GetMissionAsync(missionId, cancellationToken);
+        var task = await dataService.GetJobAsync(jobId, cancellationToken);
         runtimeId = task?.RuntimeId ?? (string.IsNullOrWhiteSpace(runtimeId) ? "sim" : runtimeId.Trim());
-        if (task is null && !IsActiveSimulation(missionId, runtimeId))
-            return NotFound(new { message = "Mission task not found." });
+        if (task is null && !IsActiveSimulation(jobId, runtimeId))
+            return NotFound(new { message = "Job task not found." });
         if (task is not null && !MatchesRuntime(task.RuntimeId, runtimeId))
-            return Conflict(new { message = "Runtime does not match the mission." });
+            return Conflict(new { message = "Runtime does not match the job." });
 
         var isSimulation = string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase);
         var scanData = isSimulation
-            ? SimulationWorkflowDataStore.GetInventoryScans(missionId)
+            ? SimulationWorkflowDataStore.GetInventoryScans(jobId)
                 .Select(scan => scan.GetRawText())
-                .Concat(InventoryWorkflowRuntimeStore.GetScans(missionId))
+                .Concat(InventoryWorkflowRuntimeStore.GetScans(jobId))
                 .ToArray()
-            : await dataService.GetJobEventDataAsync(missionId, "INVENTORY_SCAN", cancellationToken);
+            : await dataService.GetJobEventDataAsync(jobId, "INVENTORY_SCAN", cancellationToken);
         var scans = new List<JsonElement>();
         foreach (var value in scanData)
         {
@@ -368,25 +368,25 @@ public sealed class WorkflowDataController(
     [HttpPost("inventory/issues")]
     public async Task<IActionResult> AddInventoryIssue(InventoryIssueRequest request, CancellationToken cancellationToken)
     {
-        if (request.MissionId == Guid.Empty || string.IsNullOrWhiteSpace(request.Barcode)
+        if (request.JobId == Guid.Empty || string.IsNullOrWhiteSpace(request.Barcode)
             || string.IsNullOrWhiteSpace(request.RuntimeId) || request.ScannedAt == default)
-            return BadRequest(new { message = "missionId, runtimeId, barcode and scannedAt are required." });
+            return BadRequest(new { message = "jobId, runtimeId, barcode and scannedAt are required." });
         if (!string.Equals(request.IssueType?.Trim(), "MISPLACED", StringComparison.OrdinalIgnoreCase))
             return BadRequest(new { message = "Only issueType MISPLACED is supported." });
 
-        var task = await dataService.GetMissionAsync(request.MissionId, cancellationToken);
+        var task = await dataService.GetJobAsync(request.JobId, cancellationToken);
         var runtimeId = task?.RuntimeId ?? request.RuntimeId;
-        if (task is null && !IsActiveSimulation(request.MissionId, runtimeId))
-            return NotFound(new { message = "Mission task not found." });
+        if (task is null && !IsActiveSimulation(request.JobId, runtimeId))
+            return NotFound(new { message = "Job task not found." });
         if (task is not null && !MatchesRuntime(runtimeId, request.RuntimeId))
-            return Conflict(new { message = "Runtime does not match the mission." });
+            return Conflict(new { message = "Runtime does not match the job." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-            && !IsActiveSimulation(request.MissionId, runtimeId))
-            return Conflict(new { message = "No active in-memory simulation exists for this mission." });
+            && !IsActiveSimulation(request.JobId, runtimeId))
+            return Conflict(new { message = "No active in-memory simulation exists for this job." });
 
         var scanEvents = string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-            ? SimulationWorkflowDataStore.GetInventoryScans(request.MissionId).Select(scan => scan.GetRawText()).ToArray()
-            : await dataService.GetJobEventDataAsync(request.MissionId, "INVENTORY_SCAN", cancellationToken);
+            ? SimulationWorkflowDataStore.GetInventoryScans(request.JobId).Select(scan => scan.GetRawText()).ToArray()
+            : await dataService.GetJobEventDataAsync(request.JobId, "INVENTORY_SCAN", cancellationToken);
         JsonElement matchingScan = default;
         foreach (var scanData in scanEvents)
         {
@@ -414,8 +414,8 @@ public sealed class WorkflowDataController(
             return Conflict(new { message = "The referenced inventory scan is not marked as misplaced." });
 
         var existingIssues = string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-            ? SimulationWorkflowDataStore.GetInventoryIssues(request.MissionId).Select(issue => issue.GetRawText()).ToArray()
-            : await dataService.GetJobEventDataAsync(request.MissionId, "INVENTORY_ISSUE", cancellationToken);
+            ? SimulationWorkflowDataStore.GetInventoryIssues(request.JobId).Select(issue => issue.GetRawText()).ToArray()
+            : await dataService.GetJobEventDataAsync(request.JobId, "INVENTORY_ISSUE", cancellationToken);
         foreach (var issueData in existingIssues)
         {
             if (string.IsNullOrWhiteSpace(issueData)) continue;
@@ -440,7 +440,7 @@ public sealed class WorkflowDataController(
         {
             issueId = Guid.NewGuid(),
             issueType = "MISPLACED",
-            missionId = request.MissionId,
+            jobId = request.JobId,
             runtimeId,
             barcode = request.Barcode.Trim(),
             actualShelfCode = matchingScan.TryGetProperty("shelfCode", out var shelfCode) ? shelfCode.GetString() : null,
@@ -449,9 +449,9 @@ public sealed class WorkflowDataController(
             createdAtUtc = DateTime.UtcNow
         };
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
-            SimulationWorkflowDataStore.AddInventoryIssue(request.MissionId, issueRecord);
+            SimulationWorkflowDataStore.AddInventoryIssue(request.JobId, issueRecord);
         else
-            await dataService.AddJobEventAsync(request.MissionId, "INVENTORY_ISSUE", JsonSerializer.Serialize(issueRecord), cancellationToken);
+            await dataService.AddJobEventAsync(request.JobId, "INVENTORY_ISSUE", JsonSerializer.Serialize(issueRecord), cancellationToken);
 
         return StatusCode(StatusCodes.Status201Created, issueRecord);
     }
@@ -460,19 +460,19 @@ public sealed class WorkflowDataController(
     [HttpPost("inventory/reports")]
     public async Task<IActionResult> FinalizeInventory(InventoryFinalizeRequest request, CancellationToken cancellationToken)
     {
-        var task = await dataService.GetMissionAsync(request.MissionId, cancellationToken);
+        var task = await dataService.GetJobAsync(request.JobId, cancellationToken);
         var runtimeId = task?.RuntimeId ?? request.RuntimeId;
-        if (task is null && !IsActiveSimulation(request.MissionId, runtimeId))
-            return NotFound(new { message = "Mission task not found." });
+        if (task is null && !IsActiveSimulation(request.JobId, runtimeId))
+            return NotFound(new { message = "Job task not found." });
         if (task is not null && !MatchesRuntime(runtimeId, request.RuntimeId))
-            return Conflict(new { message = "Runtime does not match the mission." });
+            return Conflict(new { message = "Runtime does not match the job." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-            && !IsActiveSimulation(request.MissionId, runtimeId))
-            return Conflict(new { message = "No active in-memory simulation exists for this mission." });
+            && !IsActiveSimulation(request.JobId, runtimeId))
+            return Conflict(new { message = "No active in-memory simulation exists for this job." });
 
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
         {
-            var scans = SimulationWorkflowDataStore.GetInventoryScans(request.MissionId);
+            var scans = SimulationWorkflowDataStore.GetInventoryScans(request.JobId);
             var barcodes = scans
                 .Where(scan => scan.TryGetProperty("barcode", out var value) && value.ValueKind == JsonValueKind.String)
                 .Select(scan => scan.GetProperty("barcode").GetString()!)
@@ -490,7 +490,7 @@ public sealed class WorkflowDataController(
             });
         }
 
-        var events = await dataService.GetJobEventDataAsync(request.MissionId, "INVENTORY_SCAN", cancellationToken);
+        var events = await dataService.GetJobEventDataAsync(request.JobId, "INVENTORY_SCAN", cancellationToken);
         var scannedBarcodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var scannedShelfLevels = new HashSet<Guid>();
         var misplacedCount = 0;
@@ -524,7 +524,7 @@ public sealed class WorkflowDataController(
             totalMisplaced = misplacedCount,
             totalMissing = missingCount
         });
-        var reportId = await dataService.SaveInventoryReportAsync(request.MissionId,
+        var reportId = await dataService.SaveInventoryReportAsync(request.JobId,
             request.ScopeType ?? "SHELF", scannedBarcodes.Count, Math.Max(0, scannedBarcodes.Count - misplacedCount),
             misplacedCount, missingCount, eventData, cancellationToken);
         return Ok(new { reportId, reportType = storedReportType, runtimeId,
@@ -535,25 +535,25 @@ public sealed class WorkflowDataController(
     [HttpPost("patrol/observations")]
     public async Task<IActionResult> RecordPatrolObservation(PatrolObservationRequest request, CancellationToken cancellationToken)
     {
-        var task = await dataService.GetMissionAsync(request.MissionId, cancellationToken);
+        var task = await dataService.GetJobAsync(request.JobId, cancellationToken);
         var runtimeId = task?.RuntimeId ?? request.RuntimeId;
-        if (task is null && !IsActiveSimulation(request.MissionId, runtimeId))
-            return NotFound(new { message = "Mission task not found." });
+        if (task is null && !IsActiveSimulation(request.JobId, runtimeId))
+            return NotFound(new { message = "Job task not found." });
         if (task is not null && !MatchesRuntime(runtimeId, request.RuntimeId))
-            return Conflict(new { message = "Runtime does not match the mission." });
+            return Conflict(new { message = "Runtime does not match the job." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-            && !IsActiveSimulation(request.MissionId, runtimeId))
-            return Conflict(new { message = "No active in-memory simulation exists for this mission." });
+            && !IsActiveSimulation(request.JobId, runtimeId))
+            return Conflict(new { message = "No active in-memory simulation exists for this job." });
         if (request.Observation.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
             return BadRequest(new { message = "observation is required." });
         var category = ReadObservationCategory(request.Observation);
         var data = JsonSerializer.Serialize(new { category, observation = request.Observation, runtimeId, observedAt = DateTime.UtcNow });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
         {
-            SimulationWorkflowDataStore.AddPatrolCategory(request.MissionId, category);
+            SimulationWorkflowDataStore.AddPatrolCategory(request.JobId, category);
             return Ok(new { category, runtimeId });
         }
-        await dataService.AddJobEventAsync(request.MissionId, "PATROL_OBSERVATION", data, cancellationToken);
+        await dataService.AddJobEventAsync(request.JobId, "PATROL_OBSERVATION", data, cancellationToken);
         return Ok(new { category, runtimeId });
     }
 
@@ -561,18 +561,18 @@ public sealed class WorkflowDataController(
     [HttpPost("patrol/reports")]
     public async Task<IActionResult> FinalizePatrol(PatrolFinalizeRequest request, CancellationToken cancellationToken)
     {
-        var task = await dataService.GetMissionAsync(request.MissionId, cancellationToken);
+        var task = await dataService.GetJobAsync(request.JobId, cancellationToken);
         var runtimeId = task?.RuntimeId ?? request.RuntimeId;
-        if (task is null && !IsActiveSimulation(request.MissionId, runtimeId))
-            return NotFound(new { message = "Mission task not found." });
+        if (task is null && !IsActiveSimulation(request.JobId, runtimeId))
+            return NotFound(new { message = "Job task not found." });
         if (task is not null && !MatchesRuntime(runtimeId, request.RuntimeId))
-            return Conflict(new { message = "Runtime does not match the mission." });
+            return Conflict(new { message = "Runtime does not match the job." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-            && !IsActiveSimulation(request.MissionId, runtimeId))
-            return Conflict(new { message = "No active in-memory simulation exists for this mission." });
+            && !IsActiveSimulation(request.JobId, runtimeId))
+            return Conflict(new { message = "No active in-memory simulation exists for this job." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
         {
-            var simulationCategories = SimulationWorkflowDataStore.GetPatrolCategories(request.MissionId);
+            var simulationCategories = SimulationWorkflowDataStore.GetPatrolCategories(request.JobId);
             var simulationFallen = simulationCategories.Count(item => item == "FALLEN_BOOK");
             var simulationObstacles = simulationCategories.Count(item => item == "OBSTACLE");
             var simulationWarnings = simulationCategories.Count(item => item is "WARNING" or "OTHER_WARNING");
@@ -588,12 +588,12 @@ public sealed class WorkflowDataController(
                 otherWarningCount = simulationWarnings
             };
             await patrolNotifications.PublishPatrolCompletedAsync(new PatrolCompletedNotification(
-                request.MissionId, simulationReportId, simulationReport.reportType, runtimeId,
+                request.JobId, simulationReportId, simulationReport.reportType, runtimeId,
                 simulationReport.observationCount, simulationFallen, simulationObstacles, simulationWarnings,
                 DateTime.UtcNow), cancellationToken);
             return Ok(simulationReport);
         }
-        var observationData = await dataService.GetJobEventDataAsync(request.MissionId, "PATROL_OBSERVATION", cancellationToken);
+        var observationData = await dataService.GetJobEventDataAsync(request.JobId, "PATROL_OBSERVATION", cancellationToken);
         var categories = observationData.Select(ReadStoredObservationCategory).Where(item => item is not null).ToList();
         var fallen = categories.Count(item => item == "FALLEN_BOOK");
         var obstacles = categories.Count(item => item == "OBSTACLE");
@@ -610,10 +610,10 @@ public sealed class WorkflowDataController(
             unknownObstacleCount = obstacles,
             otherWarningCount = warnings
         });
-        var reportId = await dataService.SavePatrolReportAsync(request.MissionId, duration, categories.Count,
+        var reportId = await dataService.SavePatrolReportAsync(request.JobId, duration, categories.Count,
             warnings, eventData, cancellationToken);
         await patrolNotifications.PublishPatrolCompletedAsync(new PatrolCompletedNotification(
-            request.MissionId, reportId, storedType, runtimeId, categories.Count, fallen, obstacles, warnings,
+            request.JobId, reportId, storedType, runtimeId, categories.Count, fallen, obstacles, warnings,
             DateTime.UtcNow), cancellationToken);
         return Ok(new { reportId, reportType = storedType, runtimeId,
             observationCount = categories.Count, fallenBookCount = fallen, obstacleCount = obstacles, warningCount = warnings });
@@ -622,9 +622,9 @@ public sealed class WorkflowDataController(
     private static bool MatchesRuntime(string assignedRuntime, string requestedRuntime) =>
         string.Equals(assignedRuntime, requestedRuntime, StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsActiveSimulation(Guid missionId, string runtimeId) =>
+    private static bool IsActiveSimulation(Guid jobId, string runtimeId) =>
         string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-        && SimulationExecutionStore.TryGetExecution(missionId, out _, out var assignedRuntime)
+        && SimulationExecutionStore.TryGetExecution(jobId, out _, out var assignedRuntime)
         && string.Equals(assignedRuntime, "sim", StringComparison.OrdinalIgnoreCase);
 
     private static string ReadObservationCategory(JsonElement observation)

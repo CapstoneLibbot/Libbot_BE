@@ -11,7 +11,7 @@ namespace LiBot.Api.Controllers;
 [Route("api/book-guidance")]
 public sealed class BookGuidanceController(
     IBookGuidanceService service,
-    IMissionDataService missionData,
+    IJobDataService jobData,
     IRobotRuntimeService runtimes,
     IConfiguration configuration) : ControllerBase
 {
@@ -113,7 +113,7 @@ public sealed class BookGuidanceController(
     }
 
     /// <summary>Bắt đầu nhiệm vụ robot tìm và hướng dẫn đến bản sách đã chọn.</summary>
-    /// <remarks>Luồng Gazebo được khởi chạy từ mission Run để trạng thái mô phỏng không ghi vào database.</remarks>
+    /// <remarks>Luồng Gazebo được khởi chạy từ job Run để trạng thái mô phỏng không ghi vào database.</remarks>
     [HttpPost("start")]
     public async Task<IActionResult> Start(StartBookGuidanceRequest request, CancellationToken cancellationToken)
     {
@@ -122,7 +122,7 @@ public sealed class BookGuidanceController(
             || request.EndpointId is null)
             return BadRequest("runtimeId, bookId, bookItemId, and endpointId are required.");
         if (string.Equals(request.RuntimeId, "sim", StringComparison.OrdinalIgnoreCase))
-            return Conflict(new { message = "Start Gazebo runs from the mission Run button so execution state stays transient." });
+            return Conflict(new { message = "Start Gazebo runs from the job Run button so execution state stays transient." });
 
         var book = await service.GetBookAsync(request.BookId.Value, cancellationToken);
         if (book is null) return NotFound("Book not found.");
@@ -144,16 +144,16 @@ public sealed class BookGuidanceController(
             return Conflict(new { message = "The robot has no active map. Start navigation on the map containing this book first." });
         if (activeMapId != endpoint.MapId)
             return Conflict(new { message = "The selected book is not on the robot's active map." });
-        if (!await missionData.MapExistsAsync(activeMapId, cancellationToken))
+        if (!await jobData.MapExistsAsync(activeMapId, cancellationToken))
             return NotFound("The robot's active map was not found.");
 
         var robotId = request.RobotId;
         if (robotId == Guid.Empty)
         {
-            robotId = await missionData.GetOrCreateRobotIdForMapAsync(
+            robotId = await jobData.GetOrCreateRobotIdForMapAsync(
                 activeMapId, request.RuntimeId, runtime.DisplayName, cancellationToken);
         }
-        else if (!await missionData.RobotExistsAsync(robotId, cancellationToken))
+        else if (!await jobData.RobotExistsAsync(robotId, cancellationToken))
         {
             return NotFound("Robot not found.");
         }
@@ -175,13 +175,13 @@ public sealed class BookGuidanceController(
 
             if (!result.IsAccepted)
             {
-                return UnprocessableEntity(new { jobId = result.MissionId, robot = result.Robot });
+                return UnprocessableEntity(new { jobId = result.JobId, robot = result.Robot });
             }
 
             return Accepted(new
             {
-                jobId = result.MissionId,
-                executionId = result.MissionId,
+                jobId = result.JobId,
+                executionId = result.JobId,
                 workflowId = result.Workflow.Id,
                 runtimeId = request.RuntimeId,
                 robot = result.Robot

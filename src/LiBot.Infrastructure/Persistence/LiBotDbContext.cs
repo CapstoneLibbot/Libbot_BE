@@ -1,7 +1,7 @@
 using LiBot.Domain.Identity;
 using LiBot.Domain.Inventory;
 using LiBot.Domain.Library;
-using LiBot.Domain.Mission;
+using LiBot.Domain.Job;
 using LiBot.Domain.Workflow;
 using LiBot.Domain.Common;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +17,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         PersistPendingJobTaskState();
+        DetachSimulationJobEvents();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
@@ -25,6 +26,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         CancellationToken cancellationToken = default)
     {
         await PersistPendingJobTaskStateAsync(cancellationToken);
+        await DetachSimulationJobEventsAsync(cancellationToken);
         return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
@@ -45,7 +47,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
     public DbSet<Endpoint> Endpoints => Set<Endpoint>();
     public DbSet<EndpointGroup> EndpointGroups => Set<EndpointGroup>();
     public DbSet<EndpointGroupMember> EndpointGroupMembers => Set<EndpointGroupMember>();
-    public DbSet<Mission> Jobs => Set<Mission>();
+    public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobTask> JobTasks => Set<JobTask>();
     public DbSet<JobStep> JobSteps => Set<JobStep>();
     public DbSet<JobEvent> JobEvents => Set<JobEvent>();
@@ -64,7 +66,8 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
     private void PersistPendingJobTaskState()
     {
         foreach (var entry in ChangeTracker.Entries<JobTask>()
-                     .Where(item => item.State == EntityState.Added || item.Entity.HasUnpersistedPersistenceState))
+                     .Where(item => item.Entity.RuntimeId != "sim"
+                         && (item.State == EntityState.Added || item.Entity.HasUnpersistedPersistenceState)))
         {
             var task = entry.Entity;
             var step = JobSteps.Local.Where(item => item.JobTaskId == task.Id)
@@ -82,7 +85,8 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
     private async Task PersistPendingJobTaskStateAsync(CancellationToken cancellationToken)
     {
         foreach (var entry in ChangeTracker.Entries<JobTask>()
-                     .Where(item => item.State == EntityState.Added || item.Entity.HasUnpersistedPersistenceState))
+                     .Where(item => item.Entity.RuntimeId != "sim"
+                         && (item.State == EntityState.Added || item.Entity.HasUnpersistedPersistenceState)))
         {
             var task = entry.Entity;
             var step = JobSteps.Local.Where(item => item.JobTaskId == task.Id)
@@ -96,6 +100,76 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
                 task.SerializePersistenceState()));
             task.MarkPersistenceStatePersisted();
         }
+    }
+
+    private void DetachSimulationJobEvents()
+    {
+        var addedEvents = ChangeTracker.Entries<JobEvent>()
+            .Where(item => item.State == EntityState.Added)
+            .ToList();
+        if (addedEvents.Count == 0) return;
+
+        var simulationStepIds = new HashSet<Guid>();
+        var unresolvedStepIds = new List<Guid>();
+        foreach (var entry in addedEvents)
+        {
+            var step = JobSteps.Local.FirstOrDefault(item => item.Id == entry.Entity.JobStepId);
+            var task = step is null
+                ? null
+                : JobTasks.Local.FirstOrDefault(item => item.Id == step.JobTaskId);
+            if (task is null)
+                unresolvedStepIds.Add(entry.Entity.JobStepId);
+            else if (string.Equals(task.RuntimeId, "sim", StringComparison.OrdinalIgnoreCase))
+                simulationStepIds.Add(entry.Entity.JobStepId);
+        }
+
+        if (unresolvedStepIds.Count > 0)
+        {
+            var ids = unresolvedStepIds.Distinct().ToArray();
+            var persistedSimulationIds = (from step in JobSteps.AsNoTracking()
+                                          join task in JobTasks.AsNoTracking() on step.JobTaskId equals task.Id
+                                          where ids.Contains(step.Id) && task.RuntimeId == "sim"
+                                          select step.Id).ToList();
+            simulationStepIds.UnionWith(persistedSimulationIds);
+        }
+
+        foreach (var entry in addedEvents.Where(item => simulationStepIds.Contains(item.Entity.JobStepId)))
+            entry.State = EntityState.Detached;
+    }
+
+    private async Task DetachSimulationJobEventsAsync(CancellationToken cancellationToken)
+    {
+        var addedEvents = ChangeTracker.Entries<JobEvent>()
+            .Where(item => item.State == EntityState.Added)
+            .ToList();
+        if (addedEvents.Count == 0) return;
+
+        var simulationStepIds = new HashSet<Guid>();
+        var unresolvedStepIds = new List<Guid>();
+        foreach (var entry in addedEvents)
+        {
+            var step = JobSteps.Local.FirstOrDefault(item => item.Id == entry.Entity.JobStepId);
+            var task = step is null
+                ? null
+                : JobTasks.Local.FirstOrDefault(item => item.Id == step.JobTaskId);
+            if (task is null)
+                unresolvedStepIds.Add(entry.Entity.JobStepId);
+            else if (string.Equals(task.RuntimeId, "sim", StringComparison.OrdinalIgnoreCase))
+                simulationStepIds.Add(entry.Entity.JobStepId);
+        }
+
+        if (unresolvedStepIds.Count > 0)
+        {
+            var ids = unresolvedStepIds.Distinct().ToArray();
+            var persistedSimulationIds = await (from step in JobSteps.AsNoTracking()
+                                                join task in JobTasks.AsNoTracking() on step.JobTaskId equals task.Id
+                                                where ids.Contains(step.Id) && task.RuntimeId == "sim"
+                                                select step.Id).ToListAsync(cancellationToken);
+            simulationStepIds.UnionWith(persistedSimulationIds);
+        }
+
+        foreach (var entry in addedEvents.Where(item => simulationStepIds.Contains(item.Entity.JobStepId)))
+            entry.State = EntityState.Detached;
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -232,7 +306,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.HasOne<RobotEntity>().WithMany().HasForeignKey(x => x.RobotId).OnDelete(DeleteBehavior.NoAction);
         });
 
-        modelBuilder.Entity<Mission>(entity =>
+        modelBuilder.Entity<Job>(entity =>
         {
             entity.ToTable("JOB");
             entity.HasKey(x => x.Id);
@@ -245,15 +319,15 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.ToTable("JOB_TASK");
             entity.HasKey(x => x.Id);
             entity.Ignore(x => x.Description);
-            entity.Ignore(x => x.RuntimeId);
-            entity.Ignore(x => x.ExecutionId);
             entity.Ignore(x => x.ExecutionState);
             entity.Ignore(x => x.PersistencePayload);
             entity.Ignore(x => x.StartedAtUtc);
             entity.Ignore(x => x.CompletedAtUtc);
             entity.Property(x => x.Name).IsRequired();
             entity.Property(x => x.Status).IsRequired();
-            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
+            entity.Property(x => x.RuntimeId).HasColumnName("runtime_id").IsRequired();
+            entity.Property(x => x.ExecutionId).HasColumnName("execution_id");
+            entity.HasOne<Job>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<WorkflowTask>().WithMany().HasForeignKey(x => x.WorkflowTaskId).OnDelete(DeleteBehavior.NoAction);
         });
         modelBuilder.Entity<JobStep>(entity =>
@@ -262,6 +336,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
             entity.HasKey(x => x.Id);
             entity.HasOne<JobTask>().WithMany().HasForeignKey(x => x.JobTaskId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<TaskStep>().WithMany().HasForeignKey(x => x.TaskStepId).OnDelete(DeleteBehavior.NoAction);
+            entity.Property(x => x.Configuration).IsRequired();
         });
         modelBuilder.Entity<JobEvent>(entity =>
         {
@@ -274,19 +349,19 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         {
             entity.ToTable("FEEDBACK");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<Job>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
         });
         modelBuilder.Entity<InventoryReport>(entity =>
         {
             entity.ToTable("INVENTORY_REPORT");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<Job>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
         });
         modelBuilder.Entity<PatrolReport>(entity =>
         {
             entity.ToTable("PATROL_REPORT");
             entity.HasKey(x => x.Id);
-            entity.HasOne<Mission>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne<Job>().WithMany().HasForeignKey(x => x.JobId).OnDelete(DeleteBehavior.NoAction);
         });
 
         modelBuilder.Entity<WorkflowDefinition>(entity =>
@@ -351,9 +426,8 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
     {
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
-            var table = StoreObjectIdentifier.Table(entityType.GetTableName()!, entityType.GetSchema());
             foreach (var property in entityType.GetProperties())
-                property.SetColumnName(ToSnakeCase(property.Name), table);
+                property.SetColumnName(ToSnakeCase(property.Name));
         }
     }
 
@@ -376,12 +450,11 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         modelBuilder.Entity<Schedule>().Property(x => x.NextRunAtUtc).HasColumnName("next_run_at");
         modelBuilder.Entity<LibraryMap>().Property(x => x.MapData).HasColumnName("map_data");
         modelBuilder.Entity<Book>().Property(x => x.Image).HasColumnName("image_url");
-        modelBuilder.Entity<Mission>().Property(x => x.CreatedAtUtc).HasColumnName("create_at");
-        modelBuilder.Entity<Mission>().Property(x => x.StartedAtUtc).HasColumnName("started_at");
-        modelBuilder.Entity<Mission>().Property(x => x.CompletedAtUtc).HasColumnName("completed_at");
+        modelBuilder.Entity<Job>().Property(x => x.CreatedAtUtc).HasColumnName("create_at");
+        modelBuilder.Entity<Job>().Property(x => x.StartedAtUtc).HasColumnName("started_at");
+        modelBuilder.Entity<Job>().Property(x => x.CompletedAtUtc).HasColumnName("completed_at");
         modelBuilder.Entity<RobotLog>().Property(x => x.RecordedAtUtc).HasColumnName("record_at");
         modelBuilder.Entity<JobEvent>().Property(x => x.EventTimeUtc).HasColumnName("event_time");
-        modelBuilder.Entity<JobStep>().Property(x => x.Description).HasColumnName("configuration");
         modelBuilder.Entity<JobTask>().Property(x => x.SequenceNo).HasColumnName("sequence_no");
         modelBuilder.Entity<EndpointGroupMember>().Property(x => x.EndpointGroupId).HasColumnName("enpoint_group_id");
         modelBuilder.Entity<InventoryReport>().Property(x => x.TotalShelves).HasColumnName("total_shelfs");

@@ -8,7 +8,7 @@ using LiBot.Application.Services.Robot;
 using LiBot.Application.Services.Workflow;
 using LiBot.Application.Workflow;
 using LiBot.Domain.Enums;
-using LiBot.Domain.Mission;
+using LiBot.Domain.Job;
 using LiBot.Infrastructure.Persistence;
 using LiBot.Infrastructure.Robot;
 using Microsoft.AspNetCore.SignalR;
@@ -121,7 +121,7 @@ public sealed class LowBatteryChargingCoordinator(
             await using var scope = scopeFactory.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<LiBotDbContext>();
             var workflows = scope.ServiceProvider.GetRequiredService<IWorkflowManagementService>();
-            var missionData = scope.ServiceProvider.GetRequiredService<IMissionDataRepository>();
+            var jobData = scope.ServiceProvider.GetRequiredService<IJobDataRepository>();
 
             var chargingWorkflowId = await db.Workflows.AsNoTracking()
                 .Where(item => item.Type == "ROBOT_RETURN_AND_CHARGING" && item.Status == WorkflowStatus.Active)
@@ -130,20 +130,20 @@ public sealed class LowBatteryChargingCoordinator(
 
             if (chargingWorkflowId is Guid existingWorkflowId)
             {
-                var activeMission = await db.Jobs.AsNoTracking()
+                var activeJob = await db.Jobs.AsNoTracking()
                     .Where(item => item.WorkflowId == existingWorkflowId && (item.Status == "Pending" || item.Status == "Running"))
                     .OrderByDescending(item => item.CreatedAtUtc)
                     .Select(item => new { item.Id, item.Status })
                     .FirstOrDefaultAsync(cancellationToken);
-                if (activeMission is not null)
+                if (activeJob is not null)
                 {
-                    var existingTask = await missionData.GetTaskAsync(activeMission.Id, tracking: false, cancellationToken);
+                    var existingTask = await jobData.GetTaskAsync(activeJob.Id, tracking: false, cancellationToken);
                     if (!string.IsNullOrWhiteSpace(existingTask?.ExecutionId))
                     {
                         episode.Triggered = true;
                         await PublishAutoChargeStartedAsync(new
                         {
-                            missionId = activeMission.Id,
+                            jobId = activeJob.Id,
                             executionId = existingTask.ExecutionId,
                             runtimeId = "real",
                             workflowId = existingWorkflowId,
@@ -155,29 +155,29 @@ public sealed class LowBatteryChargingCoordinator(
                         return;
                     }
 
-                    if (activeMission.Status == "Pending")
+                    if (activeJob.Status == "Pending")
                     {
-                        var abandonedMission = await missionData.GetMissionAsync(activeMission.Id, tracking: true, cancellationToken);
-                        if (abandonedMission is not null) abandonedMission.Fail();
+                        var abandonedJob = await jobData.GetJobAsync(activeJob.Id, tracking: true, cancellationToken);
+                        if (abandonedJob is not null) abandonedJob.Fail();
                         if (existingTask is not null)
                         {
-                            var abandonedTask = await missionData.GetTaskAsync(activeMission.Id, tracking: true, cancellationToken);
+                            var abandonedTask = await jobData.GetTaskAsync(activeJob.Id, tracking: true, cancellationToken);
                             abandonedTask?.UpdateExecutionState(JsonSerializer.Serialize(new
                             {
-                                missionId = activeMission.Id,
+                                jobId = activeJob.Id,
                                 runtimeId = "real",
                                 status = "FAILED",
                                 error = "Automatic charging dispatch was interrupted before a robot execution was recorded.",
                                 updatedAt = DateTime.UtcNow
                             }));
                         }
-                        await missionData.SaveChangesAsync(cancellationToken);
+                        await jobData.SaveChangesAsync(cancellationToken);
                     }
                     else
                     {
                         episode.Triggered = true;
                         await NotifyBlockedAsync(episode, battery,
-                            "An active charging mission has no execution id. Automatic movement is paused to avoid creating a duplicate.",
+                            "An active charging job has no execution id. Automatic movement is paused to avoid creating a duplicate.",
                             cancellationToken);
                         return;
                     }
@@ -250,7 +250,7 @@ public sealed class LowBatteryChargingCoordinator(
             if (navigationIsInProgress && !hasActiveWorkflow)
             {
                 await NotifyBlockedAsync(episode, battery,
-                    "A navigation goal is active outside a workflow mission. Automatic charging will wait until it finishes.",
+                    "A navigation goal is active outside a workflow job. Automatic charging will wait until it finishes.",
                     cancellationToken);
                 return;
             }
@@ -290,16 +290,16 @@ public sealed class LowBatteryChargingCoordinator(
                 return;
             }
 
-            var robotId = await missionData.GetRobotIdByMapAsync(mapId, cancellationToken);
+            var robotId = await jobData.GetRobotIdByMapAsync(mapId, cancellationToken);
             if (robotId is null)
             {
                 await NotifyBlockedAsync(episode, battery,
-                    "No database robot is assigned to the active map, so the automatic charging mission cannot be recorded.",
+                    "No database robot is assigned to the active map, so the automatic charging job cannot be recorded.",
                     cancellationToken);
                 return;
             }
 
-            var mission = new Mission(
+            var job = new Job(
                 "Automatic return to charger",
                 $"Battery reached {battery:0.##}%; return to CHARGER endpoint '{charger.Name}'.",
                 robotId.Value,
@@ -313,24 +313,26 @@ public sealed class LowBatteryChargingCoordinator(
                 ["charger_endpoint_id"] = charger.Id.ToString(),
                 ["active_map_id"] = mapId.ToString(),
                 ["runtime_id"] = "real",
-                ["mission_id"] = mission.Id.ToString(),
-                ["task_id"] = mission.Id.ToString(),
+                ["job_id"] = job.Id.ToString(),
+                ["task_id"] = job.Id.ToString(),
                 ["backend_base_url"] = configuration["LiBot:BackendBaseUrl"]?.TrimEnd('/') ?? string.Empty
             };
-            await missionData.CreateMissionAsync(
-                mission,
-                workflow.Id,
+            await jobData.CreateJobAsync(
+                job,
+                document,
                 "real",
                 JsonSerializer.Serialize(initialContext),
                 cancellationToken);
+            var storedDocument = await jobData.GetRobotWorkflowDocumentAsync(job.Id, cancellationToken)
+                ?? throw new InvalidOperationException("The automatic charging job step configuration was not persisted.");
 
-            var jobTask = await missionData.GetTaskAsync(mission.Id, tracking: true, cancellationToken)
+            var jobTask = await jobData.GetTaskAsync(job.Id, tracking: true, cancellationToken)
                 ?? throw new InvalidOperationException("The automatic charging task was not persisted.");
             var executionId = Guid.NewGuid().ToString("N");
             jobTask.SetExecutionId(executionId);
             jobTask.UpdateExecutionState(JsonSerializer.Serialize(new
             {
-                missionId = mission.Id,
+                jobId = job.Id,
                 executionId,
                 runtimeId = "real",
                 status = "QUEUED",
@@ -340,7 +342,7 @@ public sealed class LowBatteryChargingCoordinator(
                 allowedValues = Array.Empty<string>(),
                 updatedAt = DateTime.UtcNow
             }));
-            await missionData.SaveChangesAsync(cancellationToken);
+            await jobData.SaveChangesAsync(cancellationToken);
 
             JsonElement dispatchResponse;
             try
@@ -348,26 +350,27 @@ public sealed class LowBatteryChargingCoordinator(
                 using var response = await tcpClient.SendAsync("real", new
                 {
                     command = "start_auto_charge",
-                    workflow_version = document.Version,
-                    workflow_id = document.WorkflowId,
-                    mission_id = mission.Id.ToString(),
-                    task_id = mission.Id.ToString(),
+                    workflow_version = storedDocument.Version,
+                    workflow_id = storedDocument.WorkflowId,
+                    job_id = job.Id.ToString(),
+                    task_id = job.Id.ToString(),
                     execution_id = executionId,
                     runtime_id = "real",
                     initial_context = initialContext,
-                    steps = document.Steps
+                    steps = storedDocument.Steps
                 }, cancellationToken);
                 dispatchResponse = response.RootElement.Clone();
             }
             catch (LiBotTcpException exception)
             {
-                mission.Fail();
+                job.Fail();
                 jobTask.UpdateExecutionState(JsonSerializer.Serialize(new
                 {
-                    missionId = mission.Id, executionId, runtimeId = "real", status = "FAILED",
+                    jobId = job.Id, executionId, runtimeId = "real", status = "FAILED",
                     error = exception.Message, updatedAt = DateTime.UtcNow
                 }));
-                await missionData.SaveChangesAsync(cancellationToken);
+                await jobData.SetJobTaskStatusesAsync(job.Id, "Failed", cancellationToken);
+                await jobData.SaveChangesAsync(cancellationToken);
                 await NotifyBlockedAsync(episode, battery, $"Robot rejected automatic charging: {exception.Message}", cancellationToken);
                 return;
             }
@@ -375,13 +378,14 @@ public sealed class LowBatteryChargingCoordinator(
             if (!HasStatus(dispatchResponse, "accepted"))
             {
                 var message = ReadMessage(dispatchResponse) ?? "Robot rejected the automatic charging workflow.";
-                mission.Fail();
+                job.Fail();
                 jobTask.UpdateExecutionState(JsonSerializer.Serialize(new
                 {
-                    missionId = mission.Id, executionId, runtimeId = "real", status = "FAILED",
+                    jobId = job.Id, executionId, runtimeId = "real", status = "FAILED",
                     error = message, updatedAt = DateTime.UtcNow
                 }));
-                await missionData.SaveChangesAsync(cancellationToken);
+                await jobData.SetJobTaskStatusesAsync(job.Id, "Failed", cancellationToken);
+                await jobData.SaveChangesAsync(cancellationToken);
                 await NotifyBlockedAsync(episode, battery, message, cancellationToken);
                 return;
             }
@@ -391,7 +395,7 @@ public sealed class LowBatteryChargingCoordinator(
                 && queuedValue.ValueKind == JsonValueKind.True;
             await PublishAutoChargeStartedAsync(new
             {
-                missionId = mission.Id,
+                jobId = job.Id,
                 executionId,
                 runtimeId = "real",
                 workflowId = workflow.Id,

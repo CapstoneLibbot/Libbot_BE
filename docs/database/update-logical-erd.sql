@@ -211,6 +211,8 @@ CREATE TABLE [job_task] (
     [name] VARCHAR(150) NOT NULL,
     [sequence_no] INTEGER NOT NULL,
     [status] VARCHAR(30) NOT NULL,
+    [runtime_id] VARCHAR(16) NOT NULL DEFAULT 'real',
+    [execution_id] VARCHAR(128),
     CONSTRAINT [uq_job_task_sequence] UNIQUE ([job_id], [sequence_no])
 );
 
@@ -283,7 +285,7 @@ CREATE TABLE [job_step] (
     [step_type] VARCHAR(50) NOT NULL,
     [sequence] INTEGER NOT NULL,
     [status] VARCHAR(30) NOT NULL,
-    [configuration] NVARCHAR(MAX),
+    [configuration] NVARCHAR(MAX) NOT NULL,
     CONSTRAINT [uq_job_step_sequence] UNIQUE ([job_task_id], [sequence])
 );
 

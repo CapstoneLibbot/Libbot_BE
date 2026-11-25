@@ -10,7 +10,7 @@ public interface IInventoryWorkflowService
         CancellationToken cancellationToken);
 
     Task<InventoryWorkflowReportResponse?> GetReportAsync(
-        Guid missionId,
+        Guid jobId,
         string runtimeId,
         CancellationToken cancellationToken);
 }

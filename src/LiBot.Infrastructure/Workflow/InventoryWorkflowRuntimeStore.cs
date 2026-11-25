@@ -8,38 +8,38 @@ public static class InventoryWorkflowRuntimeStore
 {
     private static readonly ConcurrentDictionary<Guid, ConcurrentQueue<string>> Scans = new();
     private static readonly ConcurrentDictionary<Guid, string> Reports = new();
-    private static readonly ConcurrentDictionary<(Guid MissionId, string Key), CachedAction> Actions = new();
+    private static readonly ConcurrentDictionary<(Guid JobId, string Key), CachedAction> Actions = new();
 
-    public static void ResetSimulation(Guid missionId)
+    public static void ResetSimulation(Guid jobId)
     {
-        Scans.TryRemove(missionId, out _);
-        Reports.TryRemove(missionId, out _);
-        foreach (var key in Actions.Keys.Where(key => key.MissionId == missionId))
+        Scans.TryRemove(jobId, out _);
+        Reports.TryRemove(jobId, out _);
+        foreach (var key in Actions.Keys.Where(key => key.JobId == jobId))
             Actions.TryRemove(key, out _);
     }
 
-    public static void AddScan(Guid missionId, object scan) =>
-        Scans.GetOrAdd(missionId, _ => new ConcurrentQueue<string>()).Enqueue(JsonSerializer.Serialize(scan));
+    public static void AddScan(Guid jobId, object scan) =>
+        Scans.GetOrAdd(jobId, _ => new ConcurrentQueue<string>()).Enqueue(JsonSerializer.Serialize(scan));
 
-    public static IReadOnlyList<string> GetScans(Guid missionId) =>
-        Scans.TryGetValue(missionId, out var scans) ? scans.ToArray() : Array.Empty<string>();
+    public static IReadOnlyList<string> GetScans(Guid jobId) =>
+        Scans.TryGetValue(jobId, out var scans) ? scans.ToArray() : Array.Empty<string>();
 
-    public static void SetReport(Guid missionId, object report) =>
-        Reports[missionId] = JsonSerializer.Serialize(report);
+    public static void SetReport(Guid jobId, object report) =>
+        Reports[jobId] = JsonSerializer.Serialize(report);
 
-    public static T? GetReport<T>(Guid missionId)
+    public static T? GetReport<T>(Guid jobId)
     {
-        if (!Reports.TryGetValue(missionId, out var json)) return default;
+        if (!Reports.TryGetValue(jobId, out var json)) return default;
         return JsonSerializer.Deserialize<T>(json, JsonOptions);
     }
 
     public static bool TryGetAction(
-        Guid missionId,
+        Guid jobId,
         string key,
         out string fingerprint,
         out string response)
     {
-        if (Actions.TryGetValue((missionId, key), out var cached))
+        if (Actions.TryGetValue((jobId, key), out var cached))
         {
             fingerprint = cached.Fingerprint;
             response = cached.Response;
@@ -51,8 +51,8 @@ public static class InventoryWorkflowRuntimeStore
         return false;
     }
 
-    public static void AddAction(Guid missionId, string key, string fingerprint, object response) =>
-        Actions[(missionId, key)] = new CachedAction(fingerprint, JsonSerializer.Serialize(response));
+    public static void AddAction(Guid jobId, string key, string fingerprint, object response) =>
+        Actions[(jobId, key)] = new CachedAction(fingerprint, JsonSerializer.Serialize(response));
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {

@@ -1,6 +1,6 @@
 using LiBot.Domain.Common;
 
-namespace LiBot.Domain.Mission;
+namespace LiBot.Domain.Job;
 
 public class InventoryReport : Entity
 {

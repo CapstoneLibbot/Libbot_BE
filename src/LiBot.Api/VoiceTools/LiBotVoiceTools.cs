@@ -15,7 +15,7 @@ namespace LiBot.Api.VoiceTools;
 public sealed class LiBotVoiceTools(
     IBookGuidanceService bookGuidance,
     IFacilityGuidanceService facilityGuidance,
-    IMissionDataService missionData,
+    IJobDataService jobData,
     IRobotRuntimeService runtimes,
     IConfiguration configuration,
     IOptions<VoiceToolsOptions> options)
@@ -84,14 +84,14 @@ public sealed class LiBotVoiceTools(
     [Description("Bắt đầu dẫn người dùng đến một đầu sách đã được tìm thấy. Chỉ gọi sau khi người dùng đã chọn sách và đồng ý dẫn đường.")]
     public async Task<VoiceBookGuidanceResult> StartBookGuidanceAsync(
         [Description("ID của đầu sách mà người dùng đã chọn từ search_books.")] Guid bookId,
-        [Description("Câu tìm kiếm ban đầu, chỉ dùng để ghi nhận mission.")] string? query = null)
+        [Description("Câu tìm kiếm ban đầu, chỉ dùng để ghi nhận job.")] string? query = null)
     {
         if (!TryGetGuidanceConfiguration(out var robotId, out var runtimeId))
             return VoiceBookGuidanceResult.Unavailable();
 
         try
         {
-            if (!await missionData.RobotExistsAsync(robotId, CancellationToken.None))
+            if (!await jobData.RobotExistsAsync(robotId, CancellationToken.None))
                 return VoiceBookGuidanceResult.Unavailable();
 
             var book = await bookGuidance.GetBookAsync(bookId, CancellationToken.None);
@@ -117,8 +117,8 @@ public sealed class LiBotVoiceTools(
                 BookItemId: selectedCopy.Id), backendBaseUrl, timeout.Token);
 
             return result.IsAccepted
-                ? VoiceBookGuidanceResult.Started(book.Title, result.MissionId, runtimeId, book.BookId)
-                : VoiceBookGuidanceResult.Failed(book.Title, result.MissionId, runtimeId, book.BookId);
+                ? VoiceBookGuidanceResult.Started(book.Title, result.JobId, runtimeId, book.BookId)
+                : VoiceBookGuidanceResult.Failed(book.Title, result.JobId, runtimeId, book.BookId);
         }
         catch (OperationCanceledException)
         {
@@ -138,14 +138,14 @@ public sealed class LiBotVoiceTools(
     [Description("Bắt đầu dẫn người dùng đến Endpoint đã tìm thấy. Chỉ gọi sau khi người dùng đã chọn địa điểm và đồng ý dẫn đường.")]
     public async Task<VoiceLocationGuidanceResult> StartLocationGuidanceAsync(
         [Description("ID Endpoint đã chọn từ search_locations.")] Guid endpointId,
-        [Description("Câu tìm kiếm ban đầu, chỉ dùng để ghi nhận mission.")] string? query = null)
+        [Description("Câu tìm kiếm ban đầu, chỉ dùng để ghi nhận job.")] string? query = null)
     {
         if (!TryGetGuidanceConfiguration(out var robotId, out var runtimeId))
             return VoiceLocationGuidanceResult.Unavailable();
 
         try
         {
-            if (!await missionData.RobotExistsAsync(robotId, CancellationToken.None))
+            if (!await jobData.RobotExistsAsync(robotId, CancellationToken.None))
                 return VoiceLocationGuidanceResult.Unavailable();
 
             var location = await facilityGuidance.GetFacilityAsync(endpointId, CancellationToken.None);
@@ -164,8 +164,8 @@ public sealed class LiBotVoiceTools(
                 RuntimeId: runtimeId,
                 FacilityId: endpointId), backendBaseUrl, timeout.Token);
             return result.IsAccepted
-                ? VoiceLocationGuidanceResult.Started(location.Name, result.MissionId, runtimeId, endpointId)
-                : VoiceLocationGuidanceResult.Failed(location.Name, result.MissionId, runtimeId, endpointId);
+                ? VoiceLocationGuidanceResult.Started(location.Name, result.JobId, runtimeId, endpointId)
+                : VoiceLocationGuidanceResult.Failed(location.Name, result.JobId, runtimeId, endpointId);
         }
         catch (OperationCanceledException)
         {

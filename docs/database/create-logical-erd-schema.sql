@@ -237,6 +237,8 @@ CREATE TABLE dbo.[JOB_TASK] (
     [WorkflowTaskId] uniqueidentifier NOT NULL,
     [Name] nvarchar(max) NOT NULL,
     [Status] nvarchar(max) NOT NULL,
+    [runtime_id] nvarchar(16) NOT NULL CONSTRAINT [df_job_task_runtime_id] DEFAULT N'real',
+    [execution_id] nvarchar(128) NULL,
     [StartedAt] datetime2 NULL,
     [CompletedAt] datetime2 NULL,
     [Description] nvarchar(max) NULL,

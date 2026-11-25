@@ -5,12 +5,14 @@ namespace LiBot.Application.Workflow.FacilityGuidance;
 public sealed record FacilityGuidanceLoadedWorkflow(
     Guid Id,
     Guid PrimaryTaskId,
+    int PrimaryTaskSequence,
+    string PrimaryTaskName,
     string Type,
     string Name,
     IReadOnlyList<IReadOnlyDictionary<string, object?>> Steps);
 
 public sealed record FacilityGuidanceStartResult(
-    Guid MissionId,
+    Guid JobId,
     FacilityGuidanceLoadedWorkflow? Workflow,
     JsonElement Robot,
     bool IsAccepted);

@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace LiBot.Application.Models;
 
 public sealed record InventoryScanRequest(
-    Guid MissionId,
+    Guid JobId,
     string RuntimeId,
     string? Barcode = null,
     string? ShelfCode = null,

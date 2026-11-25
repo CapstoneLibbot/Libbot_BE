@@ -13,71 +13,71 @@ internal static class SimulationWorkflowDataStore
     private static readonly ConcurrentDictionary<Guid, ConcurrentQueue<string>> PatrolObservations = new();
     private static readonly ConcurrentDictionary<Guid, ConcurrentQueue<string>> PatrolCoverage = new();
     private static readonly ConcurrentDictionary<Guid, string> PatrolReports = new();
-    private static readonly ConcurrentDictionary<(Guid MissionId, string Key), (string Fingerprint, string Response)> PatrolActions = new();
+    private static readonly ConcurrentDictionary<(Guid JobId, string Key), (string Fingerprint, string Response)> PatrolActions = new();
 
-    public static void Reset(Guid missionId)
+    public static void Reset(Guid jobId)
     {
-        InventoryScans.TryRemove(missionId, out _);
-        InventoryIssues.TryRemove(missionId, out _);
-        PatrolCategories.TryRemove(missionId, out _);
-        PatrolObservations.TryRemove(missionId, out _);
-        PatrolCoverage.TryRemove(missionId, out _);
-        PatrolReports.TryRemove(missionId, out _);
-        foreach (var key in PatrolActions.Keys.Where(key => key.MissionId == missionId)) PatrolActions.TryRemove(key, out _);
-        InventoryWorkflowRuntimeStore.ResetSimulation(missionId);
+        InventoryScans.TryRemove(jobId, out _);
+        InventoryIssues.TryRemove(jobId, out _);
+        PatrolCategories.TryRemove(jobId, out _);
+        PatrolObservations.TryRemove(jobId, out _);
+        PatrolCoverage.TryRemove(jobId, out _);
+        PatrolReports.TryRemove(jobId, out _);
+        foreach (var key in PatrolActions.Keys.Where(key => key.JobId == jobId)) PatrolActions.TryRemove(key, out _);
+        InventoryWorkflowRuntimeStore.ResetSimulation(jobId);
     }
 
-    public static void AddInventoryScan(Guid missionId, object scan) =>
-        InventoryScans.GetOrAdd(missionId, _ => new ConcurrentQueue<string>())
+    public static void AddInventoryScan(Guid jobId, object scan) =>
+        InventoryScans.GetOrAdd(jobId, _ => new ConcurrentQueue<string>())
             .Enqueue(JsonSerializer.Serialize(scan));
 
-    public static IReadOnlyList<JsonElement> GetInventoryScans(Guid missionId) =>
-        InventoryScans.TryGetValue(missionId, out var scans)
+    public static IReadOnlyList<JsonElement> GetInventoryScans(Guid jobId) =>
+        InventoryScans.TryGetValue(jobId, out var scans)
             ? scans.Select(Parse).ToArray()
             : Array.Empty<JsonElement>();
 
-    public static void AddInventoryIssue(Guid missionId, object issue) =>
-        InventoryIssues.GetOrAdd(missionId, _ => new ConcurrentQueue<string>())
+    public static void AddInventoryIssue(Guid jobId, object issue) =>
+        InventoryIssues.GetOrAdd(jobId, _ => new ConcurrentQueue<string>())
             .Enqueue(JsonSerializer.Serialize(issue));
 
-    public static IReadOnlyList<JsonElement> GetInventoryIssues(Guid missionId) =>
-        InventoryIssues.TryGetValue(missionId, out var issues)
+    public static IReadOnlyList<JsonElement> GetInventoryIssues(Guid jobId) =>
+        InventoryIssues.TryGetValue(jobId, out var issues)
             ? issues.Select(Parse).ToArray()
             : Array.Empty<JsonElement>();
 
-    public static void AddPatrolCategory(Guid missionId, string category) =>
-        PatrolCategories.GetOrAdd(missionId, _ => new ConcurrentQueue<string>()).Enqueue(category);
+    public static void AddPatrolCategory(Guid jobId, string category) =>
+        PatrolCategories.GetOrAdd(jobId, _ => new ConcurrentQueue<string>()).Enqueue(category);
 
-    public static IReadOnlyList<string> GetPatrolCategories(Guid missionId) =>
-        PatrolCategories.TryGetValue(missionId, out var categories)
+    public static IReadOnlyList<string> GetPatrolCategories(Guid jobId) =>
+        PatrolCategories.TryGetValue(jobId, out var categories)
             ? categories.ToArray()
             : Array.Empty<string>();
 
-    public static void AddPatrolObservation(Guid missionId, object observation) =>
-        PatrolObservations.GetOrAdd(missionId, _ => new ConcurrentQueue<string>()).Enqueue(JsonSerializer.Serialize(observation));
+    public static void AddPatrolObservation(Guid jobId, object observation) =>
+        PatrolObservations.GetOrAdd(jobId, _ => new ConcurrentQueue<string>()).Enqueue(JsonSerializer.Serialize(observation));
 
-    public static IReadOnlyList<JsonElement> GetPatrolObservations(Guid missionId) =>
-        PatrolObservations.TryGetValue(missionId, out var observations)
+    public static IReadOnlyList<JsonElement> GetPatrolObservations(Guid jobId) =>
+        PatrolObservations.TryGetValue(jobId, out var observations)
             ? observations.Select(Parse).ToArray()
             : Array.Empty<JsonElement>();
 
-    public static void AddPatrolCoverage(Guid missionId, object coverage) =>
-        PatrolCoverage.GetOrAdd(missionId, _ => new ConcurrentQueue<string>()).Enqueue(JsonSerializer.Serialize(coverage));
+    public static void AddPatrolCoverage(Guid jobId, object coverage) =>
+        PatrolCoverage.GetOrAdd(jobId, _ => new ConcurrentQueue<string>()).Enqueue(JsonSerializer.Serialize(coverage));
 
-    public static IReadOnlyList<JsonElement> GetPatrolCoverage(Guid missionId) =>
-        PatrolCoverage.TryGetValue(missionId, out var coverage)
+    public static IReadOnlyList<JsonElement> GetPatrolCoverage(Guid jobId) =>
+        PatrolCoverage.TryGetValue(jobId, out var coverage)
             ? coverage.Select(Parse).ToArray()
             : Array.Empty<JsonElement>();
 
-    public static void SetPatrolReport(Guid missionId, object report) =>
-        PatrolReports[missionId] = JsonSerializer.Serialize(report);
+    public static void SetPatrolReport(Guid jobId, object report) =>
+        PatrolReports[jobId] = JsonSerializer.Serialize(report);
 
-    public static JsonElement? GetPatrolReport(Guid missionId) =>
-        PatrolReports.TryGetValue(missionId, out var report) ? Parse(report) : null;
+    public static JsonElement? GetPatrolReport(Guid jobId) =>
+        PatrolReports.TryGetValue(jobId, out var report) ? Parse(report) : null;
 
-    public static bool TryGetPatrolAction(Guid missionId, string key, out string fingerprint, out JsonElement response)
+    public static bool TryGetPatrolAction(Guid jobId, string key, out string fingerprint, out JsonElement response)
     {
-        if (PatrolActions.TryGetValue((missionId, key), out var cached))
+        if (PatrolActions.TryGetValue((jobId, key), out var cached))
         {
             fingerprint = cached.Fingerprint;
             response = Parse(cached.Response);
@@ -88,8 +88,8 @@ internal static class SimulationWorkflowDataStore
         return false;
     }
 
-    public static void AddPatrolAction(Guid missionId, string key, string fingerprint, object response) =>
-        PatrolActions[(missionId, key)] = (fingerprint, JsonSerializer.Serialize(response));
+    public static void AddPatrolAction(Guid jobId, string key, string fingerprint, object response) =>
+        PatrolActions[(jobId, key)] = (fingerprint, JsonSerializer.Serialize(response));
 
     private static JsonElement Parse(string json)
     {

@@ -25,7 +25,7 @@ public sealed class InventoryWorkflowService(IInventoryWorkflowRepository reposi
         var action = request.Action.Trim().ToUpperInvariant();
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             action + ":" + request.Payload.GetRawText())));
-        var cacheKey = $"{request.MissionId:N}:{request.IdempotencyKey.Trim()}";
+        var cacheKey = $"{request.JobId:N}:{request.IdempotencyKey.Trim()}";
         var gate = ActionLocks.GetOrAdd(cacheKey, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken);
         try
@@ -59,20 +59,20 @@ public sealed class InventoryWorkflowService(IInventoryWorkflowRepository reposi
     }
 
     public async Task<InventoryWorkflowReportResponse?> GetReportAsync(
-        Guid missionId,
+        Guid jobId,
         string runtimeId,
         CancellationToken cancellationToken)
     {
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
-            return InventoryWorkflowRuntimeStore.GetReport<InventoryWorkflowReportResponse>(missionId);
+            return InventoryWorkflowRuntimeStore.GetReport<InventoryWorkflowReportResponse>(jobId);
 
-        var record = await repository.GetInventoryReportAsync(missionId, cancellationToken);
+        var record = await repository.GetInventoryReportAsync(jobId, cancellationToken);
         if (record is null) return null;
         using var document = JsonDocument.Parse(record.Data);
         var root = document.RootElement;
         var details = TryGet(root, "details", out var value) ? value.Clone() : JsonDocument.Parse("{}").RootElement.Clone();
         var unknown = TryGet(root, "totalUnknown", out value) && value.TryGetInt32(out var count) ? count : 0;
-        return new InventoryWorkflowReportResponse(record.ReportId, missionId, "INVENTORY", "real",
+        return new InventoryWorkflowReportResponse(record.ReportId, jobId, "INVENTORY", "real",
             record.TotalShelves, record.TotalBooksScanned, record.TotalAvailable, record.TotalMisplaced,
             record.TotalMissing, unknown, details, record.CreatedAtUtc);
     }
@@ -177,9 +177,9 @@ public sealed class InventoryWorkflowService(IInventoryWorkflowRepository reposi
             scanned_at = DateTime.UtcNow
         };
         if (simulation)
-            InventoryWorkflowRuntimeStore.AddScan(request.MissionId, scanEvent);
+            InventoryWorkflowRuntimeStore.AddScan(request.JobId, scanEvent);
         else
-            await repository.AddJobEventAsync(request.MissionId, ScanEventType,
+            await repository.AddJobEventAsync(request.JobId, ScanEventType,
                 JsonSerializer.Serialize(scanEvent), cancellationToken);
 
         return (new
@@ -220,7 +220,7 @@ public sealed class InventoryWorkflowService(IInventoryWorkflowRepository reposi
         var mapId = ReadOptionalGuid(payload, "map_id", "mapId");
         var shelfIds = ReadGuidArray(payload, "target_shelves", "targetShelves");
         var shelves = await repository.ResolveScopeAsync(floorId, mapId, shelfIds, cancellationToken);
-        var scans = await GetScansAsync(request.MissionId, simulation, cancellationToken);
+        var scans = await GetScansAsync(request.JobId, simulation, cancellationToken);
         var flattenedScans = FlattenScans(scans, shelves);
         var shelfLevelIds = shelves.SelectMany(item => item.Levels).Select(item => item.Id).Distinct().ToArray();
         var codes = flattenedScans.Select(item => item.QrCode).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -299,26 +299,26 @@ public sealed class InventoryWorkflowService(IInventoryWorkflowRepository reposi
         });
         var reportId = simulation
             ? Guid.NewGuid()
-            : await repository.SaveInventoryReportAsync(request.MissionId,
+            : await repository.SaveInventoryReportAsync(request.JobId,
                 ReadOptionalString(payload, "scope_type", "scopeType") ?? "SHELVES",
                 shelves.Count, totalScanned, available, misplaced, missingCodes.Length,
                 reportData, cancellationToken);
 
-        var report = new InventoryWorkflowReportResponse(reportId, request.MissionId,
+        var report = new InventoryWorkflowReportResponse(reportId, request.JobId,
             simulation ? "SIMULATION_INVENTORY" : "INVENTORY", request.RuntimeId,
             shelves.Count, totalScanned, available, misplaced, missingCodes.Length, unknownCodes.Length,
             details, createdAt);
-        if (simulation) InventoryWorkflowRuntimeStore.SetReport(request.MissionId, report);
+        if (simulation) InventoryWorkflowRuntimeStore.SetReport(request.JobId, report);
         return (report, shelves.Count);
     }
 
     private async Task<IReadOnlyList<string>> GetScansAsync(
-        Guid missionId,
+        Guid jobId,
         bool simulation,
         CancellationToken cancellationToken)
     {
-        if (simulation) return InventoryWorkflowRuntimeStore.GetScans(missionId);
-        var events = await repository.GetJobEventDataAsync(missionId, ScanEventType, cancellationToken);
+        if (simulation) return InventoryWorkflowRuntimeStore.GetScans(jobId);
+        var events = await repository.GetJobEventDataAsync(jobId, ScanEventType, cancellationToken);
         return events.Where(item => !string.IsNullOrWhiteSpace(item)).Select(item => item!).ToArray();
     }
 
@@ -357,14 +357,14 @@ public sealed class InventoryWorkflowService(IInventoryWorkflowRepository reposi
     {
         if (simulation)
         {
-            return InventoryWorkflowRuntimeStore.TryGetAction(request.MissionId, request.IdempotencyKey.Trim(),
+            return InventoryWorkflowRuntimeStore.TryGetAction(request.JobId, request.IdempotencyKey.Trim(),
                     out var cachedFingerprint, out var json)
                 ? new CachedResponse(cachedFingerprint,
                     JsonSerializer.Deserialize<InventoryWorkflowActionResponse>(json, JsonOptions)!)
                 : null;
         }
 
-        var records = await repository.GetJobEventDataAsync(request.MissionId, IdempotencyEventType, cancellationToken);
+        var records = await repository.GetJobEventDataAsync(request.JobId, IdempotencyEventType, cancellationToken);
         foreach (var record in records.Where(item => !string.IsNullOrWhiteSpace(item)))
         {
             using var document = JsonDocument.Parse(record!);
@@ -388,11 +388,11 @@ public sealed class InventoryWorkflowService(IInventoryWorkflowRepository reposi
     {
         if (simulation)
         {
-            InventoryWorkflowRuntimeStore.AddAction(request.MissionId, request.IdempotencyKey.Trim(), fingerprint, response);
+            InventoryWorkflowRuntimeStore.AddAction(request.JobId, request.IdempotencyKey.Trim(), fingerprint, response);
             return;
         }
 
-        await repository.AddJobEventAsync(request.MissionId, IdempotencyEventType,
+        await repository.AddJobEventAsync(request.JobId, IdempotencyEventType,
             JsonSerializer.Serialize(new
             {
                 key = request.IdempotencyKey.Trim(),

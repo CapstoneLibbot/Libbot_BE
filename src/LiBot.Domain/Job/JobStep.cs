@@ -1,6 +1,6 @@
 using LiBot.Domain.Common;
 
-namespace LiBot.Domain.Mission;
+namespace LiBot.Domain.Job;
 
 public class JobStep : Entity
 {
@@ -9,10 +9,10 @@ public class JobStep : Entity
     public int Sequence { get; private set; }
     public string StepType { get; private set; }
     public string Status { get; private set; }
-    public string? Description { get; private set; }
+    public string Configuration { get; private set; }
 
-    public JobStep(Guid jobTaskId, Guid taskStepId, int sequence, string stepType, string status = "Pending",
-        string? description = null)
+    public JobStep(Guid jobTaskId, Guid taskStepId, int sequence, string stepType, string configuration,
+        string status = "Pending")
     {
         if (jobTaskId == Guid.Empty)
             throw new ArgumentException("Job task id is required.", nameof(jobTaskId));
@@ -24,12 +24,23 @@ public class JobStep : Entity
             throw new ArgumentException("Step type is required.", nameof(stepType));
         if (string.IsNullOrWhiteSpace(status))
             throw new ArgumentException("Job step status is required.", nameof(status));
+        if (string.IsNullOrWhiteSpace(configuration))
+            throw new ArgumentException("Job step configuration is required.", nameof(configuration));
 
         JobTaskId = jobTaskId;
         TaskStepId = taskStepId;
         Sequence = sequence;
         StepType = stepType.Trim();
         Status = status.Trim();
-        Description = description?.Trim();
+        Configuration = configuration;
     }
+
+    public void UpdateStatus(string status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+            throw new ArgumentException("Job step status is required.", nameof(status));
+        Status = status.Trim();
+    }
+
+    public void PrepareForRetry() => Status = "Pending";
 }

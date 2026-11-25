@@ -14,6 +14,7 @@ public sealed record GuidanceWorkflowTaskSnapshot(
 
 public sealed record GuidanceTaskStepSnapshot(
     Guid Id,
+    int SequenceNumber,
     string StepType,
     string? Configuration,
     DateTime CreatedAtUtc);

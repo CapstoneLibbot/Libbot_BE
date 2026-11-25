@@ -14,7 +14,7 @@ Tầng này chứa các khái niệm cốt lõi của nghiệp vụ:
 - AggregateRoot
 - DomainEvent
 - Enum
-- Model nghiệp vụ như Robot, Mission, Workflow, Inventory, Library, Identity
+- Model nghiệp vụ như Robot, Job, Workflow, Inventory, Library, Identity
 
 Mục tiêu:
 - Không phụ thuộc vào EF Core, ASP.NET Core, HTTP, SignalR hay database.
@@ -23,7 +23,7 @@ Mục tiêu:
 
 Ví dụ:
 - `Robot` chứa trạng thái robot, vị trí, trạng thái hoạt động.
-- `Mission` chứa workflow, mục tiêu, deadline, trạng thái.
+- `Job` chứa workflow, mục tiêu, deadline, trạng thái.
 - `InventoryItem` chứa quantity, status, metadata.
 
 ### Mẫu code gợi ý
@@ -52,9 +52,9 @@ Thư mục gợi ý:
 - `Library/Queries`
 - `Robot/Commands`
 - `Robot/Queries`
-- `Mission/Commands`
-- `Mission/Queries`
-- `Mission/Events`
+- `Job/Commands`
+- `Job/Queries`
+- `Job/Events`
 - `Workflow/Commands`
 - `Workflow/Queries`
 - `Workflow/Engine`
@@ -69,8 +69,8 @@ Mỗi use case thường có 3 phần:
 - Result / DTO: đầu ra
 
 Ví dụ:
-- `CreateMissionCommand`
-- `CreateMissionCommandHandler`
+- `CreateJobCommand`
+- `CreateJobCommandHandler`
 - `GetRobotByIdQuery`
 - `GetRobotByIdQueryHandler`
 
@@ -101,8 +101,8 @@ Thường dùng cho:
 - giao tiếp giữa các module hoặc service
 
 Ví dụ:
-- `CreateMissionRequest`
-- `MissionResponse`
+- `CreateJobRequest`
+- `JobResponse`
 - `RobotStatusDto`
 - `WorkflowStepResult`
 
@@ -141,7 +141,7 @@ Thư mục gợi ý:
 - `Program.cs`: đăng ký services và cấu hình pipeline
 
 Ví dụ:
-- `MissionController`
+- `JobController`
 - `RobotTelemetryController`
 - `WorkflowController`
 - `RobotHub`
@@ -158,12 +158,12 @@ Ví dụ:
 
 Ví dụ khi client tạo nhiệm vụ cho robot:
 
-1. Client gọi `POST /api/missions`
-2. `MissionController` nhận request
-3. Controller map sang `CreateMissionCommand`
-4. `CreateMissionCommandHandler` validate nghiệp vụ
+1. Client gọi `POST /api/jobs`
+2. `JobController` nhận request
+3. Controller map sang `CreateJobCommand`
+4. `CreateJobCommandHandler` validate nghiệp vụ
 5. Handler gọi repository hoặc service từ Infrastructure
-6. Domain model tạo `Mission` và `DomainEvent`
+6. Domain model tạo `Job` và `DomainEvent`
 7. Hệ thống lưu dữ liệu và trả về response
 
 ## 7. Quy tắc thiết kế nên tuân theo
@@ -186,7 +186,7 @@ Ví dụ khi client tạo nhiệm vụ cho robot:
 ### Robot
 - trạng thái robot, command execution, telemetry, ping/heartbeat
 
-### Mission
+### Job
 - lifecycle của nhiệm vụ: created -> assigned -> running -> completed -> failed
 
 ### Workflow
@@ -211,4 +211,4 @@ Ví dụ khi client tạo nhiệm vụ cho robot:
 - `LiBot.Contracts`: định nghĩa DTOs và response models
 - `LiBot.Api`: map các endpoint và SignalR hub
 
-Đây là nền tảng tốt để mở rộng theo các module robot, mission, workflow và inventory trong tương lai.
+Đây là nền tảng tốt để mở rộng theo các module robot, job, workflow và inventory trong tương lai.

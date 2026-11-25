@@ -4,16 +4,39 @@ using System.Text.Json;
 namespace LiBot.Api.Controllers;
 
 /// <summary>
-/// Process-local execution state for Gazebo missions. Simulation progress is deliberately
-/// ephemeral and must never be written to the mission tables.
+/// Process-local execution state for Gazebo runs. SIM step events stay in memory;
+/// direct guidance runs may persist their final job summary without creating JobEvents.
 /// </summary>
 internal static class SimulationExecutionStore
 {
     private static readonly ConcurrentDictionary<Guid, Entry> Entries = new();
 
-    public static bool TryStart(Guid missionId, string executionId, string runtimeId, object state)
+    public static void TryStoreInitialContext(Guid jobId, string? initialContext)
     {
-        var entry = Entries.GetOrAdd(missionId, _ => new Entry());
+        if (jobId == Guid.Empty) return;
+        var entry = Entries.GetOrAdd(jobId, _ => new Entry());
+        lock (entry.Sync) entry.InitialContext = initialContext;
+    }
+
+    public static bool TryGetInitialContext(Guid jobId, out string? initialContext)
+    {
+        if (Entries.TryGetValue(jobId, out var entry))
+        {
+            lock (entry.Sync)
+            {
+                initialContext = entry.InitialContext;
+                return true;
+            }
+        }
+
+        initialContext = null;
+        return false;
+    }
+
+    public static bool TryStart(Guid jobId, string executionId, string runtimeId, object state,
+        bool persistJobStatus = false)
+    {
+        var entry = Entries.GetOrAdd(jobId, _ => new Entry());
         lock (entry.Sync)
         {
             if (IsActive(entry.Status)) return false;
@@ -21,15 +44,16 @@ internal static class SimulationExecutionStore
             entry.RuntimeId = runtimeId;
             entry.Status = "ACCEPTED";
             entry.CurrentState = Serialize(state);
+            entry.PersistJobStatus = persistJobStatus;
             entry.Events.Clear();
-            SimulationWorkflowDataStore.Reset(missionId);
+            SimulationWorkflowDataStore.Reset(jobId);
             return true;
         }
     }
 
-    public static bool TryGet(Guid missionId, out Snapshot snapshot)
+    public static bool TryGet(Guid jobId, out Snapshot snapshot)
     {
-        if (!Entries.TryGetValue(missionId, out var entry))
+        if (!Entries.TryGetValue(jobId, out var entry))
         {
             snapshot = default!;
             return false;
@@ -42,14 +66,15 @@ internal static class SimulationExecutionStore
                 entry.RuntimeId,
                 Parse(entry.CurrentState),
                 entry.Events.Select(Parse).ToArray(),
-                entry.Status);
+                entry.Status,
+                entry.PersistJobStatus);
             return true;
         }
     }
 
-    public static bool TryUpdate(Guid missionId, string? executionId, object state, bool recordEvent = false)
+    public static bool TryUpdate(Guid jobId, string? executionId, object state, bool recordEvent = false)
     {
-        if (!Entries.TryGetValue(missionId, out var entry)) return false;
+        if (!Entries.TryGetValue(jobId, out var entry)) return false;
         lock (entry.Sync)
         {
             if (!MatchesExecution(entry, executionId) || IsTerminal(entry.Status)) return false;
@@ -63,9 +88,9 @@ internal static class SimulationExecutionStore
         }
     }
 
-    public static bool TryGetExecution(Guid missionId, out string executionId, out string runtimeId)
+    public static bool TryGetExecution(Guid jobId, out string executionId, out string runtimeId)
     {
-        if (Entries.TryGetValue(missionId, out var entry))
+        if (Entries.TryGetValue(jobId, out var entry))
         {
             lock (entry.Sync)
             {
@@ -114,6 +139,8 @@ internal static class SimulationExecutionStore
         public string RuntimeId { get; set; } = "sim";
         public string Status { get; set; } = "QUEUED";
         public string CurrentState { get; set; } = "{}";
+        public string? InitialContext { get; set; }
+        public bool PersistJobStatus { get; set; }
         public List<string> Events { get; } = [];
     }
 
@@ -122,5 +149,6 @@ internal static class SimulationExecutionStore
         string RuntimeId,
         JsonElement CurrentState,
         IReadOnlyList<JsonElement> Events,
-        string Status);
+        string Status,
+        bool PersistJobStatus);
 }
