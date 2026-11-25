@@ -34,11 +34,8 @@ public static class InventoryEndpointValidator
         if (!double.IsFinite(start.X) || !double.IsFinite(start.Y) || !double.IsFinite(start.Theta)
             || !double.IsFinite(end.X) || !double.IsFinite(end.Y) || !double.IsFinite(end.Theta))
             throw new InvalidOperationException("Shelf endpoint pose must be finite.");
-        // A shelf may be configured as a point destination by assigning the
-        // same endpoint to both ends. Inventory navigation handles this as a
-        // single goal and then advances to the next selected shelf.
         if (start.EndpointId == end.EndpointId)
-            return;
+            throw new InvalidOperationException("Shelf endpoints must be distinct.");
         var dx = end.X - start.X;
         var dy = end.Y - start.Y;
         var length = Math.Sqrt(dx * dx + dy * dy);
