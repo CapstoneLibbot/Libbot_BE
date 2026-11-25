@@ -42,7 +42,7 @@ public class ExceptionMiddleware
             await context.Response.WriteAsJsonAsync(new
             {
                 error = "The request was incomplete or invalid.",
-                path = context.Request.Path
+                path = context.Request.Path.Value
             });
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
@@ -74,7 +74,7 @@ public class ExceptionMiddleware
             await context.Response.WriteAsJsonAsync(new
             {
                 error = "An unexpected error occurred.",
-                path = context.Request.Path
+                path = context.Request.Path.Value
             });
         }
     }

@@ -65,9 +65,12 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
 
     private void PersistPendingJobTaskState()
     {
-        foreach (var entry in ChangeTracker.Entries<JobTask>()
-                     .Where(item => item.Entity.RuntimeId != "sim"
-                         && (item.State == EntityState.Added || item.Entity.HasUnpersistedPersistenceState)))
+        var pendingTasks = ChangeTracker.Entries<JobTask>()
+            .Where(item => item.Entity.RuntimeId != "sim"
+                && (item.State == EntityState.Added || item.Entity.HasUnpersistedPersistenceState))
+            .ToList();
+
+        foreach (var entry in pendingTasks)
         {
             var task = entry.Entity;
             var step = JobSteps.Local.Where(item => item.JobTaskId == task.Id)
@@ -84,9 +87,12 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
 
     private async Task PersistPendingJobTaskStateAsync(CancellationToken cancellationToken)
     {
-        foreach (var entry in ChangeTracker.Entries<JobTask>()
-                     .Where(item => item.Entity.RuntimeId != "sim"
-                         && (item.State == EntityState.Added || item.Entity.HasUnpersistedPersistenceState)))
+        var pendingTasks = ChangeTracker.Entries<JobTask>()
+            .Where(item => item.Entity.RuntimeId != "sim"
+                && (item.State == EntityState.Added || item.Entity.HasUnpersistedPersistenceState))
+            .ToList();
+
+        foreach (var entry in pendingTasks)
         {
             var task = entry.Entity;
             var step = JobSteps.Local.Where(item => item.JobTaskId == task.Id)
@@ -450,6 +456,7 @@ public class LiBotDbContext(DbContextOptions<LiBotDbContext> options) : DbContex
         modelBuilder.Entity<Schedule>().Property(x => x.NextRunAtUtc).HasColumnName("next_run_at");
         modelBuilder.Entity<LibraryMap>().Property(x => x.MapData).HasColumnName("map_data");
         modelBuilder.Entity<Book>().Property(x => x.Image).HasColumnName("image_url");
+        modelBuilder.Entity<BookItem>().Property(x => x.LastInventoryAtUtc).HasColumnName("last_inventory_at");
         modelBuilder.Entity<Job>().Property(x => x.CreatedAtUtc).HasColumnName("create_at");
         modelBuilder.Entity<Job>().Property(x => x.StartedAtUtc).HasColumnName("started_at");
         modelBuilder.Entity<Job>().Property(x => x.CompletedAtUtc).HasColumnName("completed_at");
