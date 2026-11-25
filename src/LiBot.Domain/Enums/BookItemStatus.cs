@@ -5,7 +5,6 @@ public enum BookItemStatus
     Available = 1,
     Misplaced = 2,
     Missing = 3,
-    Lost = 4,
-    Damaged = 5,
-    Borrowed = 6
+    Damaged = 4,
+    Borrowed = 5
 }
