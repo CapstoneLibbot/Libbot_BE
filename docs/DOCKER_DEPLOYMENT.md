@@ -6,7 +6,7 @@ This repository packages only the LiBot ASP.NET Core API. SQL Server remains ins
 
 The flow is Windows development machine -> GitHub -> GitHub Actions -> GHCR -> Azure VM Docker container. The container listens on port 8080, and the VM maps 5205:8080. The container connects to the existing VM SQL Server through host.docker.internal,1433. Port 1433 must remain private.
 
-The API currently runs LiBotDatabaseInitializer during startup. That existing initializer calls EF Core MigrateAsync() and seeds missing library reference data. The deployment script does not run a separate migration command, delete the database, or recreate SQL Server. Review pending migrations and take the normal database backup before starting a new image against the existing LiBotDb database.
+The API can run LiBotDatabaseInitializer during startup. Local development keeps this enabled by default so EF Core migrations and reference-data seeding continue to work. The Azure deployment script forces Database__ApplyMigrations=false, so it does not migrate or seed the existing LiBotDb database. The script does not delete the database or recreate SQL Server.
 
 The existing health endpoint is GET /api/health. It is a liveness endpoint and does not query SQL Server. Startup failures are visible in docker logs.
 
@@ -46,6 +46,7 @@ Use ASP.NET Core names such as ConnectionStrings__LiBot and VoiceTools__ApiToken
 - LiBot__Host, LiBot__Port, and LiBot__RuntimeEndpoints__real__*: reachable robot runtime settings.
 - LiBot__BackendBaseUrl: the backend URL reachable by the robot.
 - ASPNETCORE_URLS: http://+:8080 on Azure; the deployment script also enforces this value.
+- Database__ApplyMigrations: false on Azure so the existing database schema and data are not changed by container startup.
 
 Store real values in /var/www/libbot-api/.env on the VM with mode 600. .env.example contains placeholders only.
 
@@ -89,6 +90,7 @@ Back on the VM:
 The VM file must include real values. Its database entry must use the existing host SQL Server:
 
     ASPNETCORE_URLS=http://+:8080
+    Database__ApplyMigrations=false
     ConnectionStrings__LiBot=Server=host.docker.internal,1433;Database=LiBotDb;User Id=REPLACE_WITH_SQL_LOGIN;Password=REPLACE_WITH_PASSWORD;MultipleActiveResultSets=True;TrustServerCertificate=True
     VoiceTools__ApiToken=REPLACE_WITH_LONG_RANDOM_SECRET
     LiBot__Host=REPLACE_WITH_ROBOT_HOST

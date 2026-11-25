@@ -62,6 +62,7 @@ docker run -d \
     --add-host=host.docker.internal:host-gateway \
     --env-file "$ENV_FILE" \
     --env ASPNETCORE_URLS=http://+:8080 \
+    --env Database__ApplyMigrations=false \
     -p 5205:8080 \
     "$IMAGE"
 

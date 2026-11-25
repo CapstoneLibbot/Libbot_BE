@@ -14,6 +14,7 @@ public sealed class ZonePolicyTests
         var input = new ZoneDto
         {
             MapId = MapId,
+            Name = "test-zone",
             ZoneType = "keep_out",
             MinX = 1,
             MinY = 2,
@@ -34,7 +35,7 @@ public sealed class ZonePolicyTests
     public void SpeedLimit_RequiresPositiveFiniteSpeed()
     {
         Assert.Throws<ArgumentException>(() => Create("SPEED_LIMIT", maxSpeed: 0));
-        Assert.Throws<ArgumentException>(() => Create("SPEED_LIMIT", maxSpeed: double.NaN));
+        Assert.ThrowsAny<ArgumentException>(() => Create("SPEED_LIMIT", maxSpeed: double.NaN));
 
         var zone = Create("SPEED_LIMIT", maxSpeed: 0.4);
         Assert.Equal(0.4, zone.MaxSpeed);

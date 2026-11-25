@@ -75,7 +75,8 @@ builder.Services.AddHostedService(provider => provider.GetRequiredService<LowBat
 
 var app = builder.Build();
 
-await app.Services.InitializeLiBotDatabaseAsync();
+if (builder.Configuration.GetValue("Database:ApplyMigrations", true))
+    await app.Services.InitializeLiBotDatabaseAsync();
 
 if (app.Environment.IsDevelopment())
 {
