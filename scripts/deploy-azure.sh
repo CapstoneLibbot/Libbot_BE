@@ -1,3 +1,4 @@
+
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
@@ -14,6 +15,7 @@ fi
 
 rollback() {
     local exit_code=$?
+
     if [[ "$DEPLOY_SUCCEEDED" -eq 1 ]]; then
         return
     fi
@@ -56,17 +58,21 @@ if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
 fi
 
 echo "Starting $CONTAINER_NAME from $IMAGE"
+
 docker run -d \
     --name "$CONTAINER_NAME" \
     --restart unless-stopped \
     --add-host=host.docker.internal:host-gateway \
     --env-file "$ENV_FILE" \
     --env ASPNETCORE_URLS=http://+:8080 \
+    --env ASPNETCORE_ENVIRONMENT=Production \
+    --env Swagger__Enabled=true \
     --env Database__ApplyMigrations=false \
     -p 5205:8080 \
     "$IMAGE"
 
 health_ok=0
+
 for attempt in $(seq 1 12); do
     if [[ "$(docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME")" != "true" ]]; then
         echo "New container stopped during startup." >&2
@@ -97,5 +103,6 @@ fi
 
 DEPLOY_SUCCEEDED=1
 trap - ERR
+
 echo "Deployment succeeded: $CONTAINER_NAME uses $IMAGE"
 docker ps --filter "name=^/${CONTAINER_NAME}$"
