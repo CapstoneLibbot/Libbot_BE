@@ -70,6 +70,19 @@ public class BookController : ControllerBase
         return book is null ? NotFound(Error("Book was not found.")) : Ok(new BaseResponse<BookResponse>(book));
     }
 
+    /// <summary>Gets books that belong to a category.</summary>
+    [HttpGet("category/{categoryId:guid}")]
+    public Task<ActionResult<BaseResponse<BookListResponse>>> GetBookByCategoryId(
+        Guid categoryId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? search = null,
+        [FromQuery] string sortBy = "title",
+        [FromQuery] string sortOrder = "asc",
+        [FromQuery] string? expand = null,
+        CancellationToken cancellationToken = default) =>
+        GetBooks(page, pageSize, search, categoryId, sortBy, sortOrder, expand, cancellationToken);
+
     [HttpPost]
     public async Task<ActionResult<BaseResponse<BookResponse>>> CreateBook(
         [FromBody] BookWriteRequest request,
