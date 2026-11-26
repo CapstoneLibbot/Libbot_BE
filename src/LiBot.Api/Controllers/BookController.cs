@@ -216,10 +216,16 @@ public class BookController : ControllerBase
     [HttpPut("items/{id:guid}")]
     public async Task<IActionResult> UpdateBookItem(Guid id, [FromBody] BookItemResourceDto dto, CancellationToken cancellationToken)
     {
+        var current = await _bookItemService.GetByIdAsync(id, cancellationToken);
+        if (current is null) return NotFound(Error("Book item was not found."));
+        if (dto.BookId != Guid.Empty && dto.BookId != current.BookId)
+            return BadRequest(Error("Không được thay đổi BookId của bản sách vật lý."));
+        dto.BookId = current.BookId;
+
         try
         {
             var item = await _bookItemService.UpdateAsync(id, dto, cancellationToken);
-            return item is null ? NotFound(Error("Book item was not found.")) : Ok(new BaseResponse<BookItemResourceDto>(item));
+            return Ok(new BaseResponse<BookItemResourceDto>(item!));
         }
         catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
     }

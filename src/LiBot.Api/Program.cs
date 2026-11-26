@@ -1,4 +1,5 @@
 using LiBot.Api.Hubs;
+using LiBot.Api.Filters;
 using LiBot.Api.Middleware;
 using LiBot.Api.Services;
 using LiBot.Api.VoiceTools;
@@ -17,7 +18,11 @@ var dotEnvSettings = DotEnvLoader.Load();
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddInMemoryCollection(dotEnvSettings);
 
-builder.Services.AddControllers(options => options.Filters.Add<ApiErrorResultFilter>())
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<ApiErrorResultFilter>();
+    options.Filters.Add<ResourceIdentityFilter>();
+})
     .ConfigureApiBehaviorOptions(options =>
     {
         options.InvalidModelStateResponseFactory = context =>
