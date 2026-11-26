@@ -17,7 +17,7 @@ var dotEnvSettings = DotEnvLoader.Load();
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddInMemoryCollection(dotEnvSettings);
 
-builder.Services.AddControllers()
+builder.Services.AddControllers(options => options.Filters.Add<ApiErrorResultFilter>())
     .ConfigureApiBehaviorOptions(options =>
     {
         options.InvalidModelStateResponseFactory = context =>
@@ -27,9 +27,10 @@ builder.Services.AddControllers()
                 context.ModelState.Values
                     .SelectMany(entry => entry.Errors)
                     .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage)
-                        ? "The request is invalid."
+                        ? "Dữ liệu yêu cầu không hợp lệ."
                         : error.ErrorMessage));
-            return new BadRequestObjectResult(BaseResponse<object>.Failure(message));
+            return new BadRequestObjectResult(BaseResponse<object>.Failure(
+                ApiErrorFormatter.Localize(StatusCodes.Status400BadRequest, message)));
         };
     });
 builder.Services.AddSignalR();
