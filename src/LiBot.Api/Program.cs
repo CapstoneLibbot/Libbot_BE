@@ -78,7 +78,8 @@ var app = builder.Build();
 if (builder.Configuration.GetValue("Database:ApplyMigrations", true))
     await app.Services.InitializeLiBotDatabaseAsync();
 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() ||
+    app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.UseSwagger();
     app.UseSwaggerUI();

@@ -46,7 +46,6 @@ public class BookItem : Entity
                 "available" => BookItemStatus.Available,
                 "misplaced" => BookItemStatus.Misplaced,
                 "missing" => BookItemStatus.Missing,
-                "lost" => BookItemStatus.Lost,
                 "damaged" => BookItemStatus.Damaged,
                 "borrowed" => BookItemStatus.Borrowed,
                 _ => throw new ArgumentException($"Invalid inventory status '{status}'.", nameof(status))
