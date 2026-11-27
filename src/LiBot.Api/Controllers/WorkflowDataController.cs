@@ -16,6 +16,7 @@ public sealed class WorkflowDataController(
     IBookGuidanceService bookGuidance,
     IPatrolNotificationPublisher patrolNotifications) : ControllerBase
 {
+    private static readonly SemaphoreSlim PatrolEvidenceLock = new(1, 1);
     private static readonly Guid SimulationBookId = Guid.Parse("26000000-0000-0000-0000-000000000001");
     private static readonly Guid SimulationBookItemId = Guid.Parse("26000000-0000-0000-0000-000000000002");
     private static readonly Guid SimulationFacilityId = Guid.Parse("26000000-0000-0000-0000-000000000003");
@@ -532,6 +533,57 @@ public sealed class WorkflowDataController(
     }
 
     /// <summary>Ghi nhận một quan sát trong nhiệm vụ tuần tra.</summary>
+    [HttpPost("patrol/evidence")]
+    [RequestSizeLimit(8 * 1024 * 1024)]
+    public async Task<IActionResult> RecordPatrolEvidence(PatrolEvidenceRequest request, CancellationToken cancellationToken)
+    {
+        if (request.JobId == Guid.Empty || request.ObservationId == Guid.Empty
+            || string.IsNullOrWhiteSpace(request.ExecutionId) || string.IsNullOrWhiteSpace(request.PathId)
+            || !string.Equals(request.RuntimeId, "real", StringComparison.OrdinalIgnoreCase)
+            || !double.IsFinite(request.Confidence) || request.Confidence < 0 || request.Confidence > 1
+            || !double.IsFinite(request.TiltDegrees) || request.TiltDegrees < 15 || request.TiltDegrees > 90
+            || request.Waypoint.ValueKind == JsonValueKind.Undefined
+            || string.IsNullOrWhiteSpace(request.ImageBase64) || request.ImageBase64.Length > 6_000_000)
+            return BadRequest(new { message = "Invalid patrol evidence." });
+        try
+        {
+            var image = Convert.FromBase64String(request.ImageBase64);
+            if (image.Length < 3 || image[0] != 0xff || image[1] != 0xd8 || image[2] != 0xff)
+                return BadRequest(new { message = "Evidence must be a JPEG image." });
+        }
+        catch (FormatException) { return BadRequest(new { message = "Invalid evidence image." }); }
+        var job = await dataService.GetJobAsync(request.JobId, cancellationToken);
+        if (job is null) return NotFound(new { message = "Job task not found." });
+        if (!MatchesRuntime(job.RuntimeId, request.RuntimeId))
+            return Conflict(new { message = "Runtime does not match the job." });
+        await PatrolEvidenceLock.WaitAsync(cancellationToken);
+        try
+        {
+            var existing = await dataService.GetJobEventDataAsync(request.JobId, "PATROL_OBSERVATION", cancellationToken);
+            foreach (var item in existing.Where(item => !string.IsNullOrWhiteSpace(item)))
+            {
+                try
+                {
+                    using var document = JsonDocument.Parse(item!);
+                    if (document.RootElement.ValueKind == JsonValueKind.Object
+                        && document.RootElement.TryGetProperty("observation_id", out var id)
+                        && id.ValueKind == JsonValueKind.String && id.GetString() == request.ObservationId.ToString())
+                        return Ok(new { observationId = request.ObservationId });
+                }
+                catch (JsonException) { /* Ignore legacy non-JSON event data. */ }
+            }
+            var data = JsonSerializer.Serialize(new {
+                observation_id = request.ObservationId, execution_id = request.ExecutionId,
+                path_id = request.PathId, category = "LEANING_BOOK_PRESENT", severity = "MEDIUM",
+                confidence = request.Confidence, tilt_degrees = request.TiltDegrees,
+                observed_at = request.ObservedAtUtc, waypoint = request.Waypoint, image_base64 = request.ImageBase64
+            });
+            await dataService.AddJobEventAsync(request.JobId, "PATROL_OBSERVATION", data, cancellationToken);
+            return Ok(new { observationId = request.ObservationId });
+        }
+        finally { PatrolEvidenceLock.Release(); }
+    }
+
     [HttpPost("patrol/observations")]
     public async Task<IActionResult> RecordPatrolObservation(PatrolObservationRequest request, CancellationToken cancellationToken)
     {
@@ -656,3 +708,7 @@ public sealed class WorkflowDataController(
         catch (JsonException) { return null; }
     }
 }
+
+public sealed record PatrolEvidenceRequest(Guid JobId, string RuntimeId, string ExecutionId, string PathId,
+    Guid ObservationId, double Confidence, double TiltDegrees, DateTimeOffset ObservedAtUtc,
+    JsonElement Waypoint, string ImageBase64);

@@ -375,6 +375,7 @@ public sealed class PatrolActionsController(
         var fallenBooks = categories.Count(item => item == "FALLEN_BOOK");
         var obstacles = categories.Count(item => item == "OBSTACLE");
         var warnings = categories.Count(item => item is "WARNING" or "OTHER_WARNING");
+        var leaningBooks = categories.Count(item => item is "LEANING_BOOK_PRESENT" or "TILTED_CARDBOARD_BOX");
         var coveredCount = coverageData.Count(item => ReadString(item, "status") == "COVERED");
         var totalPaths = coverageData.Select(item => ReadInt(item, "planned_path_count") ?? 0).DefaultIfEmpty(0).Max();
         var started = (await dataService.GetJobAsync(request.JobId, cancellationToken))?.StartedAtUtc;
@@ -390,6 +391,7 @@ public sealed class PatrolActionsController(
             fallen_book_count = fallenBooks,
             obstacle_count = obstacles,
             warning_count = warnings,
+            leaning_book_count = leaningBooks,
             path_coverage = new
             {
                 covered_paths = coveredCount,
@@ -404,14 +406,14 @@ public sealed class PatrolActionsController(
         if (runtimeId == "sim")
         {
             reportId = Guid.NewGuid();
-            var simulationReport = new { report_id = reportId, reportData.report_type, reportData.job_id, reportData.runtime_id, reportData.execution_id, reportData.duration_seconds, reportData.observation_count, reportData.fallen_book_count, reportData.obstacle_count, reportData.warning_count, reportData.path_coverage, reportData.observations };
+            var simulationReport = new { report_id = reportId, reportData.report_type, reportData.job_id, reportData.runtime_id, reportData.execution_id, reportData.duration_seconds, reportData.observation_count, reportData.fallen_book_count, reportData.obstacle_count, reportData.warning_count, reportData.leaning_book_count, reportData.path_coverage, reportData.observations };
             SimulationWorkflowDataStore.SetPatrolReport(request.JobId, simulationReport);
             return new ActionResult(simulationReport, 1);
         }
 
         reportId = await dataService.SavePatrolReportAsync(request.JobId, durationSeconds,
-            observationData.Length, warnings + obstacles, JsonSerializer.Serialize(reportData), cancellationToken);
-        var result = new { report_id = reportId, reportData.report_type, reportData.job_id, reportData.runtime_id, reportData.execution_id, reportData.duration_seconds, reportData.observation_count, reportData.fallen_book_count, reportData.obstacle_count, reportData.warning_count, reportData.path_coverage, reportData.observations };
+            observationData.Length, warnings + obstacles + leaningBooks, JsonSerializer.Serialize(reportData), cancellationToken);
+        var result = new { report_id = reportId, reportData.report_type, reportData.job_id, reportData.runtime_id, reportData.execution_id, reportData.duration_seconds, reportData.observation_count, reportData.fallen_book_count, reportData.obstacle_count, reportData.warning_count, reportData.leaning_book_count, reportData.path_coverage, reportData.observations };
         return new ActionResult(result, 1);
     }
 
