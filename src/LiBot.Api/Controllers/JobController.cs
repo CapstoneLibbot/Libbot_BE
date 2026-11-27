@@ -356,6 +356,7 @@ public class JobController(
                 command = "start_workflow",
                 workflow_version = document.Version,
                 workflow_id = document.WorkflowId,
+                workflow_type = document.Type,
                 job_id = id.ToString(),
                 task_id = id.ToString(),
                 execution_id = executionId,

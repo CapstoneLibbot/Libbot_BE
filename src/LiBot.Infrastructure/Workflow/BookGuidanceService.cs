@@ -166,7 +166,8 @@ public sealed class BookGuidanceService(
             ["endpoint_id"] = request.EndpointId?.ToString(),
             ["runtime_id"] = runtimeId,
             ["task_id"] = job.Id.ToString(),
-            ["backend_base_url"] = backendBaseUrl
+            ["backend_base_url"] = backendBaseUrl,
+            ["workflow_type"] = BookGuidanceWorkflow.Type
         };
         var initialContext = JsonSerializer.Serialize(contextValues);
         await workflowRepository.CreateExecutionAsync(job, jobTask, workflowDocument, initialContext, cancellationToken);

@@ -227,7 +227,8 @@ public sealed class JobDataRepository(LiBotDbContext db) : IJobDataRepository
         var jobStep = steps.FirstOrDefault(step => ReadStepId(step.Configuration) == stepId);
         if (jobStep is null)
         {
-            if (stepId.StartsWith("__inventory_scan", StringComparison.Ordinal)) return false;
+            if (stepId.StartsWith("__inventory_scan", StringComparison.Ordinal)
+                || stepId.StartsWith("__return_to_wait", StringComparison.Ordinal)) return false;
             throw new InvalidOperationException($"Job '{jobId}' has no step with id '{stepId}'.");
         }
 
