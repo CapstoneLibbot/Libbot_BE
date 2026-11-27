@@ -1,5 +1,7 @@
+using LiBot.Application.Interfaces;
 using LiBot.Application.Workflow.BookGuidance;
 using LiBot.Contracts.Workflow;
+using LiBot.Domain.Enums;
 using LiBot.Infrastructure.Workflow;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,7 +12,9 @@ namespace LiBot.Api.Controllers;
 [Route("api/book-guidance")]
 public sealed class BookGuidanceController(
     IBookGuidanceService service,
+    IJobDataService jobData,
     IRobotRuntimeService runtimes,
+    IEndpointService endpoints,
     IConfiguration configuration) : ControllerBase
 {
     /// <summary>Tìm đầu sách theo tên, ISBN, tác giả hoặc danh mục.</summary>
@@ -46,9 +50,9 @@ public sealed class BookGuidanceController(
     public async Task<ActionResult<FeedbackResponse>> SaveFeedback(FeedbackRequest request, CancellationToken cancellationToken)
     {
         if (request.Rating is < 1 or > 5) return BadRequest("Rating must be between 1 and 5.");
-        var isSimulationTask = await service.IsSimulationTaskAsync(request.TaskId, cancellationToken);
+        var isSimulationTask = await service.IsSimulationTaskAsync(request.JobId, cancellationToken);
         if (isSimulationTask)
-            return Ok(new FeedbackResponse(Guid.Empty, request.TaskId, request.Rating));
+            return Ok(new FeedbackResponse(Guid.Empty, request.JobId, request.Rating));
         var feedback = await service.SaveFeedbackAsync(request, cancellationToken);
         if (feedback is null)
             return NotFound("Task was not found.");
@@ -58,8 +62,8 @@ public sealed class BookGuidanceController(
 
     [HttpGet("feedback")]
     public async Task<ActionResult<IReadOnlyList<FeedbackResponse>>> GetFeedback(
-        [FromQuery] Guid? taskId, CancellationToken cancellationToken) =>
-        Ok(await service.GetFeedbackAsync(taskId, cancellationToken));
+        [FromQuery] Guid? jobId, CancellationToken cancellationToken) =>
+        Ok(await service.GetFeedbackAsync(jobId, cancellationToken));
 
     [HttpGet("feedback/{feedbackId:guid}")]
     public async Task<ActionResult<FeedbackResponse>> GetFeedbackById(Guid feedbackId, CancellationToken cancellationToken)
@@ -111,28 +115,78 @@ public sealed class BookGuidanceController(
     }
 
     /// <summary>Bắt đầu nhiệm vụ robot tìm và hướng dẫn đến bản sách đã chọn.</summary>
-    /// <remarks>Luồng Gazebo được khởi chạy từ mission Run để trạng thái mô phỏng không ghi vào database.</remarks>
+    /// <remarks>Luồng Gazebo được khởi chạy từ job Run để trạng thái mô phỏng không ghi vào database.</remarks>
     [HttpPost("start")]
     public async Task<IActionResult> Start(StartBookGuidanceRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
-        if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.BookId is null || request.BookItemId is null)
-            return BadRequest("runtimeId, bookId, and bookItemId are required.");
+        if (string.IsNullOrWhiteSpace(request.RuntimeId))
+            return BadRequest("runtimeId is required.");
         if (string.Equals(request.RuntimeId, "sim", StringComparison.OrdinalIgnoreCase))
-            return Conflict(new { message = "Start Gazebo runs from the mission Run button so execution state stays transient." });
+            return Conflict(new { code = GuidanceErrorCodes.SimUseRunButton, message = "Start Gazebo runs from the job Run button so execution state stays transient." });
 
-        var book = await service.GetBookAsync(request.BookId.Value, cancellationToken);
-        if (book is null) return NotFound("Book not found.");
-        var selectedCopy = book.BookItems.FirstOrDefault(item => item.Id == request.BookItemId.Value);
-        if (selectedCopy is null) return NotFound("Selected book copy was not found.");
-        if (!string.Equals(selectedCopy.Status, "Available", StringComparison.OrdinalIgnoreCase))
-            return Conflict(new { message = "Selected book copy is not available." });
-        var endpoint = selectedCopy.Location?.Endpoint;
-        if (endpoint is null || !double.IsFinite(endpoint.X) || !double.IsFinite(endpoint.Y) || !double.IsFinite(endpoint.Theta))
-            return UnprocessableEntity(new { message = "Selected book copy has no valid navigation endpoint." });
+        Guid targetEndpointId;
+        Guid targetMapId;
+        string queryName;
+
+        if (request.BookId.HasValue && request.BookItemId.HasValue)
+        {
+            var target = await service.GetCopyStartTargetAsync(
+                request.BookId.Value,
+                request.BookItemId.Value,
+                cancellationToken);
+            if (target is null) return NotFound("Book not found.");
+            if (target.CopyStatus is null) return NotFound("Selected book copy was not found.");
+            if (!string.Equals(target.CopyStatus, nameof(BookItemStatus.Available), StringComparison.OrdinalIgnoreCase))
+                return Conflict(new { code = GuidanceErrorCodes.CopyUnavailable, message = "Selected book copy is not available." });
+            var endpoint = target.Endpoint;
+            if (endpoint is null || !double.IsFinite(endpoint.X) || !double.IsFinite(endpoint.Y) || !double.IsFinite(endpoint.Theta))
+                return UnprocessableEntity(new { code = GuidanceErrorCodes.InvalidEndpoint, message = "Selected book copy has no valid navigation endpoint." });
+            if (request.EndpointId.HasValue && request.EndpointId.Value != endpoint.EndpointId)
+                return Conflict(new { code = GuidanceErrorCodes.EndpointMismatch, message = "The selected endpoint does not match the book copy location." });
+
+            targetEndpointId = endpoint.EndpointId;
+            targetMapId = endpoint.MapId;
+            queryName = !string.IsNullOrWhiteSpace(request.Query) ? request.Query.Trim() : target.BookTitle;
+        }
+        else if (request.EndpointId.HasValue)
+        {
+            var ep = await endpoints.GetByIdAsync(request.EndpointId.Value, null, cancellationToken);
+            if (ep is null) return NotFound("Endpoint not found.");
+            if (!ep.IsActive || !double.IsFinite(ep.PositionX) || !double.IsFinite(ep.PositionY) || !double.IsFinite(ep.Theta))
+                return UnprocessableEntity(new { code = GuidanceErrorCodes.InvalidEndpoint, message = "Selected endpoint is not active or has invalid coordinates." });
+
+            targetEndpointId = ep.Id;
+            targetMapId = ep.MapId;
+            queryName = !string.IsNullOrWhiteSpace(request.Query) ? request.Query.Trim() : ep.Name;
+        }
+        else
+        {
+            return BadRequest("Either (bookId, bookItemId) or endpointId is required.");
+        }
 
         var runtimeError = runtimes.ValidateGuidanceStart(request.RuntimeId, request.ArmLeaseId);
-        if (runtimeError is not null) return Conflict(new { message = runtimeError });
+        if (runtimeError is not null)
+            return Conflict(new { code = GuidanceErrorCodes.FromRuntimeValidation(runtimeError), message = runtimeError });
+        var runtime = runtimes.Get(request.RuntimeId);
+        if (runtime is null) return BadRequest("The selected robot runtime was not found.");
+        if (!Guid.TryParse(runtime.Telemetry?.ActiveMapId, out var activeMapId))
+            return Conflict(new { code = GuidanceErrorCodes.NoActiveMap, message = "The robot has no active map. Start navigation on the map containing this destination first." });
+        if (activeMapId != targetMapId)
+            return Conflict(new { code = GuidanceErrorCodes.WrongActiveMap, message = "The selected destination is not on the robot's active map." });
+        if (!await jobData.MapExistsAsync(activeMapId, cancellationToken))
+            return NotFound("The robot's active map was not found.");
+
+        var robotId = request.RobotId;
+        if (robotId == Guid.Empty)
+        {
+            robotId = await jobData.GetOrCreateRobotIdForMapAsync(
+                activeMapId, request.RuntimeId, runtime.DisplayName, cancellationToken);
+        }
+        else if (!await jobData.RobotExistsAsync(robotId, cancellationToken))
+        {
+            return NotFound("Robot not found.");
+        }
+        request = request with { Query = queryName, RobotId = robotId, EndpointId = targetEndpointId };
 
         var baseUrl = !string.IsNullOrWhiteSpace(request.BackendBaseUrl)
             ? request.BackendBaseUrl.TrimEnd('/')
@@ -150,13 +204,13 @@ public sealed class BookGuidanceController(
 
             if (!result.IsAccepted)
             {
-                return UnprocessableEntity(new { missionId = result.MissionId, robot = result.Robot });
+                return UnprocessableEntity(new { code = GuidanceErrorCodes.RobotRejected, message = "Robot runtime did not accept the book guidance workflow.", jobId = result.JobId, robot = result.Robot });
             }
 
             return Accepted(new
             {
-                missionId = result.MissionId,
-                executionId = result.MissionId,
+                jobId = result.JobId,
+                executionId = result.JobId,
                 workflowId = result.Workflow.Id,
                 runtimeId = request.RuntimeId,
                 robot = result.Robot
@@ -226,11 +280,11 @@ public sealed class BookGuidanceController(
         }
     }
 
-    /// <summary>Đánh dấu task hướng dẫn hoàn thành hoặc thất bại.</summary>
-    [HttpPost("tasks/{taskId:guid}/complete")]
-    public async Task<IActionResult> CompleteTask(Guid taskId, CompleteBookGuidanceRequest request, CancellationToken cancellationToken)
+    /// <summary>Đánh dấu Job hướng dẫn hoàn thành hoặc thất bại.</summary>
+    [HttpPost("jobs/{jobId:guid}/complete")]
+    public async Task<IActionResult> CompleteJob(Guid jobId, CompleteBookGuidanceRequest request, CancellationToken cancellationToken)
     {
-        return await service.CompleteTaskAsync(taskId, request, cancellationToken)
+        return await service.CompleteTaskAsync(jobId, request, cancellationToken)
             ? NoContent()
             : NotFound();
     }

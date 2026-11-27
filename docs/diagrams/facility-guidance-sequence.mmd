@@ -1,0 +1,56 @@
+sequenceDiagram
+    actor R as Reader
+    participant K as Reader App
+    participant A as LiBot API
+    participant S as Facility Guidance Service
+    participant D as Repositories
+    participant DB as SQL Server
+    participant B as Robot Runtime
+
+    R->>K: 1. Find and select an area
+    K->>A: 2. Search area
+    A->>S: 3. Find area
+    S->>D: 4. Load area details
+    D->>DB: 5. Read area data
+    DB-->>D: 6. Area data
+    D-->>S: 7. Area details
+    S-->>A: 8. Area details
+    A-->>K: 9. Return area
+    K-->>R: 10. Show area
+
+    R->>K: 11. Confirm guidance
+    K->>A: 12. Request guidance
+    A->>A: 13. Validate request
+    A->>S: 14. Start guidance
+    S->>D: 15. Create job
+    D->>DB: 16. Save job data
+    DB-->>D: 17. Job saved
+    D-->>S: 18. Job details
+    S->>B: 19. Start robot task
+    B-->>S: 20. Accept task
+    S-->>A: 21. Execution details
+    A-->>K: 22. Guidance started
+
+    B->>B: 23. Navigate to area
+    loop Each workflow step
+        B->>A: Report step result
+        A->>D: Save step result
+        D->>DB: Save result
+        D-->>A: Result saved
+    end
+
+    K->>A: 24. Check progress
+    A->>S: 25. Get progress
+    S->>B: 26. Check robot progress
+    B-->>S: 27. Current progress
+    S-->>A: 28. Progress details
+    A-->>K: 29. Show progress
+    K->>A: 30. Submit final result
+    A->>D: 31. Update job status
+    D->>DB: 32. Save job status
+    K-->>R: 33. Show result
+    R->>K: 34. Submit rating
+    K->>A: 35. Save rating
+    A->>D: 36. Record rating
+    D->>DB: 37. Save rating
+    DB-->>D: Rating saved

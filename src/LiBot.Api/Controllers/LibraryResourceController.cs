@@ -1,21 +1,17 @@
+using LiBot.Application.Interfaces;
+using LiBot.Application.Models;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LiBot.Api.Controllers;
 
 /// <summary>Các thao tác CRUD dùng chung cho dữ liệu thư viện.</summary>
 /// <remarks>Các controller kế thừa cung cấp danh sách, chi tiết, tạo, cập nhật và xóa từng loại tài nguyên.</remarks>
-public abstract class LibraryResourceController<TEntity, TDto> : ControllerBase
+public abstract class LibraryResourceController<TEntity, TDto>(ILibraryResourceService<TEntity, TDto> service) : ControllerBase
     where TEntity : class
     where TDto : class, ILibraryResourceDto<TEntity>, new()
 {
-    private readonly ILibraryResourceService<TEntity, TDto> _service;
-
+    private readonly ILibraryResourceService<TEntity, TDto> _service = service;
     protected ILibraryResourceService<TEntity, TDto> ResourceService => _service;
-
-    protected LibraryResourceController(ILibraryResourceService<TEntity, TDto> service)
-    {
-        _service = service;
-    }
 
     /// <summary>Lấy toàn bộ tài nguyên của nhóm hiện tại.</summary>
     [HttpGet]

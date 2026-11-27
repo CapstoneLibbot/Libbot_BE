@@ -1,7 +1,7 @@
 namespace LiBot.Application.Models;
 
 public sealed record PatrolCompletedNotification(
-    Guid MissionId,
+    Guid JobId,
     Guid ReportId,
     string ReportType,
     string RuntimeId,

@@ -27,9 +27,6 @@ public class EndpointRepository(LiBotDbContext db) : IEndpointRepository
         var descending = string.Equals(query.SortOrder, "desc", StringComparison.OrdinalIgnoreCase);
         source = query.SortBy.ToLowerInvariant() switch
         {
-            "created" or "createdatutc" => descending
-                ? source.OrderByDescending(endpoint => endpoint.CreatedAtUtc)
-                : source.OrderBy(endpoint => endpoint.CreatedAtUtc),
             _ => descending
                 ? source.OrderByDescending(endpoint => endpoint.Name)
                 : source.OrderBy(endpoint => endpoint.Name)
@@ -51,7 +48,8 @@ public class EndpointRepository(LiBotDbContext db) : IEndpointRepository
 
     public async Task<EndpointResponse> CreateAsync(EndpointWriteRequest request, CancellationToken cancellationToken)
     {
-        var endpoint = new Endpoint(request.MapId, request.Name, request.PositionX, request.PositionY, request.Theta);
+        var endpoint = new Endpoint(request.MapId, request.Name, request.PositionX, request.PositionY,
+            request.Theta, request.Description, request.EndpointType);
         if (!request.IsActive) endpoint.Deactivate();
         db.Endpoints.Add(endpoint);
         await db.SaveChangesAsync(cancellationToken);
@@ -62,7 +60,8 @@ public class EndpointRepository(LiBotDbContext db) : IEndpointRepository
     {
         var endpoint = await db.Endpoints.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (endpoint is null) return null;
-        endpoint.Update(request.MapId, request.Name, request.PositionX, request.PositionY, request.Theta, request.IsActive);
+        endpoint.Update(request.MapId, request.Name, request.PositionX, request.PositionY, request.Theta,
+            request.Description, request.EndpointType, request.IsActive);
         await db.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(id, null, cancellationToken);
     }
@@ -94,12 +93,12 @@ public class EndpointRepository(LiBotDbContext db) : IEndpointRepository
             endpoint.Id,
             endpoint.MapId,
             endpoint.Name,
+            endpoint.Description,
+            endpoint.EndpointType,
             endpoint.PositionX,
             endpoint.PositionY,
             endpoint.Theta,
             endpoint.IsActive,
-            endpoint.CreatedAtUtc,
-            endpoint.UpdatedAtUtc,
             maps.TryGetValue(endpoint.MapId, out var map)
                 ? new EndpointMapResponse(map.Id, map.Name, map.Version, map.Width, map.Height, map.MapData)
                 : null)).ToList();

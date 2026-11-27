@@ -15,8 +15,19 @@ public interface IBookGuidanceService
         int pageSize,
         CancellationToken cancellationToken);
 
+    Task<BookSearchResponse> SearchTitlesAsync(
+        string query,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken);
+
     Task<BookGuidanceDetail?> GetBookAsync(
         Guid bookId,
+        CancellationToken cancellationToken);
+
+    Task<BookCopyStartTarget?> GetCopyStartTargetAsync(
+        Guid bookId,
+        Guid bookItemId,
         CancellationToken cancellationToken);
 
     Task<FeedbackResponse?> SaveFeedbackAsync(

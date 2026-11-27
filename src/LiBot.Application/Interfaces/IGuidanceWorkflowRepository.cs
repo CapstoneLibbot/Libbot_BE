@@ -1,5 +1,5 @@
 using LiBot.Application.Models;
-using LiBot.Domain.Mission;
+using LiBot.Domain.Job;
 
 namespace LiBot.Application.Interfaces;
 
@@ -10,12 +10,12 @@ public interface IGuidanceWorkflowRepository
         CancellationToken cancellationToken);
 
     Task CreateExecutionAsync(
-        Mission mission,
+        Job job,
         JobTask jobTask,
-        Guid workflowId,
+        RobotWorkflowDocument workflowDocument,
         string initialContext,
         CancellationToken cancellationToken);
 
-    Task<Mission?> GetMissionAsync(Guid missionId, CancellationToken cancellationToken);
+    Task<Job?> GetJobAsync(Guid jobId, CancellationToken cancellationToken);
     Task SaveChangesAsync(CancellationToken cancellationToken);
 }

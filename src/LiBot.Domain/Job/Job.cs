@@ -1,0 +1,102 @@
+namespace LiBot.Domain.Job;
+using LiBot.Domain.Enums;
+
+public class Job
+{
+    public Guid Id { get; private set; } = Guid.NewGuid();
+    public string Name { get; private set; }
+    public string? Description { get; private set; }
+    public string Status { get; private set; } = "Pending";
+    public Guid? CreatedBy { get; private set; }
+    public Guid RobotId { get; private set; }
+    public Guid WorkflowId { get; private set; }
+    public int Priority { get; private set; }
+
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public JobStatus StatusCode => Enum.TryParse<JobStatus>(Status, true, out var status)
+        ? status
+        : JobStatus.Pending;
+
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public JobPriority PriorityCode => Enum.IsDefined(typeof(JobPriority), Priority)
+        ? (JobPriority)Priority
+        : JobPriority.Normal;
+    [System.ComponentModel.DataAnnotations.Schema.Column("CreateAt")]
+    public DateTime CreatedAtUtc { get; private set; } = DateTime.UtcNow;
+    [System.ComponentModel.DataAnnotations.Schema.Column("StartedAt")]
+    public DateTime? StartedAtUtc { get; private set; }
+    [System.ComponentModel.DataAnnotations.Schema.Column("CompletedAt")]
+    public DateTime? CompletedAtUtc { get; private set; }
+
+    private Job() => Name = string.Empty;
+
+    public Job(string name, string? description, Guid robotId, Guid workflowId, Guid? createdBy = null, int priority = 0)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Job name is required.", nameof(name));
+        if (robotId == Guid.Empty)
+            throw new ArgumentException("Robot id is required.", nameof(robotId));
+        if (workflowId == Guid.Empty)
+            throw new ArgumentException("Workflow id is required.", nameof(workflowId));
+
+        Name = name.Trim();
+        Description = description?.Trim();
+        CreatedBy = createdBy;
+        RobotId = robotId;
+        WorkflowId = workflowId;
+        Priority = priority;
+    }
+
+    public void Start()
+    {
+        if (Status != "Pending")
+            throw new InvalidOperationException("Only pending jobs can start.");
+
+        Status = "Running";
+        StartedAtUtc = DateTime.UtcNow;
+    }
+
+    public void Retry()
+    {
+        if (Status is not ("Failed" or "Cancelled"))
+            throw new InvalidOperationException("Only failed or cancelled jobs can be retried.");
+
+        Status = "Pending";
+        StartedAtUtc = null;
+        CompletedAtUtc = null;
+    }
+
+    public void Complete()
+    {
+        Status = "Completed";
+        CompletedAtUtc = DateTime.UtcNow;
+    }
+
+    public void Update(string name, string? description, int priority, Guid workflowId)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Job name is required.", nameof(name));
+        if (workflowId == Guid.Empty)
+            throw new ArgumentException("Workflow id is required.", nameof(workflowId));
+        Name = name.Trim();
+        Description = description?.Trim();
+        Priority = priority;
+        WorkflowId = workflowId;
+    }
+
+    public void Cancel()
+    {
+        if (Status is "Completed" or "Cancelled")
+            throw new InvalidOperationException("Completed or cancelled jobs cannot be cancelled.");
+        Status = "Cancelled";
+        CompletedAtUtc = DateTime.UtcNow;
+    }
+
+    public void Fail()
+    {
+        if (Status is "Completed" or "Cancelled")
+            throw new InvalidOperationException("Completed or cancelled jobs cannot be failed.");
+        Status = "Failed";
+        CompletedAtUtc = DateTime.UtcNow;
+    }
+}

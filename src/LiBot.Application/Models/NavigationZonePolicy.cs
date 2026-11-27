@@ -6,4 +6,7 @@ public sealed record NavigationZonePolicy(
     double MinY,
     double MaxX,
     double MaxY,
-    double MaxSpeed);
+    double MaxSpeed,
+    double? Width = null,
+    double? Height = null,
+    double RotationAngle = 0);

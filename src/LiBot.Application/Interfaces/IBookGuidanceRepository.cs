@@ -12,9 +12,17 @@ public interface IBookGuidanceRepository
         int pageSize,
         CancellationToken cancellationToken);
 
+    /// <summary>Voice search is intentionally limited to book titles.</summary>
+    Task<BookSearchResponse> SearchTitlesAsync(
+        string query,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken);
+
     Task<BookGuidanceDetail?> GetBookAsync(Guid bookId, CancellationToken cancellationToken);
+    Task<BookCopyStartTarget?> GetCopyStartTargetAsync(Guid bookId, Guid bookItemId, CancellationToken cancellationToken);
     Task<FeedbackResponse?> SaveFeedbackAsync(FeedbackRequest request, CancellationToken cancellationToken);
-    Task<IReadOnlyList<FeedbackResponse>> GetFeedbackAsync(Guid? taskId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<FeedbackResponse>> GetFeedbackAsync(Guid? jobId, CancellationToken cancellationToken);
     Task<FeedbackResponse?> GetFeedbackByIdAsync(Guid feedbackId, CancellationToken cancellationToken);
     Task<FeedbackResponse?> UpdateFeedbackAsync(Guid feedbackId, FeedbackUpdateRequest request, CancellationToken cancellationToken);
     Task<bool> DeleteFeedbackAsync(Guid feedbackId, CancellationToken cancellationToken);

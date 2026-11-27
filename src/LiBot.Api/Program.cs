@@ -1,5 +1,7 @@
 using LiBot.Api.Hubs;
+using LiBot.Api.Filters;
 using LiBot.Api.Middleware;
+using LiBot.Api.Services;
 using LiBot.Api.VoiceTools;
 using LiBot.Application.Models;
 using LiBot.Application.Services.Robot;
@@ -16,7 +18,11 @@ var dotEnvSettings = DotEnvLoader.Load();
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddInMemoryCollection(dotEnvSettings);
 
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<ApiErrorResultFilter>();
+    options.Filters.Add<ResourceIdentityFilter>();
+})
     .ConfigureApiBehaviorOptions(options =>
     {
         options.InvalidModelStateResponseFactory = context =>
@@ -26,9 +32,10 @@ builder.Services.AddControllers()
                 context.ModelState.Values
                     .SelectMany(entry => entry.Errors)
                     .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage)
-                        ? "The request is invalid."
+                        ? "Dữ liệu yêu cầu không hợp lệ."
                         : error.ErrorMessage));
-            return new BadRequestObjectResult(BaseResponse<object>.Failure(message));
+            return new BadRequestObjectResult(BaseResponse<object>.Failure(
+                ApiErrorFormatter.Localize(StatusCodes.Status400BadRequest, message)));
         };
     });
 builder.Services.AddSignalR();
@@ -64,17 +71,21 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "LiBot API",
         Version = "v1",
-        Description = "API quản lý thư viện, workflow/mission và điều khiển robot LiBot. Mỗi nhóm endpoint có mô tả chức năng; xem XML documentation tại các operation để biết mục đích và cách sử dụng."
+        Description = "API quản lý thư viện, workflow/job và điều khiển robot LiBot. Mỗi nhóm endpoint có mô tả chức năng; xem XML documentation tại các operation để biết mục đích và cách sử dụng."
     });
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, "LiBot.Api.xml"), includeControllerXmlComments: true);
 });
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddSingleton<LowBatteryChargingCoordinator>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<LowBatteryChargingCoordinator>());
 
 var app = builder.Build();
 
-await app.Services.InitializeLiBotDatabaseAsync();
+if (builder.Configuration.GetValue("Database:ApplyMigrations", true))
+    await app.Services.InitializeLiBotDatabaseAsync();
 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() ||
+    app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.UseSwagger();
     app.UseSwaggerUI();

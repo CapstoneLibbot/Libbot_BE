@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using LiBot.Application.Robot;
 using LiBot.Infrastructure.Robot;
+using LiBot.Api.Services;
 using System.Text.Json;
 
 namespace LiBot.Api.Controllers;
@@ -11,6 +12,7 @@ namespace LiBot.Api.Controllers;
 [Route("api/robot-runtimes")]
 public sealed class RobotTelemetryController(
     IRobotRuntimeService runtimes,
+    LowBatteryChargingCoordinator chargingCoordinator,
     ILiBotTcpClient tcpClient,
     IHttpClientFactory httpClientFactory,
     IConfiguration configuration,
@@ -92,8 +94,13 @@ public sealed class RobotTelemetryController(
     public async Task<IActionResult> Telemetry(
         string runtimeId,
         RobotTelemetryRequest request,
-        CancellationToken cancellationToken) =>
-        await runtimes.UpdateTelemetryAsync(runtimeId, request, cancellationToken) ? Accepted() : NotFound();
+        CancellationToken cancellationToken)
+    {
+        if (!await runtimes.UpdateTelemetryAsync(runtimeId, request, cancellationToken))
+            return NotFound();
+        await chargingCoordinator.OnTelemetryUpdatedAsync(runtimeId, request);
+        return Accepted();
+    }
 
     /// <summary>Lấy occupancy grid mới nhất của runtime.</summary>
     [HttpGet("{runtimeId}/map")]

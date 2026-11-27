@@ -1,6 +1,7 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
-using LiBot.Domain.Mission;
+using LiBot.Domain.Enums;
+using LiBot.Domain.Job;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,6 +9,35 @@ namespace LiBot.Infrastructure.Repositories;
 
 public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRepository
 {
+    public async Task<BookSearchResponse> SearchTitlesAsync(
+        string query,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        var term = query.Trim();
+        var booksQuery =
+            from book in db.Books.AsNoTracking()
+            join bookCategory in db.BookCategories.AsNoTracking() on book.CategoryId equals bookCategory.Id into categories
+            from bookCategory in categories.DefaultIfEmpty()
+            where EF.Functions.Like(book.Title, $"%{term}%")
+            select new { Book = book, CategoryName = bookCategory == null ? null : bookCategory.Name };
+
+        var totalCount = await booksQuery.CountAsync(cancellationToken);
+        var books = await booksQuery
+            .OrderBy(item => item.Book.Title)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(item => new BookSearchItem(
+                item.Book.Id, item.Book.Isbn, item.Book.Title, item.Book.Author, item.CategoryName,
+                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == BookItemStatus.Available),
+                item.Book.Image))
+            .ToListAsync(cancellationToken);
+
+        return new BookSearchResponse(books, page, pageSize, totalCount,
+            (int)Math.Ceiling(totalCount / (double)pageSize));
+    }
+
     public async Task<BookSearchResponse> SearchAsync(
         string? query,
         string? category,
@@ -35,10 +65,10 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
 
         if (!string.IsNullOrWhiteSpace(category))
         {
-            var categoryTerm = category.Trim().ToLowerInvariant();
+            var categoryTerm = category.Trim();
             booksQuery = booksQuery.Where(item =>
                 item.CategoryName != null &&
-                EF.Functions.Like(item.CategoryName.ToLower(), $"%{categoryTerm}%"));
+                EF.Functions.Like(item.CategoryName, $"%{categoryTerm}%"));
         }
 
         var totalCount = await booksQuery.CountAsync(cancellationToken);
@@ -52,7 +82,7 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
                 item.Book.Title,
                 item.Book.Author,
                 item.CategoryName,
-                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == "Available"),
+                db.BookItems.Count(bookItem => bookItem.BookId == item.Book.Id && bookItem.Status == BookItemStatus.Available),
                 item.Book.Image))
             .ToListAsync(cancellationToken);
 
@@ -95,23 +125,23 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
             join aisle in db.Aisles.AsNoTracking() on shelf.AisleId equals aisle.Id
             join floor in db.Floors.AsNoTracking() on aisle.FloorId equals floor.Id
             join endpoint in db.Endpoints.AsNoTracking().Where(item => item.IsActive)
-                on shelf.EndpointId equals endpoint.Id into endpoints
+                on shelf.StartEndpointId equals endpoint.Id into endpoints
             from endpoint in endpoints.DefaultIfEmpty()
             where copy.BookId == bookId
             select new
             {
                 copy.Id,
                 Location = new BookLocation(
-                    floor.Id, floor.Name, floor.FloorNumber, aisle.Id, aisle.Code, aisle.Name,
-                    shelf.Id, shelf.Code, shelf.Name, level.Id, level.LevelNumber,
+                    floor.Id, floor.Name, floor.FloorNumber, aisle.Id, aisle.Name, aisle.Name,
+                    shelf.Id, shelf.Name, shelf.Name, level.Id, level.LevelNumber,
                     endpoint == null ? null : new NavigationEndpoint(
-                        endpoint.Id, endpoint.Name, endpoint.PositionX, endpoint.PositionY, endpoint.Theta))
+                        endpoint.Id, endpoint.MapId, endpoint.Name, endpoint.PositionX, endpoint.PositionY, endpoint.Theta))
             })
             .ToDictionaryAsync(item => item.Id, item => item.Location, cancellationToken);
 
         var bookItems = copies
             .Select(copy => new BookGuidanceBookItem(
-                copy.Id, copy.Barcode, copy.Status, locationsByCopyId.GetValueOrDefault(copy.Id)))
+                copy.Id, copy.Barcode, copy.Status.ToString(), locationsByCopyId.GetValueOrDefault(copy.Id)))
             .ToList();
 
         return new BookGuidanceDetail(
@@ -122,23 +152,65 @@ public sealed class BookGuidanceRepository(LiBotDbContext db) : IBookGuidanceRep
         };
     }
 
+    public async Task<BookCopyStartTarget?> GetCopyStartTargetAsync(
+        Guid bookId,
+        Guid bookItemId,
+        CancellationToken cancellationToken)
+    {
+        var bookInfo = await db.Books
+            .AsNoTracking()
+            .Where(book => book.Id == bookId)
+            .Select(book => new { book.Title })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (bookInfo is null) return null;
+
+        var copy = await (
+            from item in db.BookItems.AsNoTracking()
+            join level in db.ShelfLevels.AsNoTracking() on item.ExpectedShelfLevelId equals level.Id into levels
+            from level in levels.DefaultIfEmpty()
+            join shelf in db.Shelves.AsNoTracking() on level.ShelfId equals shelf.Id into shelves
+            from shelf in shelves.DefaultIfEmpty()
+            join endpoint in db.Endpoints.AsNoTracking().Where(e => e.IsActive)
+                on shelf.StartEndpointId equals endpoint.Id into endpoints
+            from endpoint in endpoints.DefaultIfEmpty()
+            where item.Id == bookItemId && item.BookId == bookId
+            select new
+            {
+                Status = item.Status.ToString(),
+                Endpoint = endpoint == null
+                    ? null
+                    : new NavigationEndpoint(
+                        endpoint.Id,
+                        endpoint.MapId,
+                        endpoint.Name,
+                        endpoint.PositionX,
+                        endpoint.PositionY,
+                        endpoint.Theta)
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return copy is null
+            ? new BookCopyStartTarget(bookInfo.Title, null, null)
+            : new BookCopyStartTarget(bookInfo.Title, copy.Status, copy.Endpoint);
+    }
+
     public async Task<FeedbackResponse?> SaveFeedbackAsync(
         FeedbackRequest request,
         CancellationToken cancellationToken)
     {
-        if (!await db.Jobs.AnyAsync(job => job.Id == request.TaskId, cancellationToken)) return null;
+        if (!await db.Jobs.AnyAsync(job => job.Id == request.JobId, cancellationToken)) return null;
 
-        var feedback = new Feedback(request.TaskId, request.Rating, request.Comment);
+        var feedback = new Feedback(request.JobId, request.Rating, request.Comment);
         db.Feedback.Add(feedback);
         await db.SaveChangesAsync(cancellationToken);
         return ToFeedbackResponse(feedback);
     }
 
-    public async Task<IReadOnlyList<FeedbackResponse>> GetFeedbackAsync(Guid? taskId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<FeedbackResponse>> GetFeedbackAsync(Guid? jobId, CancellationToken cancellationToken)
     {
         var query = db.Feedback.AsNoTracking();
-        if (taskId.HasValue) query = query.Where(item => item.JobId == taskId.Value);
-        return await query.OrderByDescending(item => item.CreatedAtUtc)
+        if (jobId.HasValue) query = query.Where(item => item.JobId == jobId.Value);
+        return await query.OrderByDescending(item => item.Id)
             .Select(item => new FeedbackResponse(item.Id, item.JobId, item.Rating, item.Comment))
             .ToListAsync(cancellationToken);
     }

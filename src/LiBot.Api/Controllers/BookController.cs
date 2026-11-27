@@ -5,6 +5,8 @@ using LiBot.Application.Models.BookCategory;
 using LiBot.Application.Models.BookItem;
 using LiBot.Domain.Library;
 using Microsoft.AspNetCore.Mvc;
+using BookCategoryResourceDto = LiBot.Application.Models.BookCategoryDto;
+using BookItemResourceDto = LiBot.Application.Models.BookItemDto;
 
 namespace LiBot.Api.Controllers;
 
@@ -14,15 +16,18 @@ namespace LiBot.Api.Controllers;
 public class BookController : ControllerBase
 {
     private readonly IBookService _bookService;
-    private readonly ILibraryResourceService<BookCategory, BookCategoryDto> _categoryService;
-    private readonly ILibraryResourceService<BookItem, BookItemDto> _bookItemService;
+    private readonly IBookItemService _bookItemQueryService;
+    private readonly ILibraryResourceService<BookCategory, BookCategoryResourceDto> _categoryService;
+    private readonly ILibraryResourceService<BookItem, BookItemResourceDto> _bookItemService;
 
     public BookController(
         IBookService bookService,
-        ILibraryResourceService<BookCategory, BookCategoryDto> categoryService,
-        ILibraryResourceService<BookItem, BookItemDto> bookItemService)
+        IBookItemService bookItemQueryService,
+        ILibraryResourceService<BookCategory, BookCategoryResourceDto> categoryService,
+        ILibraryResourceService<BookItem, BookItemResourceDto> bookItemService)
     {
         _bookService = bookService ?? throw new ArgumentNullException(nameof(bookService));
+        _bookItemQueryService = bookItemQueryService ?? throw new ArgumentNullException(nameof(bookItemQueryService));
         _categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
         _bookItemService = bookItemService ?? throw new ArgumentNullException(nameof(bookItemService));
     }
@@ -40,9 +45,9 @@ public class BookController : ControllerBase
     {
         if (page < 1 || pageSize is < 1 or > 100 || (long)(page - 1) * pageSize > int.MaxValue)
             return BadRequest(Error("page must be at least 1 and pageSize must be between 1 and 100."));
-        if (!new[] { "title", "author", "isbn", "publicationyear", "created", "createdatutc" }
+        if (!new[] { "title", "author", "isbn", "publicationyear" }
                 .Contains(sortBy.ToLowerInvariant()))
-            return BadRequest(Error("sortBy must be title, author, isbn, publicationYear or created."));
+            return BadRequest(Error("sortBy must be title, author, isbn or publicationYear."));
         if (!new[] { "asc", "desc" }.Contains(sortOrder.ToLowerInvariant()))
             return BadRequest(Error("sortOrder must be asc or desc."));
         if (!HasValidExpansion(expand, "category", "items"))
@@ -64,6 +69,19 @@ public class BookController : ControllerBase
         var book = await _bookService.GetByIdAsync(id, expand, cancellationToken);
         return book is null ? NotFound(Error("Book was not found.")) : Ok(new BaseResponse<BookResponse>(book));
     }
+
+    /// <summary>Gets books that belong to a category.</summary>
+    [HttpGet("category/{categoryId:guid}")]
+    public Task<ActionResult<BaseResponse<BookListResponse>>> GetBookByCategoryId(
+        Guid categoryId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? search = null,
+        [FromQuery] string sortBy = "title",
+        [FromQuery] string sortOrder = "asc",
+        [FromQuery] string? expand = null,
+        CancellationToken cancellationToken = default) =>
+        GetBooks(page, pageSize, search, categoryId, sortBy, sortOrder, expand, cancellationToken);
 
     [HttpPost]
     public async Task<ActionResult<BaseResponse<BookResponse>>> CreateBook(
@@ -105,34 +123,34 @@ public class BookController : ControllerBase
 
     [HttpGet("categories")]
     public async Task<IActionResult> GetCategories(CancellationToken cancellationToken) =>
-        Ok(new BaseResponse<IReadOnlyList<BookCategoryDto>>(
+        Ok(new BaseResponse<IReadOnlyList<BookCategoryResourceDto>>(
             await _categoryService.GetAllAsync(cancellationToken)));
 
     [HttpGet("categories/{id:guid}")]
     public async Task<IActionResult> GetCategoryById(Guid id, CancellationToken cancellationToken)
     {
         var category = await _categoryService.GetByIdAsync(id, cancellationToken);
-        return category is null ? NotFound(Error("Book category was not found.")) : Ok(new BaseResponse<BookCategoryDto>(category));
+        return category is null ? NotFound(Error("Book category was not found.")) : Ok(new BaseResponse<BookCategoryResourceDto>(category));
     }
 
     [HttpPost("categories")]
-    public async Task<IActionResult> CreateCategory([FromBody] BookCategoryDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateCategory([FromBody] BookCategoryResourceDto dto, CancellationToken cancellationToken)
     {
         try
         {
             var category = await _categoryService.CreateAsync(dto, cancellationToken);
-            return Created($"/api/books/categories/{category.Id}", new BaseResponse<BookCategoryDto>(category));
+            return Created($"/api/books/categories/{category.Id}", new BaseResponse<BookCategoryResourceDto>(category));
         }
         catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
     }
 
     [HttpPut("categories/{id:guid}")]
-    public async Task<IActionResult> UpdateCategory(Guid id, [FromBody] BookCategoryDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateCategory(Guid id, [FromBody] BookCategoryResourceDto dto, CancellationToken cancellationToken)
     {
         try
         {
             var category = await _categoryService.UpdateAsync(id, dto, cancellationToken);
-            return category is null ? NotFound(Error("Book category was not found.")) : Ok(new BaseResponse<BookCategoryDto>(category));
+            return category is null ? NotFound(Error("Book category was not found.")) : Ok(new BaseResponse<BookCategoryResourceDto>(category));
         }
         catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
     }
@@ -142,35 +160,100 @@ public class BookController : ControllerBase
         await _categoryService.DeleteAsync(id, cancellationToken) ? Ok(BaseResponse<object>.SuccessMessage("Book category deleted successfully.")) : NotFound(Error("Book category was not found."));
 
     [HttpGet("items")]
-    public async Task<IActionResult> GetBookItems(CancellationToken cancellationToken) =>
-        Ok(new BaseResponse<IReadOnlyList<BookItemDto>>(
+    public async Task<IActionResult> GetBookItems(
+        [FromQuery] Guid? bookId,
+        [FromQuery] Guid? shelfLevelId,
+        CancellationToken cancellationToken)
+    {
+        if (bookId is not null && shelfLevelId is not null)
+            return BadRequest(Error("Only one of bookId or shelfLevelId can be provided."));
+
+        if (bookId is Guid requestedBookId)
+            return await GetBookItemsByBookId(requestedBookId, cancellationToken);
+
+        if (shelfLevelId is Guid requestedShelfLevelId)
+            return await GetBookItemsByShelfLevelId(requestedShelfLevelId, cancellationToken);
+
+        return Ok(new BaseResponse<IReadOnlyList<BookItemResourceDto>>(
             await _bookItemService.GetAllAsync(cancellationToken)));
+    }
+
+    /// <summary>Gets all physical copies that belong to a book.</summary>
+    [HttpGet("items/by-book/{bookId:guid}")]
+    public async Task<IActionResult> GetBookItemByBookId(
+        Guid bookId,
+        CancellationToken cancellationToken) =>
+        await GetBookItemsByBookId(bookId, cancellationToken);
+
+    /// <summary>Gets all physical copies currently placed on a shelf level.</summary>
+    [HttpGet("items/by-shelf-level/{shelfLevelId:guid}")]
+    public async Task<IActionResult> GetBookItemByShelfLevelId(
+        Guid shelfLevelId,
+        CancellationToken cancellationToken) =>
+        await GetBookItemsByShelfLevelId(shelfLevelId, cancellationToken);
+
+    private async Task<IActionResult> GetBookItemsByBookId(
+        Guid bookId,
+        CancellationToken cancellationToken)
+    {
+        var items = await _bookItemQueryService.GetByBookIdAsync(bookId, cancellationToken);
+        return Ok(new BaseResponse<IReadOnlyList<BookItemResourceDto>>(items));
+    }
+
+    private async Task<IActionResult> GetBookItemsByShelfLevelId(
+        Guid shelfLevelId,
+        CancellationToken cancellationToken)
+    {
+        var items = await _bookItemQueryService.GetByShelfLevelIdAsync(shelfLevelId, cancellationToken);
+        return Ok(new BaseResponse<IReadOnlyList<BookItemResourceDto>>(items));
+    }
 
     [HttpGet("items/{id:guid}")]
     public async Task<IActionResult> GetBookItemById(Guid id, CancellationToken cancellationToken)
     {
         var item = await _bookItemService.GetByIdAsync(id, cancellationToken);
-        return item is null ? NotFound(Error("Book item was not found.")) : Ok(new BaseResponse<BookItemDto>(item));
+        return item is null ? NotFound(Error("Book item was not found.")) : Ok(new BaseResponse<BookItemResourceDto>(item));
     }
 
     [HttpPost("items")]
-    public async Task<IActionResult> CreateBookItem([FromBody] BookItemDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateBookItem([FromBody] BookItemResourceDto dto, CancellationToken cancellationToken)
     {
         try
         {
             var item = await _bookItemService.CreateAsync(dto, cancellationToken);
-            return Created($"/api/books/items/{item.Id}", new BaseResponse<BookItemDto>(item));
+            return Created($"/api/books/items/{item.Id}", new BaseResponse<BookItemResourceDto>(item));
         }
         catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
     }
 
     [HttpPut("items/{id:guid}")]
-    public async Task<IActionResult> UpdateBookItem(Guid id, [FromBody] BookItemDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateBookItem(Guid id, [FromBody] BookItemResourceDto dto, CancellationToken cancellationToken)
     {
+        var current = await _bookItemService.GetByIdAsync(id, cancellationToken);
+        if (current is null) return NotFound(Error("Book item was not found."));
+        if (dto.BookId != Guid.Empty && dto.BookId != current.BookId)
+            return BadRequest(Error("Không được thay đổi BookId của bản sách vật lý."));
+        dto.BookId = current.BookId;
+
         try
         {
             var item = await _bookItemService.UpdateAsync(id, dto, cancellationToken);
-            return item is null ? NotFound(Error("Book item was not found.")) : Ok(new BaseResponse<BookItemDto>(item));
+            return Ok(new BaseResponse<BookItemResourceDto>(item!));
+        }
+        catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
+    }
+
+    [HttpPatch("items/{id:guid}/status")]
+    public async Task<IActionResult> UpdateBookItemStatus(
+        Guid id, StatusUpdateRequest request, CancellationToken cancellationToken)
+    {
+        var current = await _bookItemService.GetByIdAsync(id, cancellationToken);
+        if (current is null) return NotFound(Error("Book item was not found."));
+        current.Status = request.Status;
+        try
+        {
+            var updated = await _bookItemService.UpdateAsync(id, current, cancellationToken);
+            return Ok(new BaseResponse<BookItemResourceDto>(updated!));
         }
         catch (ArgumentException exception) { return BadRequest(Error(exception.Message)); }
     }

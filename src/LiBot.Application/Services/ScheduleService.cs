@@ -48,10 +48,11 @@ public sealed class ScheduleService(IGenericRepository<Schedule> repository) : I
     }
 
     private static Schedule CreateSchedule(ScheduleWriteRequest request) =>
-        new(request.ScheduleType, request.ScheduleTime, request.StartDate, request.EndDate, request.CreatedBy);
+        new(request.Name, request.Data, request.ScheduleType, request.ScheduleTime, request.StartDate,
+            request.EndDate, request.CreatedBy);
 
     private static ScheduleResponse ToResponse(Schedule schedule) => new(
-        schedule.Id, schedule.CreatedBy, schedule.ScheduleType, schedule.ScheduleTime,
+        schedule.Id, schedule.CreatedBy, schedule.Name, schedule.Data, schedule.ScheduleType, schedule.ScheduleTime,
         schedule.StartDate, schedule.EndDate, schedule.LastRunAtUtc, schedule.NextRunAtUtc,
         schedule.CreatedAtUtc, schedule.UpdatedAtUtc);
 }

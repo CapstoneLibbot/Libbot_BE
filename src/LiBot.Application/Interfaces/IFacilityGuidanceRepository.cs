@@ -9,13 +9,13 @@ public interface IFacilityGuidanceRepository
         bool exact,
         int page,
         int pageSize,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        Guid? mapId = null);
 
     Task<IReadOnlyList<FacilityGuidanceDetail>> GetAllFacilitiesAsync(CancellationToken cancellationToken);
-    Task<FacilityGuidanceDetail?> GetReadingRoomAsync(CancellationToken cancellationToken);
     Task<FacilityGuidanceDetail?> GetFacilityAsync(Guid facilityId, CancellationToken cancellationToken);
     Task<FacilityFeedbackResponse?> SaveFeedbackAsync(FacilityFeedbackRequest request, CancellationToken cancellationToken);
-    Task<IReadOnlyList<FacilityFeedbackResponse>> GetFeedbackAsync(Guid? taskId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<FacilityFeedbackResponse>> GetFeedbackAsync(Guid? jobId, CancellationToken cancellationToken);
     Task<FacilityFeedbackResponse?> GetFeedbackByIdAsync(Guid feedbackId, CancellationToken cancellationToken);
     Task<FacilityFeedbackResponse?> UpdateFeedbackAsync(Guid feedbackId, FeedbackUpdateRequest request, CancellationToken cancellationToken);
     Task<bool> DeleteFeedbackAsync(Guid feedbackId, CancellationToken cancellationToken);

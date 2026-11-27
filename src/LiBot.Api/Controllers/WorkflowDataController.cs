@@ -2,6 +2,7 @@ using System.Text.Json;
 using LiBot.Application.Models;
 using LiBot.Application.Interfaces;
 using LiBot.Application.Workflow.BookGuidance;
+using LiBot.Infrastructure.Workflow;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LiBot.Api.Controllers;
@@ -15,6 +16,7 @@ public sealed class WorkflowDataController(
     IBookGuidanceService bookGuidance,
     IPatrolNotificationPublisher patrolNotifications) : ControllerBase
 {
+    private static readonly SemaphoreSlim PatrolEvidenceLock = new(1, 1);
     private static readonly Guid SimulationBookId = Guid.Parse("26000000-0000-0000-0000-000000000001");
     private static readonly Guid SimulationBookItemId = Guid.Parse("26000000-0000-0000-0000-000000000002");
     private static readonly Guid SimulationFacilityId = Guid.Parse("26000000-0000-0000-0000-000000000003");
@@ -64,6 +66,7 @@ public sealed class WorkflowDataController(
 
             var simulationEndpoint = new NavigationEndpoint(
                 endpoint.Id,
+                endpoint.MapId,
                 endpoint.Name,
                 endpoint.X,
                 endpoint.Y,
@@ -172,22 +175,24 @@ public sealed class WorkflowDataController(
     [HttpPost("inventory/scan")]
     public async Task<IActionResult> RecordInventoryScan(InventoryScanRequest request, CancellationToken cancellationToken)
     {
-        if (request.MissionId == Guid.Empty || string.IsNullOrWhiteSpace(request.Barcode))
-            return BadRequest(new { message = "missionId and barcode are required." });
-        var task = await dataService.GetMissionAsync(request.MissionId, cancellationToken);
+        if (request.JobId == Guid.Empty || string.IsNullOrWhiteSpace(request.Code))
+            return BadRequest(new { message = "jobId and qrCode are required." });
+        var task = await dataService.GetJobAsync(request.JobId, cancellationToken);
         var runtimeId = task?.RuntimeId ?? request.RuntimeId;
-        if (task is null && !IsActiveSimulation(request.MissionId, runtimeId))
-            return NotFound(new { message = "Mission task not found." });
+        if (task is null && !IsActiveSimulation(request.JobId, runtimeId))
+            return NotFound(new { message = "Job task not found." });
         if (task is not null && !MatchesRuntime(runtimeId, request.RuntimeId))
-            return Conflict(new { message = "Runtime does not match the mission." });
+            return Conflict(new { message = "Runtime does not match the job." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-            && !IsActiveSimulation(request.MissionId, runtimeId))
-            return Conflict(new { message = "No active in-memory simulation exists for this mission." });
+            && !IsActiveSimulation(request.JobId, runtimeId))
+            return Conflict(new { message = "No active in-memory simulation exists for this job." });
 
-        var barcode = request.Barcode.Trim();
+        var barcode = request.Code!.Trim();
         if (runtimeId == "real" && string.IsNullOrWhiteSpace(request.ShelfCode))
             return BadRequest(new { message = "shelfCode is required for a physical inventory scan." });
-        var shelfLevelId = runtimeId == "sim" ? null : await dataService.ResolveShelfLevelAsync(request.ShelfCode, cancellationToken);
+        if (request.LevelNumber is not null and not (1 or 2))
+            return BadRequest(new { message = "levelNumber must be 1 or 2." });
+        var shelfLevelId = runtimeId == "sim" ? null : await dataService.ResolveShelfLevelAsync(request.ShelfCode, request.LevelNumber, cancellationToken);
         if (runtimeId == "real" && shelfLevelId is null)
             return BadRequest(new { message = $"No active shelf level was found for shelf '{request.ShelfCode}'." });
         var item = runtimeId == "sim" ? null : await dataService.GetInventoryBookAsync(barcode, cancellationToken);
@@ -209,8 +214,10 @@ public sealed class WorkflowDataController(
         var scan = new
         {
             barcode,
+            qrCode = barcode,
             shelfCode = request.ShelfCode,
             shelfLevelId,
+            levelNumber = request.LevelNumber,
             known,
             misplaced,
             expectedShelfCode,
@@ -219,36 +226,168 @@ public sealed class WorkflowDataController(
         };
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
         {
-            SimulationWorkflowDataStore.AddInventoryScan(request.MissionId, scan);
+            SimulationWorkflowDataStore.AddInventoryScan(request.JobId, scan);
             return Ok(scan);
         }
-        await dataService.AddJobEventAsync(request.MissionId, "INVENTORY_SCAN", JsonSerializer.Serialize(scan), cancellationToken);
+        await dataService.AddJobEventAsync(request.JobId, "INVENTORY_SCAN", JsonSerializer.Serialize(scan), cancellationToken);
         return Ok(scan);
+    }
+
+    /// <summary>Lấy các barcode đã quét trong nhiệm vụ kiểm kê đang chạy hoặc đã hoàn tất.</summary>
+    [HttpGet("inventory/scans/{jobId:guid}")]
+    public async Task<IActionResult> GetInventoryScans(
+        Guid jobId,
+        [FromQuery] string? runtimeId,
+        CancellationToken cancellationToken)
+    {
+        var task = await dataService.GetJobAsync(jobId, cancellationToken);
+        runtimeId = task?.RuntimeId ?? (string.IsNullOrWhiteSpace(runtimeId) ? "sim" : runtimeId.Trim());
+        if (task is null && !IsActiveSimulation(jobId, runtimeId))
+            return NotFound(new { message = "Job task not found." });
+        if (task is not null && !MatchesRuntime(task.RuntimeId, runtimeId))
+            return Conflict(new { message = "Runtime does not match the job." });
+
+        var isSimulation = string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase);
+        var scanData = isSimulation
+            ? SimulationWorkflowDataStore.GetInventoryScans(jobId)
+                .Select(scan => scan.GetRawText())
+                .Concat(InventoryWorkflowRuntimeStore.GetScans(jobId))
+                .ToArray()
+            : await dataService.GetJobEventDataAsync(jobId, "INVENTORY_SCAN", cancellationToken);
+        var scans = new List<JsonElement>();
+        foreach (var value in scanData)
+        {
+            if (string.IsNullOrWhiteSpace(value)) continue;
+            try
+            {
+                using var document = JsonDocument.Parse(value);
+                var root = document.RootElement;
+                if (root.ValueKind != JsonValueKind.Object) continue;
+
+                if (TryGetProperty(root, "barcode", out _))
+                {
+                    scans.Add(root.Clone());
+                    continue;
+                }
+
+                if (!TryGetProperty(root, "scanned_items", out var items)
+                    || items.ValueKind != JsonValueKind.Array)
+                    continue;
+
+                var shelfCode = TryGetProperty(root, "shelf_code", out var shelfCodeValue)
+                    && shelfCodeValue.ValueKind == JsonValueKind.String
+                    ? shelfCodeValue.GetString()
+                    : null;
+                var scannedAt = TryGetProperty(root, "scanned_at", out var scannedAtValue)
+                    && scannedAtValue.ValueKind == JsonValueKind.String
+                    ? scannedAtValue.GetString()
+                    : DateTime.UtcNow.ToString("O");
+                var verificationByBarcode = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+                if (TryGetProperty(root, "verified_book_items", out var verifiedItems)
+                    && verifiedItems.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var verifiedItem in verifiedItems.EnumerateArray())
+                    {
+                        if (TryGetProperty(verifiedItem, "qr_code", out var verifiedBarcode)
+                            && verifiedBarcode.ValueKind == JsonValueKind.String
+                            && !string.IsNullOrWhiteSpace(verifiedBarcode.GetString()))
+                            verificationByBarcode[verifiedBarcode.GetString()!] = verifiedItem;
+                    }
+                }
+
+                foreach (var item in items.EnumerateArray())
+                {
+                    if (!TryGetProperty(item, "qr_code", out var barcodeValue)
+                        || barcodeValue.ValueKind != JsonValueKind.String
+                        || string.IsNullOrWhiteSpace(barcodeValue.GetString()))
+                        continue;
+
+                    var barcode = barcodeValue.GetString()!;
+                    verificationByBarcode.TryGetValue(barcode, out var verification);
+                    var hasVerification = verification.ValueKind == JsonValueKind.Object;
+                    var status = hasVerification && TryGetProperty(verification, "status", out var statusValue)
+                        && statusValue.ValueKind == JsonValueKind.String
+                        ? statusValue.GetString()
+                        : "SCANNED";
+                    var known = hasVerification && TryGetProperty(verification, "known", out var knownValue)
+                        && knownValue.ValueKind == JsonValueKind.True;
+                    var misplaced = hasVerification && TryGetProperty(verification, "misplaced", out var misplacedValue)
+                        && misplacedValue.ValueKind == JsonValueKind.True;
+                    var levelNumber = TryGetProperty(item, "level_number", out var levelValue)
+                        && levelValue.TryGetInt32(out var level)
+                        ? level
+                        : (int?)null;
+                    var shelfLevelId = hasVerification && TryGetProperty(verification, "actual_shelf_level_id", out var actualLevelValue)
+                        && actualLevelValue.ValueKind == JsonValueKind.String
+                        ? actualLevelValue.GetString()
+                        : null;
+
+                    scans.Add(JsonSerializer.SerializeToElement(new
+                    {
+                        barcode,
+                        qrCode = barcode,
+                        shelfCode,
+                        shelfLevelId,
+                        levelNumber,
+                        known,
+                        misplaced,
+                        expectedShelfCode = (string?)null,
+                        runtimeId,
+                        scannedAt,
+                        status
+                    }));
+                }
+            }
+            catch (JsonException)
+            {
+                // Ignore malformed historical scan events.
+            }
+        }
+
+        return Ok(scans);
+    }
+
+    private static bool TryGetProperty(JsonElement element, string propertyName, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+        }
+
+        value = default;
+        return false;
     }
 
     /// <summary>Creates a misplaced-book issue for a previously recorded inventory scan.</summary>
     [HttpPost("inventory/issues")]
     public async Task<IActionResult> AddInventoryIssue(InventoryIssueRequest request, CancellationToken cancellationToken)
     {
-        if (request.MissionId == Guid.Empty || string.IsNullOrWhiteSpace(request.Barcode)
+        if (request.JobId == Guid.Empty || string.IsNullOrWhiteSpace(request.Barcode)
             || string.IsNullOrWhiteSpace(request.RuntimeId) || request.ScannedAt == default)
-            return BadRequest(new { message = "missionId, runtimeId, barcode and scannedAt are required." });
+            return BadRequest(new { message = "jobId, runtimeId, barcode and scannedAt are required." });
         if (!string.Equals(request.IssueType?.Trim(), "MISPLACED", StringComparison.OrdinalIgnoreCase))
             return BadRequest(new { message = "Only issueType MISPLACED is supported." });
 
-        var task = await dataService.GetMissionAsync(request.MissionId, cancellationToken);
+        var task = await dataService.GetJobAsync(request.JobId, cancellationToken);
         var runtimeId = task?.RuntimeId ?? request.RuntimeId;
-        if (task is null && !IsActiveSimulation(request.MissionId, runtimeId))
-            return NotFound(new { message = "Mission task not found." });
+        if (task is null && !IsActiveSimulation(request.JobId, runtimeId))
+            return NotFound(new { message = "Job task not found." });
         if (task is not null && !MatchesRuntime(runtimeId, request.RuntimeId))
-            return Conflict(new { message = "Runtime does not match the mission." });
+            return Conflict(new { message = "Runtime does not match the job." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-            && !IsActiveSimulation(request.MissionId, runtimeId))
-            return Conflict(new { message = "No active in-memory simulation exists for this mission." });
+            && !IsActiveSimulation(request.JobId, runtimeId))
+            return Conflict(new { message = "No active in-memory simulation exists for this job." });
 
         var scanEvents = string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-            ? SimulationWorkflowDataStore.GetInventoryScans(request.MissionId).Select(scan => scan.GetRawText()).ToArray()
-            : await dataService.GetJobEventDataAsync(request.MissionId, "INVENTORY_SCAN", cancellationToken);
+            ? SimulationWorkflowDataStore.GetInventoryScans(request.JobId).Select(scan => scan.GetRawText()).ToArray()
+            : await dataService.GetJobEventDataAsync(request.JobId, "INVENTORY_SCAN", cancellationToken);
         JsonElement matchingScan = default;
         foreach (var scanData in scanEvents)
         {
@@ -276,8 +415,8 @@ public sealed class WorkflowDataController(
             return Conflict(new { message = "The referenced inventory scan is not marked as misplaced." });
 
         var existingIssues = string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-            ? SimulationWorkflowDataStore.GetInventoryIssues(request.MissionId).Select(issue => issue.GetRawText()).ToArray()
-            : await dataService.GetJobEventDataAsync(request.MissionId, "INVENTORY_ISSUE", cancellationToken);
+            ? SimulationWorkflowDataStore.GetInventoryIssues(request.JobId).Select(issue => issue.GetRawText()).ToArray()
+            : await dataService.GetJobEventDataAsync(request.JobId, "INVENTORY_ISSUE", cancellationToken);
         foreach (var issueData in existingIssues)
         {
             if (string.IsNullOrWhiteSpace(issueData)) continue;
@@ -302,7 +441,7 @@ public sealed class WorkflowDataController(
         {
             issueId = Guid.NewGuid(),
             issueType = "MISPLACED",
-            missionId = request.MissionId,
+            jobId = request.JobId,
             runtimeId,
             barcode = request.Barcode.Trim(),
             actualShelfCode = matchingScan.TryGetProperty("shelfCode", out var shelfCode) ? shelfCode.GetString() : null,
@@ -311,9 +450,9 @@ public sealed class WorkflowDataController(
             createdAtUtc = DateTime.UtcNow
         };
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
-            SimulationWorkflowDataStore.AddInventoryIssue(request.MissionId, issueRecord);
+            SimulationWorkflowDataStore.AddInventoryIssue(request.JobId, issueRecord);
         else
-            await dataService.AddJobEventAsync(request.MissionId, "INVENTORY_ISSUE", JsonSerializer.Serialize(issueRecord), cancellationToken);
+            await dataService.AddJobEventAsync(request.JobId, "INVENTORY_ISSUE", JsonSerializer.Serialize(issueRecord), cancellationToken);
 
         return StatusCode(StatusCodes.Status201Created, issueRecord);
     }
@@ -322,19 +461,19 @@ public sealed class WorkflowDataController(
     [HttpPost("inventory/reports")]
     public async Task<IActionResult> FinalizeInventory(InventoryFinalizeRequest request, CancellationToken cancellationToken)
     {
-        var task = await dataService.GetMissionAsync(request.MissionId, cancellationToken);
+        var task = await dataService.GetJobAsync(request.JobId, cancellationToken);
         var runtimeId = task?.RuntimeId ?? request.RuntimeId;
-        if (task is null && !IsActiveSimulation(request.MissionId, runtimeId))
-            return NotFound(new { message = "Mission task not found." });
+        if (task is null && !IsActiveSimulation(request.JobId, runtimeId))
+            return NotFound(new { message = "Job task not found." });
         if (task is not null && !MatchesRuntime(runtimeId, request.RuntimeId))
-            return Conflict(new { message = "Runtime does not match the mission." });
+            return Conflict(new { message = "Runtime does not match the job." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-            && !IsActiveSimulation(request.MissionId, runtimeId))
-            return Conflict(new { message = "No active in-memory simulation exists for this mission." });
+            && !IsActiveSimulation(request.JobId, runtimeId))
+            return Conflict(new { message = "No active in-memory simulation exists for this job." });
 
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
         {
-            var scans = SimulationWorkflowDataStore.GetInventoryScans(request.MissionId);
+            var scans = SimulationWorkflowDataStore.GetInventoryScans(request.JobId);
             var barcodes = scans
                 .Where(scan => scan.TryGetProperty("barcode", out var value) && value.ValueKind == JsonValueKind.String)
                 .Select(scan => scan.GetProperty("barcode").GetString()!)
@@ -352,7 +491,7 @@ public sealed class WorkflowDataController(
             });
         }
 
-        var events = await dataService.GetJobEventDataAsync(request.MissionId, "INVENTORY_SCAN", cancellationToken);
+        var events = await dataService.GetJobEventDataAsync(request.JobId, "INVENTORY_SCAN", cancellationToken);
         var scannedBarcodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var scannedShelfLevels = new HashSet<Guid>();
         var misplacedCount = 0;
@@ -381,14 +520,12 @@ public sealed class WorkflowDataController(
         var storedReportType = reportType;
         var eventData = JsonSerializer.Serialize(new
         {
-            reportType = storedReportType,
             runtimeId,
             totalBooksScanned = scannedBarcodes.Count,
             totalMisplaced = misplacedCount,
             totalMissing = missingCount
         });
-        var reportId = await dataService.SaveInventoryReportAsync(request.MissionId, storedReportType,
-            $"{reportType} mission {request.MissionId}: {scannedBarcodes.Count} scanned, {misplacedCount} misplaced, {missingCount} missing.",
+        var reportId = await dataService.SaveInventoryReportAsync(request.JobId,
             request.ScopeType ?? "SHELF", scannedBarcodes.Count, Math.Max(0, scannedBarcodes.Count - misplacedCount),
             misplacedCount, missingCount, eventData, cancellationToken);
         return Ok(new { reportId, reportType = storedReportType, runtimeId,
@@ -396,28 +533,79 @@ public sealed class WorkflowDataController(
     }
 
     /// <summary>Ghi nhận một quan sát trong nhiệm vụ tuần tra.</summary>
+    [HttpPost("patrol/evidence")]
+    [RequestSizeLimit(8 * 1024 * 1024)]
+    public async Task<IActionResult> RecordPatrolEvidence(PatrolEvidenceRequest request, CancellationToken cancellationToken)
+    {
+        if (request.JobId == Guid.Empty || request.ObservationId == Guid.Empty
+            || string.IsNullOrWhiteSpace(request.ExecutionId) || string.IsNullOrWhiteSpace(request.PathId)
+            || !string.Equals(request.RuntimeId, "real", StringComparison.OrdinalIgnoreCase)
+            || !double.IsFinite(request.Confidence) || request.Confidence < 0 || request.Confidence > 1
+            || !double.IsFinite(request.TiltDegrees) || request.TiltDegrees < 15 || request.TiltDegrees > 90
+            || request.Waypoint.ValueKind == JsonValueKind.Undefined
+            || string.IsNullOrWhiteSpace(request.ImageBase64) || request.ImageBase64.Length > 6_000_000)
+            return BadRequest(new { message = "Invalid patrol evidence." });
+        try
+        {
+            var image = Convert.FromBase64String(request.ImageBase64);
+            if (image.Length < 3 || image[0] != 0xff || image[1] != 0xd8 || image[2] != 0xff)
+                return BadRequest(new { message = "Evidence must be a JPEG image." });
+        }
+        catch (FormatException) { return BadRequest(new { message = "Invalid evidence image." }); }
+        var job = await dataService.GetJobAsync(request.JobId, cancellationToken);
+        if (job is null) return NotFound(new { message = "Job task not found." });
+        if (!MatchesRuntime(job.RuntimeId, request.RuntimeId))
+            return Conflict(new { message = "Runtime does not match the job." });
+        await PatrolEvidenceLock.WaitAsync(cancellationToken);
+        try
+        {
+            var existing = await dataService.GetJobEventDataAsync(request.JobId, "PATROL_OBSERVATION", cancellationToken);
+            foreach (var item in existing.Where(item => !string.IsNullOrWhiteSpace(item)))
+            {
+                try
+                {
+                    using var document = JsonDocument.Parse(item!);
+                    if (document.RootElement.ValueKind == JsonValueKind.Object
+                        && document.RootElement.TryGetProperty("observation_id", out var id)
+                        && id.ValueKind == JsonValueKind.String && id.GetString() == request.ObservationId.ToString())
+                        return Ok(new { observationId = request.ObservationId });
+                }
+                catch (JsonException) { /* Ignore legacy non-JSON event data. */ }
+            }
+            var data = JsonSerializer.Serialize(new {
+                observation_id = request.ObservationId, execution_id = request.ExecutionId,
+                path_id = request.PathId, category = "LEANING_BOOK_PRESENT", severity = "MEDIUM",
+                confidence = request.Confidence, tilt_degrees = request.TiltDegrees,
+                observed_at = request.ObservedAtUtc, waypoint = request.Waypoint, image_base64 = request.ImageBase64
+            });
+            await dataService.AddJobEventAsync(request.JobId, "PATROL_OBSERVATION", data, cancellationToken);
+            return Ok(new { observationId = request.ObservationId });
+        }
+        finally { PatrolEvidenceLock.Release(); }
+    }
+
     [HttpPost("patrol/observations")]
     public async Task<IActionResult> RecordPatrolObservation(PatrolObservationRequest request, CancellationToken cancellationToken)
     {
-        var task = await dataService.GetMissionAsync(request.MissionId, cancellationToken);
+        var task = await dataService.GetJobAsync(request.JobId, cancellationToken);
         var runtimeId = task?.RuntimeId ?? request.RuntimeId;
-        if (task is null && !IsActiveSimulation(request.MissionId, runtimeId))
-            return NotFound(new { message = "Mission task not found." });
+        if (task is null && !IsActiveSimulation(request.JobId, runtimeId))
+            return NotFound(new { message = "Job task not found." });
         if (task is not null && !MatchesRuntime(runtimeId, request.RuntimeId))
-            return Conflict(new { message = "Runtime does not match the mission." });
+            return Conflict(new { message = "Runtime does not match the job." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-            && !IsActiveSimulation(request.MissionId, runtimeId))
-            return Conflict(new { message = "No active in-memory simulation exists for this mission." });
+            && !IsActiveSimulation(request.JobId, runtimeId))
+            return Conflict(new { message = "No active in-memory simulation exists for this job." });
         if (request.Observation.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
             return BadRequest(new { message = "observation is required." });
         var category = ReadObservationCategory(request.Observation);
         var data = JsonSerializer.Serialize(new { category, observation = request.Observation, runtimeId, observedAt = DateTime.UtcNow });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
         {
-            SimulationWorkflowDataStore.AddPatrolCategory(request.MissionId, category);
+            SimulationWorkflowDataStore.AddPatrolCategory(request.JobId, category);
             return Ok(new { category, runtimeId });
         }
-        await dataService.AddJobEventAsync(request.MissionId, "PATROL_OBSERVATION", data, cancellationToken);
+        await dataService.AddJobEventAsync(request.JobId, "PATROL_OBSERVATION", data, cancellationToken);
         return Ok(new { category, runtimeId });
     }
 
@@ -425,18 +613,18 @@ public sealed class WorkflowDataController(
     [HttpPost("patrol/reports")]
     public async Task<IActionResult> FinalizePatrol(PatrolFinalizeRequest request, CancellationToken cancellationToken)
     {
-        var task = await dataService.GetMissionAsync(request.MissionId, cancellationToken);
+        var task = await dataService.GetJobAsync(request.JobId, cancellationToken);
         var runtimeId = task?.RuntimeId ?? request.RuntimeId;
-        if (task is null && !IsActiveSimulation(request.MissionId, runtimeId))
-            return NotFound(new { message = "Mission task not found." });
+        if (task is null && !IsActiveSimulation(request.JobId, runtimeId))
+            return NotFound(new { message = "Job task not found." });
         if (task is not null && !MatchesRuntime(runtimeId, request.RuntimeId))
-            return Conflict(new { message = "Runtime does not match the mission." });
+            return Conflict(new { message = "Runtime does not match the job." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-            && !IsActiveSimulation(request.MissionId, runtimeId))
-            return Conflict(new { message = "No active in-memory simulation exists for this mission." });
+            && !IsActiveSimulation(request.JobId, runtimeId))
+            return Conflict(new { message = "No active in-memory simulation exists for this job." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
         {
-            var simulationCategories = SimulationWorkflowDataStore.GetPatrolCategories(request.MissionId);
+            var simulationCategories = SimulationWorkflowDataStore.GetPatrolCategories(request.JobId);
             var simulationFallen = simulationCategories.Count(item => item == "FALLEN_BOOK");
             var simulationObstacles = simulationCategories.Count(item => item == "OBSTACLE");
             var simulationWarnings = simulationCategories.Count(item => item is "WARNING" or "OTHER_WARNING");
@@ -452,12 +640,12 @@ public sealed class WorkflowDataController(
                 otherWarningCount = simulationWarnings
             };
             await patrolNotifications.PublishPatrolCompletedAsync(new PatrolCompletedNotification(
-                request.MissionId, simulationReportId, simulationReport.reportType, runtimeId,
+                request.JobId, simulationReportId, simulationReport.reportType, runtimeId,
                 simulationReport.observationCount, simulationFallen, simulationObstacles, simulationWarnings,
                 DateTime.UtcNow), cancellationToken);
             return Ok(simulationReport);
         }
-        var observationData = await dataService.GetJobEventDataAsync(request.MissionId, "PATROL_OBSERVATION", cancellationToken);
+        var observationData = await dataService.GetJobEventDataAsync(request.JobId, "PATROL_OBSERVATION", cancellationToken);
         var categories = observationData.Select(ReadStoredObservationCategory).Where(item => item is not null).ToList();
         var fallen = categories.Count(item => item == "FALLEN_BOOK");
         var obstacles = categories.Count(item => item == "OBSTACLE");
@@ -468,19 +656,16 @@ public sealed class WorkflowDataController(
             : 0;
         var eventData = JsonSerializer.Serialize(new
         {
-            reportType = storedType,
             runtimeId,
             observationCount = categories.Count,
             fallenBookCount = fallen,
             unknownObstacleCount = obstacles,
             otherWarningCount = warnings
         });
-        var reportId = await dataService.SavePatrolReportAsync(request.MissionId, storedType,
-            $"Patrol mission {request.MissionId}: {categories.Count} observations, {fallen} fallen books, {obstacles} obstacles, {warnings} warnings.",
-            duration, categories.Count, warnings + fallen + obstacles, fallen, obstacles, warnings, "COMPLETED",
-            eventData, cancellationToken);
+        var reportId = await dataService.SavePatrolReportAsync(request.JobId, duration, categories.Count,
+            warnings, eventData, cancellationToken);
         await patrolNotifications.PublishPatrolCompletedAsync(new PatrolCompletedNotification(
-            request.MissionId, reportId, storedType, runtimeId, categories.Count, fallen, obstacles, warnings,
+            request.JobId, reportId, storedType, runtimeId, categories.Count, fallen, obstacles, warnings,
             DateTime.UtcNow), cancellationToken);
         return Ok(new { reportId, reportType = storedType, runtimeId,
             observationCount = categories.Count, fallenBookCount = fallen, obstacleCount = obstacles, warningCount = warnings });
@@ -489,9 +674,9 @@ public sealed class WorkflowDataController(
     private static bool MatchesRuntime(string assignedRuntime, string requestedRuntime) =>
         string.Equals(assignedRuntime, requestedRuntime, StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsActiveSimulation(Guid missionId, string runtimeId) =>
+    private static bool IsActiveSimulation(Guid jobId, string runtimeId) =>
         string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase)
-        && SimulationExecutionStore.TryGetExecution(missionId, out _, out var assignedRuntime)
+        && SimulationExecutionStore.TryGetExecution(jobId, out _, out var assignedRuntime)
         && string.Equals(assignedRuntime, "sim", StringComparison.OrdinalIgnoreCase);
 
     private static string ReadObservationCategory(JsonElement observation)
@@ -523,3 +708,7 @@ public sealed class WorkflowDataController(
         catch (JsonException) { return null; }
     }
 }
+
+public sealed record PatrolEvidenceRequest(Guid JobId, string RuntimeId, string ExecutionId, string PathId,
+    Guid ObservationId, double Confidence, double TiltDegrees, DateTimeOffset ObservedAtUtc,
+    JsonElement Waypoint, string ImageBase64);

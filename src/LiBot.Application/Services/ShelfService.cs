@@ -1,6 +1,7 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models.Shelf;
 using LiBot.Application.Models.ShelfLevel;
+using LiBot.Domain.Enums;
 
 namespace LiBot.Application.Services;
 
@@ -60,14 +61,18 @@ public class ShelfService(IShelfRepository repository) : IShelfService
 
     private async Task ValidateShelfAsync(ShelfWriteRequest request, CancellationToken cancellationToken)
     {
-        if (request.AisleId == Guid.Empty || string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.Name))
-            throw new ArgumentException("aisleId, code and name are required.");
+        if (request.AisleId == Guid.Empty || request.StartEndpointId == Guid.Empty
+            || request.EndEndpointId == Guid.Empty || string.IsNullOrWhiteSpace(request.Name)
+            || !Enum.TryParse<ShelfStatus>(request.Status, true, out _))
+            throw new ArgumentException("aisleId, startEndpointId, endEndpointId, name and status are required.");
         if (!await repository.AisleExistsAsync(request.AisleId, cancellationToken)) throw new KeyNotFoundException("Aisle was not found.");
     }
 
     private async Task ValidateLevelAsync(ShelfLevelWriteRequest request, CancellationToken cancellationToken)
     {
-        if (request.ShelfId == Guid.Empty || request.LevelNumber <= 0) throw new ArgumentException("shelfId and a positive levelNumber are required.");
+        if (request.ShelfId == Guid.Empty || request.LevelNumber <= 0
+            || !Enum.TryParse<ShelfStatus>(request.Status, true, out _))
+            throw new ArgumentException("shelfId, a positive levelNumber and a valid status are required.");
         if (!await repository.ShelfExistsAsync(request.ShelfId, cancellationToken)) throw new KeyNotFoundException("Shelf was not found.");
     }
 }

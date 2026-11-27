@@ -1,5 +1,6 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models.Aisle;
+using LiBot.Domain.Enums;
 
 namespace LiBot.Application.Services;
 
@@ -14,7 +15,6 @@ public class AisleService(IAisleRepository repository) : IAisleService
             pageSize,
             query.Search,
             query.FloorId,
-            query.EndpointId,
             query.SortBy,
             query.SortOrder,
             query.Expand);
@@ -43,11 +43,10 @@ public class AisleService(IAisleRepository repository) : IAisleService
 
     private async Task ValidateReferencesAsync(AisleWriteRequest request, CancellationToken cancellationToken)
     {
-        if (request.FloorId == Guid.Empty || string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.Name))
-            throw new ArgumentException("floorId, code and name are required.");
+        if (request.FloorId == Guid.Empty || string.IsNullOrWhiteSpace(request.Name)
+            || !Enum.TryParse<AisleStatus>(request.Status, true, out _))
+            throw new ArgumentException("floorId, name and status are required.");
         if (!await repository.FloorExistsAsync(request.FloorId, cancellationToken))
             throw new KeyNotFoundException("Floor was not found.");
-        if (request.EndpointId is Guid endpointId && !await repository.EndpointExistsAsync(endpointId, cancellationToken))
-            throw new KeyNotFoundException("Endpoint was not found.");
     }
 }

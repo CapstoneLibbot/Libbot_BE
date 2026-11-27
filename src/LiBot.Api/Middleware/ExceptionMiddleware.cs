@@ -39,11 +39,7 @@ public class ExceptionMiddleware
             context.Response.Clear();
             context.Response.StatusCode = ex.StatusCode;
             context.Response.ContentType = "application/json";
-            await context.Response.WriteAsJsonAsync(new
-            {
-                error = "The request was incomplete or invalid.",
-                path = context.Request.Path
-            });
+            await WriteErrorAsync(context, ex.StatusCode, ex.Message);
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
@@ -68,14 +64,22 @@ public class ExceptionMiddleware
             if (context.Response.HasStarted) return;
 
             context.Response.Clear();
-            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-            context.Response.ContentType = "application/json";
-
-            await context.Response.WriteAsJsonAsync(new
-            {
-                error = "An unexpected error occurred.",
-                path = context.Request.Path
-            });
+            await WriteErrorAsync(context, ApiErrorFormatter.GetStatusCode(ex), ex.Message);
         }
+
+        if (!context.Response.HasStarted && context.Response.ContentLength is null
+            && context.Response.StatusCode >= 400)
+        {
+            await WriteErrorAsync(context, context.Response.StatusCode, null);
+        }
+    }
+
+    private static Task WriteErrorAsync(HttpContext context, int statusCode, string? detail)
+    {
+        context.Response.Clear();
+        context.Response.StatusCode = statusCode;
+        context.Response.ContentType = "application/json; charset=utf-8";
+        return context.Response.WriteAsJsonAsync(
+            ApiErrorFormatter.Normalize(statusCode, new { message = detail }, context.Request.Path));
     }
 }

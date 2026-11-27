@@ -4,12 +4,15 @@ namespace LiBot.Application.Workflow.FacilityGuidance;
 
 public sealed record FacilityGuidanceLoadedWorkflow(
     Guid Id,
+    Guid PrimaryTaskId,
+    int PrimaryTaskSequence,
+    string PrimaryTaskName,
     string Type,
     string Name,
     IReadOnlyList<IReadOnlyDictionary<string, object?>> Steps);
 
 public sealed record FacilityGuidanceStartResult(
-    Guid MissionId,
+    Guid JobId,
     FacilityGuidanceLoadedWorkflow? Workflow,
     JsonElement Robot,
     bool IsAccepted);
@@ -21,4 +24,4 @@ public sealed class FacilityGuidanceRobotUnavailableException(string message, Ex
     : InvalidOperationException(message, innerException);
 
 public sealed class FacilityGuidanceExecutionNotFoundException(string executionId)
-    : InvalidOperationException($"Facility guidance execution '{executionId}' was not found or has expired.");
+    : Exception($"Facility guidance execution '{executionId}' was not found or has expired.");

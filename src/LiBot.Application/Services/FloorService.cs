@@ -1,5 +1,6 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models.Floor;
+using LiBot.Domain.Enums;
 
 namespace LiBot.Application.Services;
 
@@ -33,6 +34,8 @@ public class FloorService(IFloorRepository repository) : IFloorService
 
     private static void Validate(FloorWriteRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Name)) throw new ArgumentException("name is required.");
+        if (string.IsNullOrWhiteSpace(request.Name)
+            || !Enum.TryParse<FloorStatus>(request.Status, true, out _))
+            throw new ArgumentException("name and status are required.");
     }
 }

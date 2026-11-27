@@ -1,42 +1,45 @@
 using System.ComponentModel;
+using System.Text.Json.Serialization;
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
+using LiBot.Application.Services.Robot;
 using LiBot.Application.Workflow.BookGuidance;
+using LiBot.Application.Workflow.FacilityGuidance;
+using LiBot.Domain.Enums;
 using ModelContextProtocol.Server;
+using Microsoft.Extensions.Options;
 
 namespace LiBot.Api.VoiceTools;
 
-/// <summary>Allow-listed, read-only tools available to the Xiaozhi LLM.</summary>
+/// <summary>Allow-listed voice tools available to the Xiaozhi LLM.</summary>
 [McpServerToolType]
 public sealed class LiBotVoiceTools(
     IBookGuidanceService bookGuidance,
-    IVoiceAreaSearchService areaSearch)
+    IFacilityGuidanceService facilityGuidance,
+    IJobDataService jobData,
+    IRobotRuntimeService runtimes,
+    IConfiguration configuration,
+    IOptions<VoiceToolsOptions> options)
 {
     private const int ResultLimit = 3;
     private static readonly TimeSpan ToolTimeout = TimeSpan.FromSeconds(5);
 
     [McpServerTool(Name = "search_books", UseStructuredContent = true)]
-    [Description("Tìm đầu sách theo tên, tác giả, ISBN hoặc danh mục. Chỉ dùng khi người dùng hỏi về sách trong thư viện. Kết quả đã giới hạn tối đa ba đầu sách.")]
+    [Description("Tìm đầu sách theo tên sách. Không dùng để tìm theo tác giả hoặc danh mục. Kết quả đã giới hạn tối đa ba đầu sách.")]
     public async Task<VoiceBookSearchResult> SearchBooksAsync(
-        [Description("Tên sách, tên tác giả hoặc ISBN cần tìm.")] string query,
-        [Description("Danh mục sách nếu người dùng nêu rõ; bỏ trống nếu không có.")] string? category = null)
+        [Description("Tên sách cần tìm.")] string? query = null)
     {
         if (!TryNormalizeQuery(query, out var normalizedQuery))
-            return VoiceBookSearchResult.InvalidInput();
-
-        if (!string.IsNullOrWhiteSpace(category) && category.Trim().Length > 100)
             return VoiceBookSearchResult.InvalidInput();
 
         try
         {
             using var timeout = new CancellationTokenSource(ToolTimeout);
-            var response = await bookGuidance.SearchAsync(
+            var response = await bookGuidance.SearchTitlesAsync(
                 normalizedQuery,
-                string.IsNullOrWhiteSpace(category) ? null : category.Trim(),
-                "FUZZY",
                 page: 1,
                 pageSize: ResultLimit,
-                timeout.Token);
+                cancellationToken: timeout.Token);
 
             return new VoiceBookSearchResult(
                 ErrorCode: string.Empty,
@@ -45,9 +48,7 @@ public sealed class LiBotVoiceTools(
                     book.BookId,
                     book.Title,
                     book.Author,
-                    book.Isbn,
-                    book.Classification ?? string.Empty,
-                    book.AvailableCopies)).ToList());
+                    book.AvailableCopies > 0)).ToList());
         }
         catch (OperationCanceledException)
         {
@@ -55,63 +56,231 @@ public sealed class LiBotVoiceTools(
         }
     }
 
-    [McpServerTool(Name = "search_areas", UseStructuredContent = true)]
-    [Description("Tìm khu vực trong thư viện theo tên hoặc mô tả. Chỉ dùng khi người dùng hỏi vị trí một khu vực. Kết quả đã giới hạn tối đa ba khu vực.")]
-    public async Task<VoiceAreaSearchResult> SearchAreasAsync(
-        [Description("Tên hoặc mô tả khu vực cần tìm.")] string query)
+    [McpServerTool(Name = "search_locations", UseStructuredContent = true)]
+    [Description("Tìm địa điểm trong thư viện theo đúng tên Endpoint, ví dụ Phòng họp hoặc Bàn thủ thư. Kết quả đã giới hạn tối đa ba Endpoint.")]
+    public async Task<VoiceLocationSearchResult> SearchLocationsAsync(
+        [Description("Tên địa điểm/Endpoint cần tìm.")] string? query = null)
     {
         if (!TryNormalizeQuery(query, out var normalizedQuery))
-            return VoiceAreaSearchResult.InvalidInput();
+            return VoiceLocationSearchResult.InvalidInput();
 
         try
         {
             using var timeout = new CancellationTokenSource(ToolTimeout);
-            var response = await areaSearch.SearchAsync(normalizedQuery, ResultLimit, timeout.Token);
-            return new VoiceAreaSearchResult(
-                ErrorCode: string.Empty,
-                TotalMatches: response.TotalMatches,
-                Areas: response.Areas.Select(area => new VoiceAreaSearchItem(
-                    area.Name,
-                    area.FloorName,
-                    area.FloorNumber)).ToList());
+            Guid? activeMapId = null;
+            var configuredRuntimeId = options?.Value?.GuidanceRuntimeId?.Trim();
+            var targetRuntimeId = string.IsNullOrWhiteSpace(configuredRuntimeId) ? "real" : configuredRuntimeId;
+            if (Guid.TryParse(runtimes?.Get(targetRuntimeId)?.Telemetry?.ActiveMapId, out var parsedMapId))
+            {
+                activeMapId = parsedMapId;
+            }
+            var response = await facilityGuidance.SearchAsync(
+                normalizedQuery, "FUZZY", page: 1, pageSize: ResultLimit, cancellationToken: timeout.Token, mapId: activeMapId);
+            return new VoiceLocationSearchResult(
+                string.Empty,
+                response.TotalCount,
+                response.Facilities.Select(location => new VoiceLocationSearchItem(
+                    location.FacilityId, location.Name, true)).ToList());
         }
         catch (OperationCanceledException)
         {
-            return VoiceAreaSearchResult.Timeout();
+            return VoiceLocationSearchResult.Timeout();
         }
     }
 
-    private static bool TryNormalizeQuery(string? query, out string normalized)
+    [McpServerTool(Name = "start_book_guidance", UseStructuredContent = true)]
+    [Description("Bắt đầu dẫn người dùng đến một đầu sách đã được tìm thấy. Chỉ gọi sau khi người dùng đã chọn sách và đồng ý dẫn đường.")]
+    public async Task<VoiceBookGuidanceResult> StartBookGuidanceAsync(
+        [Description("ID của đầu sách mà người dùng đã chọn từ search_books.")] Guid bookId,
+        [Description("Câu tìm kiếm ban đầu, chỉ dùng để ghi nhận job.")] string? query = null)
     {
-        normalized = query?.Trim() ?? string.Empty;
-        return normalized.Length is > 0 and <= 100;
+        if (!TryGetGuidanceConfiguration(out var robotId, out var runtimeId))
+            return VoiceBookGuidanceResult.Unavailable();
+
+        try
+        {
+            if (!await jobData.RobotExistsAsync(robotId, CancellationToken.None))
+                return VoiceBookGuidanceResult.Unavailable();
+
+            var book = await bookGuidance.GetBookAsync(bookId, CancellationToken.None);
+            if (book is null) return VoiceBookGuidanceResult.NotFound();
+
+            var availableCopies = book.BookItems
+                .Where(item =>
+                    string.Equals(item.Status, nameof(BookItemStatus.Available), StringComparison.OrdinalIgnoreCase) &&
+                    item.Location?.Endpoint is { } endpoint &&
+                    double.IsFinite(endpoint.X) && double.IsFinite(endpoint.Y) && double.IsFinite(endpoint.Theta))
+                .ToList();
+            if (availableCopies.Count == 0) return VoiceBookGuidanceResult.NotAvailable();
+
+            if (runtimes.ValidateVoiceGuidanceStart(runtimeId) is not null)
+                return VoiceBookGuidanceResult.Unavailable();
+            var runtime = runtimes.Get(runtimeId);
+            if (runtime is null || !Guid.TryParse(runtime.Telemetry?.ActiveMapId, out var activeMapId))
+                return VoiceBookGuidanceResult.Unavailable();
+
+            var selectedCopy = availableCopies.FirstOrDefault(item =>
+                item.Location!.Endpoint!.MapId == activeMapId);
+            if (selectedCopy is null)
+                return VoiceBookGuidanceResult.Unavailable();
+            var endpointId = selectedCopy.Location!.Endpoint!.EndpointId;
+
+            var backendBaseUrl = configuration["LiBot:BackendBaseUrl"]?.TrimEnd('/') ?? string.Empty;
+            using var timeout = new CancellationTokenSource(ToolTimeout);
+            var result = await bookGuidance.StartAsync(new StartBookGuidanceRequest(
+                string.IsNullOrWhiteSpace(query) ? book.Title : query.Trim(),
+                robotId,
+                BackendBaseUrl: backendBaseUrl,
+                RuntimeId: runtimeId,
+                BookId: book.BookId,
+                BookItemId: selectedCopy.Id,
+                EndpointId: endpointId), backendBaseUrl, timeout.Token);
+
+            return result.IsAccepted
+                ? VoiceBookGuidanceResult.Started(book.Title, result.JobId, runtimeId, endpointId)
+                : VoiceBookGuidanceResult.Failed(book.Title, result.JobId, runtimeId, endpointId);
+        }
+        catch (OperationCanceledException)
+        {
+            return VoiceBookGuidanceResult.Unavailable();
+        }
+        catch (BookGuidanceRobotUnavailableException)
+        {
+            return VoiceBookGuidanceResult.Unavailable();
+        }
+        catch (BookGuidanceWorkflowConfigurationException)
+        {
+            return VoiceBookGuidanceResult.Unavailable();
+        }
     }
+
+    [McpServerTool(Name = "start_location_guidance", UseStructuredContent = true)]
+    [Description("Bắt đầu dẫn người dùng đến Endpoint đã tìm thấy. Chỉ gọi sau khi người dùng đã chọn địa điểm và đồng ý dẫn đường.")]
+    public async Task<VoiceLocationGuidanceResult> StartLocationGuidanceAsync(
+        [Description("ID Endpoint đã chọn từ search_locations.")] Guid endpointId,
+        [Description("Câu tìm kiếm ban đầu, chỉ dùng để ghi nhận job.")] string? query = null)
+    {
+        if (!TryGetGuidanceConfiguration(out var robotId, out var runtimeId))
+            return VoiceLocationGuidanceResult.Unavailable();
+
+        try
+        {
+            if (!await jobData.RobotExistsAsync(robotId, CancellationToken.None))
+                return VoiceLocationGuidanceResult.Unavailable();
+
+            var location = await facilityGuidance.GetFacilityAsync(endpointId, CancellationToken.None);
+            if (location is null) return VoiceLocationGuidanceResult.NotFound();
+            var endpoint = location.Location.Endpoint;
+            if (!double.IsFinite(endpoint.X) || !double.IsFinite(endpoint.Y) || !double.IsFinite(endpoint.Theta)
+                || runtimes.ValidateVoiceGuidanceStart(runtimeId) is not null)
+                return VoiceLocationGuidanceResult.Unavailable();
+            var runtime = runtimes.Get(runtimeId);
+            if (runtime is null
+                || !Guid.TryParse(runtime.Telemetry?.ActiveMapId, out var activeMapId)
+                || activeMapId != location.Location.MapId)
+                return VoiceLocationGuidanceResult.Unavailable();
+
+            var backendBaseUrl = configuration["LiBot:BackendBaseUrl"]?.TrimEnd('/') ?? string.Empty;
+            using var timeout = new CancellationTokenSource(ToolTimeout);
+            var result = await facilityGuidance.StartAsync(new StartFacilityGuidanceRequest(
+                string.IsNullOrWhiteSpace(query) ? location.Name : query.Trim(),
+                robotId,
+                BackendBaseUrl: backendBaseUrl,
+                RuntimeId: runtimeId,
+                FacilityId: endpointId), backendBaseUrl, timeout.Token);
+            return result.IsAccepted
+                ? VoiceLocationGuidanceResult.Started(location.Name, result.JobId, runtimeId, endpointId)
+                : VoiceLocationGuidanceResult.Failed(location.Name, result.JobId, runtimeId, endpointId);
+        }
+        catch (OperationCanceledException)
+        {
+            return VoiceLocationGuidanceResult.Unavailable();
+        }
+        catch (FacilityGuidanceRobotUnavailableException)
+        {
+            return VoiceLocationGuidanceResult.Unavailable();
+        }
+        catch (FacilityGuidanceWorkflowConfigurationException)
+        {
+            return VoiceLocationGuidanceResult.Unavailable();
+        }
+    }
+
+    private bool TryGetGuidanceConfiguration(out Guid robotId, out string runtimeId)
+    {
+        robotId = Guid.Empty;
+        runtimeId = options.Value.GuidanceRuntimeId?.Trim() ?? string.Empty;
+        return Guid.TryParse(options.Value.GuidanceRobotId, out robotId)
+            && robotId != Guid.Empty
+            && !string.IsNullOrWhiteSpace(runtimeId);
+    }
+
+    private static bool TryNormalizeQuery(string? query, out string normalizedQuery)
+    {
+        normalizedQuery = string.IsNullOrWhiteSpace(query) ? string.Empty : query.Trim();
+        return normalizedQuery.Length is > 0 and <= 100;
+    }
+
 }
 
 public sealed record VoiceBookSearchResult(
-    string ErrorCode,
-    int TotalMatches,
-    IReadOnlyList<VoiceBookSearchItem> Books)
+    [property: JsonPropertyName("errorCode")] string ErrorCode,
+    [property: JsonPropertyName("totalMatches")] int TotalMatches,
+    [property: JsonPropertyName("books")] IReadOnlyList<VoiceBookSearchItem> Books)
 {
     public static VoiceBookSearchResult InvalidInput() => new("INVALID_INPUT", 0, []);
     public static VoiceBookSearchResult Timeout() => new("TOOL_TIMEOUT", 0, []);
 }
 
 public sealed record VoiceBookSearchItem(
-    Guid BookId,
-    string Title,
-    string Author,
-    string Isbn,
-    string Classification,
-    int AvailableCopies);
+    [property: JsonPropertyName("bookId")] Guid BookId,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("author")] string Author,
+    [property: JsonPropertyName("canGuide")] bool CanGuide);
 
-public sealed record VoiceAreaSearchResult(
-    string ErrorCode,
-    int TotalMatches,
-    IReadOnlyList<VoiceAreaSearchItem> Areas)
+public sealed record VoiceLocationSearchResult(
+    [property: JsonPropertyName("errorCode")] string ErrorCode,
+    [property: JsonPropertyName("totalMatches")] int TotalMatches,
+    [property: JsonPropertyName("locations")] IReadOnlyList<VoiceLocationSearchItem> Locations)
 {
-    public static VoiceAreaSearchResult InvalidInput() => new("INVALID_INPUT", 0, []);
-    public static VoiceAreaSearchResult Timeout() => new("TOOL_TIMEOUT", 0, []);
+    public static VoiceLocationSearchResult InvalidInput() => new("INVALID_INPUT", 0, []);
+    public static VoiceLocationSearchResult Timeout() => new("TOOL_TIMEOUT", 0, []);
 }
 
-public sealed record VoiceAreaSearchItem(string Name, string FloorName, int FloorNumber);
+public sealed record VoiceLocationSearchItem(
+    [property: JsonPropertyName("endpointId")] Guid EndpointId,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("canGuide")] bool CanGuide);
+
+public sealed record VoiceBookGuidanceResult(
+    [property: JsonPropertyName("errorCode")] string ErrorCode,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("jobId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] Guid? JobId = null,
+    [property: JsonPropertyName("executionId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? ExecutionId = null,
+    [property: JsonPropertyName("runtimeId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? RuntimeId = null,
+    [property: JsonPropertyName("destinationId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] Guid? DestinationId = null)
+{
+    public static VoiceBookGuidanceResult Started(string title, Guid jobId, string runtimeId, Guid destinationId) =>
+        new(string.Empty, title, jobId, jobId.ToString(), runtimeId, destinationId);
+    public static VoiceBookGuidanceResult Failed(string title, Guid jobId, string runtimeId, Guid destinationId) =>
+        new("GUIDANCE_FAILED", title, jobId, jobId.ToString(), runtimeId, destinationId);
+    public static VoiceBookGuidanceResult NotFound() => new("BOOK_NOT_FOUND", string.Empty, null, null, null);
+    public static VoiceBookGuidanceResult NotAvailable() => new("BOOK_NOT_AVAILABLE", string.Empty, null, null, null);
+    public static VoiceBookGuidanceResult Unavailable() => new("GUIDANCE_UNAVAILABLE", string.Empty, null, null, null);
+}
+
+public sealed record VoiceLocationGuidanceResult(
+    [property: JsonPropertyName("errorCode")] string ErrorCode,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("jobId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] Guid? JobId = null,
+    [property: JsonPropertyName("executionId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? ExecutionId = null,
+    [property: JsonPropertyName("runtimeId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? RuntimeId = null,
+    [property: JsonPropertyName("destinationId"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] Guid? DestinationId = null)
+{
+    public static VoiceLocationGuidanceResult Started(string name, Guid jobId, string runtimeId, Guid destinationId) =>
+        new(string.Empty, name, jobId, jobId.ToString(), runtimeId, destinationId);
+    public static VoiceLocationGuidanceResult Failed(string name, Guid jobId, string runtimeId, Guid destinationId) =>
+        new("GUIDANCE_FAILED", name, jobId, jobId.ToString(), runtimeId, destinationId);
+    public static VoiceLocationGuidanceResult NotFound() => new("LOCATION_NOT_FOUND", string.Empty, null, null, null);
+    public static VoiceLocationGuidanceResult Unavailable() => new("GUIDANCE_UNAVAILABLE", string.Empty, null, null, null);
+}

@@ -12,10 +12,10 @@ public interface IFacilityGuidanceService
         string matchMode,
         int page,
         int pageSize,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        Guid? mapId = null);
 
     Task<IReadOnlyList<FacilityGuidanceDetail>> GetAllFacilitiesAsync(CancellationToken cancellationToken);
-    Task<FacilityGuidanceDetail?> GetReadingRoomAsync(CancellationToken cancellationToken);
     Task<FacilityGuidanceDetail?> GetFacilityAsync(
         Guid facilityId,
         CancellationToken cancellationToken);

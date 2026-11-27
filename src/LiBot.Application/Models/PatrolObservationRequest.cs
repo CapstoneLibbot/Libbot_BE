@@ -3,4 +3,4 @@ using System.Text.Json;
 
 namespace LiBot.Application.Models;
 
-public sealed record PatrolObservationRequest(Guid MissionId, string RuntimeId, JsonElement Observation);
+public sealed record PatrolObservationRequest(Guid JobId, string RuntimeId, JsonElement Observation);

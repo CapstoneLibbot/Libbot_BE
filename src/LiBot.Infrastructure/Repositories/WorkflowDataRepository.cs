@@ -1,6 +1,6 @@
 using LiBot.Application.Interfaces;
 using LiBot.Application.Models;
-using LiBot.Domain.Mission;
+using LiBot.Domain.Job;
 using LiBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,18 +22,39 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
         return map is null ? null : new SimulationMapRecord(map.Id, map.Name, map.Width, map.Height);
     }
 
-    public async Task<WorkflowMissionRecord?> GetMissionAsync(Guid missionId, CancellationToken cancellationToken)
+    public async Task<WorkflowJobRecord?> GetJobAsync(Guid jobId, CancellationToken cancellationToken)
     {
-        var task = await db.JobTasks.AsNoTracking().FirstOrDefaultAsync(item => item.JobId == missionId, cancellationToken);
-        return task is null ? null : new WorkflowMissionRecord(task.RuntimeId, task.StartedAtUtc);
+        var task = await db.JobTasks.AsNoTracking().Where(item => item.JobId == jobId)
+            .OrderBy(item => item.SequenceNo).FirstOrDefaultAsync(cancellationToken);
+        if (task is not null)
+            await JobEventPersistence.HydrateJobTaskAsync(db, task, cancellationToken);
+        return task is null ? null : new WorkflowJobRecord(task.RuntimeId, task.StartedAtUtc);
     }
 
-    public async Task<Guid?> ResolveShelfLevelAsync(string? shelfCode, CancellationToken cancellationToken)
+    public async Task<PatrolMapRecord?> GetPatrolMapAsync(Guid mapId, CancellationToken cancellationToken)
+    {
+        var map = await db.Maps.AsNoTracking().FirstOrDefaultAsync(item => item.Id == mapId, cancellationToken);
+        return map is null ? null : new PatrolMapRecord(map.Id, map.FloorId, map.Status.ToString());
+    }
+
+    public async Task<IReadOnlyList<PatrolEndpointRecord>> GetPatrolEndpointsAsync(
+        IReadOnlyCollection<Guid> endpointIds, CancellationToken cancellationToken)
+    {
+        if (endpointIds.Count == 0) return Array.Empty<PatrolEndpointRecord>();
+        return await db.Endpoints.AsNoTracking()
+            .Where(item => endpointIds.Contains(item.Id))
+            .Select(item => new PatrolEndpointRecord(item.Id, item.MapId, item.Name,
+                item.PositionX, item.PositionY, item.Theta, item.IsActive))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<Guid?> ResolveShelfLevelAsync(string? shelfCode, int? levelNumber, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(shelfCode)) return null;
         return await (from level in db.ShelfLevels.AsNoTracking()
                       join shelf in db.Shelves.AsNoTracking() on level.ShelfId equals shelf.Id
-                      where shelf.Code == shelfCode
+                      where shelf.Name == shelfCode
+                          && (!levelNumber.HasValue || level.LevelNumber == levelNumber.Value)
                       orderby level.LevelNumber
                       select (Guid?)level.Id).FirstOrDefaultAsync(cancellationToken);
     }
@@ -47,7 +68,7 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
             ? await (from level in db.ShelfLevels.AsNoTracking()
                      join shelf in db.Shelves.AsNoTracking() on level.ShelfId equals shelf.Id
                      where level.Id == levelId
-                     select shelf.Code).FirstOrDefaultAsync(cancellationToken)
+                     select shelf.Name).FirstOrDefaultAsync(cancellationToken)
             : null;
         return new InventoryBookRecord(item.ExpectedShelfLevelId, expectedShelfCode);
     }
@@ -60,19 +81,18 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task AddJobEventAsync(Guid missionId, string eventType, string? data, CancellationToken cancellationToken)
+    public async Task<Guid> AddJobEventAsync(Guid jobId, string eventType, string? data, CancellationToken cancellationToken)
     {
-        await db.JobEvents.AddAsync(new JobEvent(missionId, eventType, data), cancellationToken);
+        var jobEvent = await JobEventPersistence.CreateForJobAsync(
+            db, jobId, eventType, data, cancellationToken);
+        await db.JobEvents.AddAsync(jobEvent, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        return jobEvent.Id;
     }
 
     public async Task<IReadOnlyList<string?>> GetJobEventDataAsync(
-        Guid missionId, string eventType, CancellationToken cancellationToken) =>
-        await db.JobEvents.AsNoTracking()
-            .Where(item => item.JobId == missionId && item.EventType == eventType)
-            .OrderBy(item => item.EventTimeUtc)
-            .Select(item => item.Data)
-            .ToListAsync(cancellationToken);
+        Guid jobId, string eventType, CancellationToken cancellationToken) =>
+        await JobEventPersistence.GetEventDataAsync(db, jobId, eventType, cancellationToken);
 
     public Task<int> CountMissingBooksAsync(IReadOnlyCollection<Guid> shelfLevelIds,
         IReadOnlyCollection<string> scannedBarcodes, CancellationToken cancellationToken)
@@ -84,26 +104,26 @@ public sealed class WorkflowDataRepository(LiBotDbContext db) : IWorkflowDataRep
             && !barcodes.Contains(item.Barcode), cancellationToken);
     }
 
-    public async Task<Guid> SaveInventoryReportAsync(Guid missionId, string reportType, string description, string scopeType,
-        int totalBooksScanned, int correctlyPlaced, int misplaced, int missing, string eventData,
+    public async Task<Guid> SaveInventoryReportAsync(Guid jobId, string scopeType,
+        int totalBooksScanned, int correctlyPlaced, int misplaced, int missing, string data,
         CancellationToken cancellationToken)
     {
-        var report = new InventoryReport(missionId, reportType, description, scopeType, 1,
-            totalBooksScanned, correctlyPlaced, misplaced, missing);
+        var report = new InventoryReport(jobId, scopeType, 1,
+            totalBooksScanned, correctlyPlaced, misplaced, missing, data);
         await db.InventoryReports.AddAsync(report, cancellationToken);
-        await db.JobEvents.AddAsync(new JobEvent(missionId, "INVENTORY_REPORT", eventData), cancellationToken);
+        await db.JobEvents.AddAsync(await JobEventPersistence.CreateForJobAsync(
+            db, jobId, "INVENTORY_REPORT", data, cancellationToken), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return report.Id;
     }
 
-    public async Task<Guid> SavePatrolReportAsync(Guid missionId, string reportType, string description,
-        int durationSeconds, int observationCount, int totalFindings, int fallenBooks, int obstacles, int warnings,
-        string status, string eventData, CancellationToken cancellationToken)
+    public async Task<Guid> SavePatrolReportAsync(Guid jobId, int durationSeconds, int observationCount,
+        int warnings, string data, CancellationToken cancellationToken)
     {
-        var report = new PatrolReport(missionId, reportType, description, durationSeconds, observationCount, totalFindings,
-            fallenBooks, obstacles, warnings, status);
+        var report = new PatrolReport(jobId, durationSeconds, observationCount, warnings, data);
         await db.PatrolReports.AddAsync(report, cancellationToken);
-        await db.JobEvents.AddAsync(new JobEvent(missionId, "PATROL_REPORT", eventData), cancellationToken);
+        await db.JobEvents.AddAsync(await JobEventPersistence.CreateForJobAsync(
+            db, jobId, "PATROL_REPORT", data, cancellationToken), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return report.Id;
     }

@@ -1,3 +1,5 @@
+using System.Text.Json;
+using LiBot.Application.Interfaces;
 using LiBot.Application.Workflow.FacilityGuidance;
 using LiBot.Application.Robot;
 using LiBot.Contracts.Workflow;
@@ -10,16 +12,18 @@ namespace LiBot.Api.Controllers;
 [Route("api/facility-guidance")]
 public sealed class FacilityGuidanceController(
     IFacilityGuidanceService service,
+    IJobDataService jobData,
     IRobotRuntimeService runtimes,
     IConfiguration configuration) : ControllerBase
 {
-    /// <summary>Tìm khu vực hoặc địa điểm theo tên.</summary>
+    /// <summary>Tìm khu vực hoặc địa điểm theo tên (tùy chọn lọc theo mapId).</summary>
     [HttpGet("search")]
     public async Task<ActionResult<FacilitySearchResponse>> Search(
         [FromQuery] string? query = null,
         [FromQuery] string matchMode = "FUZZY",
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
+        [FromQuery] Guid? mapId = null,
         CancellationToken cancellationToken = default)
     {
         if (!string.Equals(matchMode, "FUZZY", StringComparison.OrdinalIgnoreCase) &&
@@ -29,7 +33,7 @@ public sealed class FacilityGuidanceController(
         if (pageSize is < 1 or > 100) return BadRequest("pageSize must be between 1 and 100.");
         if ((long)(page - 1) * pageSize > int.MaxValue) return BadRequest("page is too large.");
 
-        return Ok(await service.SearchAsync(query, matchMode, page, pageSize, cancellationToken));
+        return Ok(await service.SearchAsync(query, matchMode, page, pageSize, cancellationToken, mapId));
     }
 
     /// <summary>Lấy toàn bộ facility đang hoạt động cùng vị trí điều hướng.</summary>
@@ -37,14 +41,6 @@ public sealed class FacilityGuidanceController(
     public async Task<ActionResult<IReadOnlyList<FacilityGuidanceDetail>>> GetAllFacilities(
         CancellationToken cancellationToken) =>
         Ok(await service.GetAllFacilitiesAsync(cancellationToken));
-
-    /// <summary>Lấy thông tin và vị trí điều hướng của phòng đọc sách.</summary>
-    [HttpGet("facilities/reading-room")]
-    public async Task<ActionResult<FacilityGuidanceDetail>> GetReadingRoom(CancellationToken cancellationToken)
-    {
-        var readingRoom = await service.GetReadingRoomAsync(cancellationToken);
-        return readingRoom is null ? NotFound("Reading room facility not found.") : Ok(readingRoom);
-    }
 
     /// <summary>Lấy vị trí và thông tin điều hướng của một địa điểm.</summary>
     [HttpGet("facilities/{facilityId:guid}")]
@@ -63,9 +59,9 @@ public sealed class FacilityGuidanceController(
         CancellationToken cancellationToken)
     {
         if (request.Rating is < 1 or > 5) return BadRequest("Rating must be between 1 and 5.");
-        var isSimulationTask = await service.IsSimulationTaskAsync(request.TaskId, cancellationToken);
+        var isSimulationTask = await service.IsSimulationTaskAsync(request.JobId, cancellationToken);
         if (isSimulationTask)
-            return Ok(new FacilityFeedbackResponse(Guid.Empty, request.TaskId, request.Rating));
+            return Ok(new FacilityFeedbackResponse(Guid.Empty, request.JobId, request.Rating));
         var feedback = await service.SaveFeedbackAsync(request, cancellationToken);
         if (feedback is null)
             return NotFound("Task was not found.");
@@ -75,8 +71,8 @@ public sealed class FacilityGuidanceController(
 
     [HttpGet("feedback")]
     public async Task<ActionResult<IReadOnlyList<FacilityFeedbackResponse>>> GetFeedback(
-        [FromQuery] Guid? taskId, CancellationToken cancellationToken) =>
-        Ok(await service.GetFeedbackAsync(taskId, cancellationToken));
+        [FromQuery] Guid? jobId, CancellationToken cancellationToken) =>
+        Ok(await service.GetFeedbackAsync(jobId, cancellationToken));
 
     [HttpGet("feedback/{feedbackId:guid}")]
     public async Task<ActionResult<FacilityFeedbackResponse>> GetFeedbackById(Guid feedbackId, CancellationToken cancellationToken)
@@ -128,30 +124,50 @@ public sealed class FacilityGuidanceController(
     }
 
     /// <summary>Bắt đầu nhiệm vụ robot hướng dẫn đến địa điểm đã tìm được.</summary>
-    /// <remarks>Luồng Gazebo được khởi chạy qua mission Run để giữ trạng thái mô phỏng tạm thời.</remarks>
+    /// <remarks>Luồng Gazebo được khởi chạy qua job Run để giữ trạng thái mô phỏng tạm thời.</remarks>
     [HttpPost("start")]
     public async Task<IActionResult> Start(
         StartFacilityGuidanceRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest("A search query is required.");
         if (string.IsNullOrWhiteSpace(request.RuntimeId) || request.FacilityId is null)
             return BadRequest("runtimeId and facilityId are required.");
 
         var runtimeId = request.RuntimeId.Trim().ToLowerInvariant();
-        if (runtimes.Get(runtimeId) is null)
+        var runtime = runtimes.Get(runtimeId);
+        if (runtime is null)
             return BadRequest(new { message = $"Robot runtime '{runtimeId}' is not configured." });
         if (string.Equals(runtimeId, "sim", StringComparison.OrdinalIgnoreCase))
-            return Conflict(new { message = "Start Gazebo runs from the mission Run button so execution state stays transient." });
+            return Conflict(new { code = GuidanceErrorCodes.SimUseRunButton, message = "Start Gazebo runs from the job Run button so execution state stays transient." });
 
         var facility = await service.GetFacilityAsync(request.FacilityId.Value, cancellationToken);
         if (facility is null) return NotFound("Facility not found.");
         var endpoint = facility.Location.Endpoint;
         if (!double.IsFinite(endpoint.X) || !double.IsFinite(endpoint.Y) || !double.IsFinite(endpoint.Theta))
-            return UnprocessableEntity(new { message = "Selected facility has no valid navigation endpoint." });
+            return UnprocessableEntity(new { code = GuidanceErrorCodes.InvalidEndpoint, message = "Selected facility has no valid navigation endpoint." });
 
         var runtimeError = runtimes.ValidateGuidanceStart(runtimeId, request.ArmLeaseId);
-        if (runtimeError is not null) return Conflict(new { message = runtimeError });
+        if (runtimeError is not null)
+            return Conflict(new { code = GuidanceErrorCodes.FromRuntimeValidation(runtimeError), message = runtimeError });
+        if (!Guid.TryParse(runtime.Telemetry?.ActiveMapId, out var activeMapId))
+            return Conflict(new { code = GuidanceErrorCodes.NoActiveMap, message = "The robot has no active map. Start navigation on the map containing this destination first." });
+        if (activeMapId != facility.Location.MapId)
+            return Conflict(new { code = GuidanceErrorCodes.WrongActiveMap, message = "The selected destination is not on the robot's active map." });
+        if (!await jobData.MapExistsAsync(activeMapId, cancellationToken))
+            return NotFound("The robot's active map was not found.");
+
+        var robotId = request.RobotId;
+        if (robotId == Guid.Empty)
+        {
+            robotId = await jobData.GetOrCreateRobotIdForMapAsync(
+                activeMapId, runtimeId, runtime.DisplayName, cancellationToken);
+        }
+        else if (!await jobData.RobotExistsAsync(robotId, cancellationToken))
+        {
+            return NotFound("Robot not found.");
+        }
+
+        var queryName = !string.IsNullOrWhiteSpace(request.Query) ? request.Query.Trim() : facility.Name;
 
         var baseUrl = !string.IsNullOrWhiteSpace(request.BackendBaseUrl)
             ? request.BackendBaseUrl.TrimEnd('/')
@@ -160,7 +176,8 @@ public sealed class FacilityGuidanceController(
 
         try
         {
-            var result = await service.StartAsync(request, baseUrl, cancellationToken);
+            var normalizedRequest = request with { Query = queryName, RobotId = robotId, RuntimeId = runtimeId };
+            var result = await service.StartAsync(normalizedRequest, baseUrl, cancellationToken);
             if (result.Workflow is null)
             {
                 return WorkflowConfigurationProblem(
@@ -171,13 +188,13 @@ public sealed class FacilityGuidanceController(
             {
                 var message = GetString(result.Robot, "message") ?? GetString(result.Robot, "error")
                     ?? "Robot runtime did not accept the facility guidance workflow.";
-                return UnprocessableEntity(new { message, missionId = result.MissionId, robot = result.Robot });
+                return UnprocessableEntity(new { code = GuidanceErrorCodes.RobotRejected, message, jobId = result.JobId, robot = result.Robot });
             }
 
             return Accepted(new
             {
-                missionId = result.MissionId,
-                executionId = result.MissionId,
+                jobId = result.JobId,
+                executionId = result.JobId,
                 workflowId = result.Workflow.Id,
                 runtimeId,
                 robot = result.Robot
@@ -260,14 +277,14 @@ public sealed class FacilityGuidanceController(
         }
     }
 
-    /// <summary>Đánh dấu task hướng dẫn địa điểm hoàn thành hoặc thất bại.</summary>
-    [HttpPost("tasks/{taskId:guid}/complete")]
-    public async Task<IActionResult> CompleteTask(
-        Guid taskId,
+    /// <summary>Đánh dấu Job hướng dẫn địa điểm hoàn thành hoặc thất bại.</summary>
+    [HttpPost("jobs/{jobId:guid}/complete")]
+    public async Task<IActionResult> CompleteJob(
+        Guid jobId,
         CompleteFacilityGuidanceRequest request,
         CancellationToken cancellationToken)
     {
-        return await service.CompleteTaskAsync(taskId, request, cancellationToken)
+        return await service.CompleteTaskAsync(jobId, request, cancellationToken)
             ? NoContent()
             : NotFound();
     }
@@ -277,10 +294,10 @@ public sealed class FacilityGuidanceController(
         title: "Facility guidance workflow is not configured correctly",
         detail: detail);
 
-    private static string? GetString(System.Text.Json.JsonElement value, string propertyName) =>
-        value.ValueKind == System.Text.Json.JsonValueKind.Object &&
+    private static string? GetString(JsonElement value, string propertyName) =>
+        value.ValueKind == JsonValueKind.Object &&
         value.TryGetProperty(propertyName, out var property) &&
-        property.ValueKind == System.Text.Json.JsonValueKind.String
+        property.ValueKind == JsonValueKind.String
             ? property.GetString()
             : null;
 }
